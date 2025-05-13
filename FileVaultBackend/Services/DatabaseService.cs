@@ -1,6 +1,6 @@
 using Microsoft.Data.SqlClient;
 
-namespace FileVaultBackend.Service;
+namespace FileVaultBackend.Services;
 
 public class DatabaseServices
 {

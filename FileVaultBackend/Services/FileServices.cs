@@ -1,12 +1,12 @@
-namespace FileVaultBackend.Service;
+namespace FileVaultBackend.Services;
 
-public class FileService
+public class FileServices
 {
     // Root directory for file storage, injected through configuration
     private readonly string _storageRoot;
 
     // Constructor to initialize the FileService with the storage root path from the configuration
-    public FileService(IConfiguration config)
+    public FileServices(IConfiguration config)
     {
         _storageRoot = config.GetValue<string>("StorageRoot");
     }

@@ -1,10 +1,10 @@
-using FileVaultBackend.Service;
+using FileVaultBackend.Services;
 internal class Program
 {
     private static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
-        builder.Services.AddScoped<FileService>();
+        builder.Services.AddScoped<FileServices>();
         builder.Services.AddScoped<DatabaseServices>();
 
         var app = builder.Build();
@@ -22,25 +22,25 @@ internal class Program
         });
 
         // Map the /upload route to handle file uploads from the client
-        app.MapPost("/upload", async (HttpRequest request, FileService file, DatabaseServices database) =>
+        app.MapPost("/upload", async (HttpRequest request, FileServices file, DatabaseServices database) =>
         {
             return await file.UploadFile(request, database);
         });
 
         // Map the /download/{fileName} route to handle file downloads
-        app.MapGet("/download/{fileName}", async (string fileName, HttpContext context, FileService file, DatabaseServices database) =>
+        app.MapGet("/download/{fileName}", async (string fileName, HttpContext context, FileServices file, DatabaseServices database) =>
         {
             return await file.DownloadFile(fileName, context, database);
         });
 
         // Map the /delete/{fileName} route to handle file deletions
-        app.MapDelete("/delete/{fileName}", (FileService file, string fileName, DatabaseServices database) =>
+        app.MapDelete("/delete/{fileName}", (FileServices file, string fileName, DatabaseServices database) =>
         {
             return file.DeleteFile(fileName, database);
         });
 
         // Map the /files route to return a list of files in storage
-        app.MapGet("/files", (FileService file, DatabaseServices database) =>
+        app.MapGet("/files", (FileServices file, DatabaseServices database) =>
         {
             return database.GetFilesFromDb();
         });
