@@ -117,7 +117,7 @@ public class FileServices
             // Delete the file from the storage
             await database.DeleteFileMetadata(fileName);
             File.Delete(fullFilePath);
-            return Results.Ok($"File deleted: {fileName}.");
+            return Results.Ok($"File deleted: {fileName}");
         }
         catch (Exception)
         {
