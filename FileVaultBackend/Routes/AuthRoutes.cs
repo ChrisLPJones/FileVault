@@ -28,7 +28,7 @@ namespace FileVaultBackend.Routes
                 }
                 catch (JsonException ex)
                 {
-                    return Results.BadRequest("Invalid Json");
+                    return Results.BadRequest($"Invalid Json: {ex}");
                 }
             });
 

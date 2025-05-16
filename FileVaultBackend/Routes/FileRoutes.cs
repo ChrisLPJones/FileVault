@@ -40,6 +40,14 @@ namespace FileVaultBackend.Routes
 
 
 
+            // Map the /files route to return a list of files in storage
+            app.MapGet("/files", (FileServices file, DatabaseServices db) =>
+            {
+                return db.GetFilesFromDb();
+            });
+
+
+
 
 
             // Map the /download/{fileName} route to handle file downloads
@@ -47,8 +55,6 @@ namespace FileVaultBackend.Routes
             {
                 return await file.DownloadFile(fileName, context, db);
             });
-
-
 
 
 
@@ -64,13 +70,6 @@ namespace FileVaultBackend.Routes
 
 
 
-
-
-            // Map the /files route to return a list of files in storage
-            app.MapGet("/files", (FileServices file, DatabaseServices db) =>
-            {
-                return db.GetFilesFromDb();
-            });
         }
     }
 }
