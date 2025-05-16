@@ -15,6 +15,42 @@ public class FileServices
 
 
 
+    // Method to upload a file to the storage
+    public async Task<(bool success, string? Message, string? OrigonalFileName)> UploadFile(IFormFile file, DatabaseServices db)
+    {
+        // Get the file name
+        var fileName = Path.GetFileName(file.FileName);
+        // Create guid for file
+        var guid = Guid.NewGuid().ToString();
+
+        // Generate a unique filename for the file and combine it with the storage root path
+        var fullFilePath = Path.Combine(_storageRoot, guid);
+
+        try
+        {
+            // Save the uploaded file to the local storage location
+            using (var stream = new FileStream(fullFilePath, FileMode.Create))
+                await file.CopyToAsync(stream);
+
+            // Add metadata to Database
+            await db.AddFile(fileName, guid);
+
+            // Return a success response with the file's path
+            return (true, null, fileName);
+        }
+        catch (Exception ex)
+        {
+            if (File.Exists(fullFilePath))
+                File.Delete(fullFilePath);
+
+            return (false, ex.Message, null);
+        }
+    }
+
+
+
+
+
     // Method to download a file from the storage
     internal async Task<IResult> DownloadFile(string fileName, HttpContext context, DatabaseServices db)
     {
@@ -39,55 +75,6 @@ public class FileServices
         await context.Response.SendFileAsync(fullFilePath);
         return Results.Empty;
     }
-
-    
-
-
-
-
-    // Method to upload a file to the storage
-    public async Task<IResult> UploadFile(HttpRequest request, DatabaseServices db)
-    {
-        // Check if the request has the correct form content type
-        if (!request.HasFormContentType)
-            return Results.BadRequest("Error: Expected Form Data.");
-
-        // Read the form data from the request
-        var form = await request.ReadFormAsync();
-        // Get the first file from the form data
-        var file = form.Files.FirstOrDefault();
-        if (file == null || file.Length == 0)
-            return Results.BadRequest("Error: No file uploaded.");
-
-        // Get the file name
-        var fileName = Path.GetFileName(file.FileName);
-        // Create guid for file
-        var guid = Guid.NewGuid().ToString();
-
-        // Generate a unique filename for the file and combine it with the storage root path
-        var fullFilePath = Path.Combine(_storageRoot, guid);
-
-        try
-        {
-            // Save the uploaded file to the local storage location
-            using (var stream = new FileStream(fullFilePath, FileMode.Create))
-                await file.CopyToAsync(stream);
-
-            // Add metadata to Database
-            await db.AddFile(fileName, guid);
-
-            // Return a success response with the file's path
-            return Results.Ok($"File Uploaded: {fileName}");
-        }
-        catch (Exception)
-        {
-            if (File.Exists(fullFilePath))
-                File.Delete(fullFilePath);
-
-            return Results.BadRequest($"Error: File not saved.");
-        }
-    }
-
 
 
 
@@ -124,7 +111,6 @@ public class FileServices
             return Results.BadRequest("Error: File delete failed.");
         }
     }
-
 
 
 
