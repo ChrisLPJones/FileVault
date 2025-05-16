@@ -4,7 +4,7 @@ namespace FileVaultBackend.Services;
 
 public class DatabaseServices
 {
-    // Connection string for database access, injected through configuration
+    // Connection string for db access, injected through configuration
     private readonly string _connectionString;
     public DatabaseServices(IConfiguration config)
     {
@@ -15,19 +15,11 @@ public class DatabaseServices
 
 
     // Check connection to 
-    public async Task<IResult> CheckConnection()
+    public async Task CheckConnection()
     {
         using (SqlConnection connection = new SqlConnection(_connectionString))
         {
-            try
-            {
-                await connection.OpenAsync();
-                return Results.Ok("Connection successful");
-            }
-            catch (SqlException)
-            {
-                return Results.BadRequest($"Connection to Sql failed");
-            }
+            await connection.OpenAsync();
         }
     }
 
@@ -52,7 +44,7 @@ public class DatabaseServices
                 try
                 {
                     await command.ExecuteNonQueryAsync();
-                    Console.WriteLine("File metadata added to database");
+                    Console.WriteLine("File metadata added to db");
                 }
                 catch (SqlException ex)
                 {
@@ -83,7 +75,7 @@ public class DatabaseServices
                 try
                 {
                     await command.ExecuteNonQueryAsync();
-                    Console.WriteLine("File metadata deleted from database");
+                    Console.WriteLine("File metadata deleted from db");
                 }
                 catch (SqlException)
                 {
@@ -141,7 +133,7 @@ public class DatabaseServices
         }
         else
         {
-            Console.WriteLine($"Error: File does not exist in database");
+            Console.WriteLine($"Error: File does not exist in db");
             return null;
         }
     }

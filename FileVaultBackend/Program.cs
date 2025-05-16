@@ -1,3 +1,4 @@
+using FileVaultBackend.Models;
 using FileVaultBackend.Routes;
 using FileVaultBackend.Services;
 

@@ -16,12 +16,12 @@ public class FileServices
 
 
     // Method to download a file from the storage
-    internal async Task<IResult> DownloadFile(string fileName, HttpContext context, DatabaseServices database)
+    internal async Task<IResult> DownloadFile(string fileName, HttpContext context, DatabaseServices db)
     {
         // Sanitize the filename and get the full path to the file
         var sanitizedFilename = Path.GetFileName(fileName);
-        await database.CheckConnection();
-        var fileGUID = await database.GetFileGUIDAsync(sanitizedFilename);
+        await db.CheckConnection();
+        var fileGUID = await db.GetFileGUIDAsync(sanitizedFilename);
         var fullFilePath = Path.Combine(_storageRoot, fileGUID);
 
         // If the file doesn't exist, return a 404 error
@@ -40,13 +40,13 @@ public class FileServices
         return Results.Empty;
     }
 
-
+    
 
 
 
 
     // Method to upload a file to the storage
-    public async Task<IResult> UploadFile(HttpRequest request, DatabaseServices database)
+    public async Task<IResult> UploadFile(HttpRequest request, DatabaseServices db)
     {
         // Check if the request has the correct form content type
         if (!request.HasFormContentType)
@@ -74,7 +74,7 @@ public class FileServices
                 await file.CopyToAsync(stream);
 
             // Add metadata to Database
-            await database.AddFile(fileName, guid);
+            await db.AddFile(fileName, guid);
 
             // Return a success response with the file's path
             return Results.Ok($"File Uploaded: {fileName}");
@@ -94,12 +94,12 @@ public class FileServices
 
 
     // Method to delete a file from the storage
-    public async Task<IResult> DeleteFile(string fileName, DatabaseServices database)
+    public async Task<IResult> DeleteFile(string fileName, DatabaseServices db)
     {
         // Sanitize the filename and get the full path to the file
         var sanitizedFilename = Path.GetFileName(fileName);
 
-        string fileGuid = await database.GetFileGUIDAsync(sanitizedFilename);
+        string fileGuid = await db.GetFileGUIDAsync(sanitizedFilename);
         if (fileGuid == null)
         {
             return Results.NotFound("Error: File not found.");
@@ -115,7 +115,7 @@ public class FileServices
         try
         {
             // Delete the file from the storage
-            await database.DeleteFileMetadata(fileName);
+            await db.DeleteFileMetadata(fileName);
             File.Delete(fullFilePath);
             return Results.Ok($"File deleted: {fileName}");
         }

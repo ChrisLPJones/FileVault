@@ -1,4 +1,5 @@
 ﻿using FileVaultBackend.Services;
+using Microsoft.Data.SqlClient;
 
 namespace FileVaultBackend.Routes
 {
@@ -15,9 +16,17 @@ namespace FileVaultBackend.Routes
 
 
             // Map the /pingsql rout, which return "Pong" to indicate the Sql Server successfully connected
-            app.MapGet("/pingsql", async (HttpRequest request, DatabaseServices database) =>
+            app.MapGet("/pingsql", async (HttpRequest request, DatabaseServices db) =>
             {
-                return await database.CheckConnection();
+                try
+                {
+                    await db.CheckConnection();
+                    return Results.Ok("Connection successful");
+                }
+                catch (SqlException)
+                {
+                    return Results.BadRequest($"Connection to Sql failed");
+                }
             });
         }
     }
