@@ -79,7 +79,7 @@ public class FileServices(IConfiguration config)
         string fileGuid = await db.GetFileGUIDAsync(sanitizedFilename);
         if (fileGuid == null)
         {
-            return new HttpReturnResult(true, "Error: File not found.", null, null); 
+            return new HttpReturnResult(false, "Error: File not found.", null, null); 
         }
 
         var fullFilePath = Path.Combine(_storageRoot, fileGuid);
