@@ -12,7 +12,7 @@ public class FileServices(IConfiguration config)
 
 
     // Method to upload a file to the storage
-    public async Task<(bool success, string Message, string OrigonalFileName)> UploadFile(IFormFile file, DatabaseServices db)
+    public async Task<HttpReturnResult> UploadFile(IFormFile file, DatabaseServices db)
     {
         // Get the file name
         var fileName = Path.GetFileName(file.FileName);
@@ -32,35 +32,38 @@ public class FileServices(IConfiguration config)
             await db.AddFile(fileName, guid);
 
             // Return a success response with the file's path
-            return (true, null, fileName);
+            return new HttpReturnResult(true, null, fileName, null);
         }
         catch (Exception ex)
         {
             if (File.Exists(fullFilePath))
                 File.Delete(fullFilePath);
 
-            return (false, ex.Message, null);
+            return new HttpReturnResult(false, $"Error: {ex.Message}", null, null);
         }
     }
 
 
+
+
+
     // Method to download a file from the storage
-    internal async Task<HttpResult> DownloadFile(string fileName, DatabaseServices db)
+    internal async Task<HttpReturnResult> DownloadFile(string fileName, DatabaseServices db)
     {
         var sanitizedFilename = Path.GetFileName(fileName);
         await db.CheckConnection();
 
         var fileGUID = await db.GetFileGUIDAsync(sanitizedFilename);
         if (fileGUID == null)
-            return new HttpResult(false, "File not found.", null, null);
+            return new HttpReturnResult(false, "File not found.", null, null);
 
         var fullFilePath = Path.Combine(_storageRoot, fileGUID);
         if (!File.Exists(fullFilePath))
-            return new HttpResult(false, "File not found.", null, null);
+            return new HttpReturnResult(false, "File not found.", null, null);
 
         // Read file into memory
         var fileBytes = await File.ReadAllBytesAsync(fullFilePath);
-        return new HttpResult(true, null, sanitizedFilename, fileBytes);
+        return new HttpReturnResult(true, null, sanitizedFilename, fileBytes);
     }
 
 

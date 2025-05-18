@@ -6,7 +6,17 @@ namespace FileVaultBackend.Routes
 
     public static class FileRoutes
     { 
-        public record HttpResult(bool Success, string? Message, string? FileName, byte[]? FileContent);
+
+
+
+
+
+        public record HttpReturnResult(bool Success, string? Message, string? FileName, byte[]? FileContent);
+
+
+
+
+
         public static void MapFileRoutes(this IEndpointRouteBuilder app)
         {
             // Map the /upload route to handle file uploads from the client
@@ -26,11 +36,17 @@ namespace FileVaultBackend.Routes
                     if (file == null || file.Length == 0)
                         return Results.BadRequest("Error: No file uploaded.");
 
-                    var (success, message, originalFileName) = await fs.UploadFile(file, db);
+                    var result = await fs.UploadFile(file, db);
 
-                    return success
-                        ? Results.Ok($"File Uploaded: {originalFileName}")
-                        : Results.BadRequest($"Error: File not saved: {message}");
+
+                    if (result.Success)
+                    {
+                        return Results.Ok($"File Uploaded: {result.FileName}");
+                    }
+                    else
+                    {
+                        return Results.BadRequest($"Error: File not saved: {result.Message}");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -43,7 +59,7 @@ namespace FileVaultBackend.Routes
 
 
             // Map the /files route to return a list of files in storage
-            app.MapGet("/files", (FileServices file, DatabaseServices db) =>
+            app.MapGet("/files", (DatabaseServices db) =>
             {
                 return db.GetFilesFromDb();
             });
@@ -52,9 +68,9 @@ namespace FileVaultBackend.Routes
 
 
 
-            app.MapGet("/download/{fileName}", async (string fileName, FileServices file, DatabaseServices db) =>
+            app.MapGet("/download/{fileName}", async (string fileName, FileServices fs, DatabaseServices db) =>
             {
-                var result = await file.DownloadFile(fileName, db);
+                var result = await fs.DownloadFile(fileName, db);
 
                 if (!result.Success || result.FileContent == null || result.FileName == null)
                 {
@@ -73,9 +89,9 @@ namespace FileVaultBackend.Routes
 
 
             // Map the /delete/{fileName} route to handle file deletions
-            app.MapDelete("/delete/{fileName}", (FileServices file, string fileName, DatabaseServices db) =>
+            app.MapDelete("/delete/{fileName}", (FileServices fs, string fileName, DatabaseServices db) =>
             {
-                return file.DeleteFile(fileName, db);
+                return fs.DeleteFile(fileName, db);
             });
 
 
