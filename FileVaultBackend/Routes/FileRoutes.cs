@@ -10,13 +10,13 @@ namespace FileVaultBackend.Routes
 
 
 
-
+        // Records
         public record HttpReturnResult(bool Success, string? Message, string? FileName, byte[]? FileContent);
 
 
 
 
-
+        // Main
         public static void MapFileRoutes(this IEndpointRouteBuilder app)
         {
             // Map the /upload route to handle file uploads from the client
@@ -89,9 +89,17 @@ namespace FileVaultBackend.Routes
 
 
             // Map the /delete/{fileName} route to handle file deletions
-            app.MapDelete("/delete/{fileName}", (FileServices fs, string fileName, DatabaseServices db) =>
+            app.MapDelete("/delete/{fileName}", async (FileServices fs, string fileName, DatabaseServices db) =>
             {
-                return fs.DeleteFile(fileName, db);
+                var result = await fs.DeleteFile(fileName, db);
+                if (!result.Success)
+                {
+                    return Results.BadRequest(result.Message);
+                }
+                else
+                {
+                    return Results.Ok(result.Message);
+                }
             });
 
 

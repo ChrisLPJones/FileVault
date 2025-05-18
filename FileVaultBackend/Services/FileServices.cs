@@ -71,7 +71,7 @@ public class FileServices(IConfiguration config)
 
 
     // Method to delete a file from the storage
-    public async Task<IResult> DeleteFile(string fileName, DatabaseServices db)
+    public async Task<HttpReturnResult> DeleteFile(string fileName, DatabaseServices db)
     {
         // Sanitize the filename and get the full path to the file
         var sanitizedFilename = Path.GetFileName(fileName);
@@ -79,7 +79,7 @@ public class FileServices(IConfiguration config)
         string fileGuid = await db.GetFileGUIDAsync(sanitizedFilename);
         if (fileGuid == null)
         {
-            return Results.NotFound("Error: File not found.");
+            return new HttpReturnResult(true, "Error: File not found.", null, null); 
         }
 
         var fullFilePath = Path.Combine(_storageRoot, fileGuid);
@@ -87,18 +87,18 @@ public class FileServices(IConfiguration config)
 
         // If the file doesn't exist, return a bad request error
         if (!File.Exists(fullFilePath))
-            return Results.NotFound("Error: File doesn't exist.");
-
+            return new HttpReturnResult(false, "Error: File doesn't exist.", null, null);
+        
         try
         {
             // Delete the file from the storage
             await db.DeleteFileMetadata(fileName);
             File.Delete(fullFilePath);
-            return Results.Ok($"File deleted: {fileName}");
+            return new HttpReturnResult(true, $"File deleted: {fileName}", null,null); 
         }
         catch (Exception)
         {
-            return Results.BadRequest("Error: File delete failed.");
+            return new HttpReturnResult(false, "Error: File delete failed.", null, null );
         }
     }
 }
