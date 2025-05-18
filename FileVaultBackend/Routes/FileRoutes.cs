@@ -61,7 +61,7 @@ namespace FileVaultBackend.Routes
             // Map the /files route to return a list of files in storage
             app.MapGet("/files", (DatabaseServices db) =>
             {
-                return db.GetFilesFromDb();
+                return Results.Ok(db.GetFilesFromDb());
             });
 
 
