@@ -92,7 +92,7 @@ public class DatabaseServices
     public List<string> GetFilesFromDb(){
         string fileName = null;
 
-        List<string> filesList = new List<string>();
+        List<string> filesList = [];
 
         using SqlConnection connection = new SqlConnection(_connectionString);
         connection.Open();

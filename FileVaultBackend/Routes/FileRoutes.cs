@@ -3,8 +3,10 @@ using System.Runtime.CompilerServices;
 
 namespace FileVaultBackend.Routes
 {
+
     public static class FileRoutes
     { 
+        public record HttpResult(bool Success, string? Message, string? FileName, byte[]? FileContent);
         public static void MapFileRoutes(this IEndpointRouteBuilder app)
         {
             // Map the /upload route to handle file uploads from the client
@@ -19,7 +21,7 @@ namespace FileVaultBackend.Routes
                     // Read the form data from the request
                     var form = await request.ReadFormAsync();
                     // Get the first file from the form data
-                    var file = form.Files.FirstOrDefault();
+                    var file = form.Files.Count > 0 ? form.Files[0] : null;
 
                     if (file == null || file.Length == 0)
                         return Results.BadRequest("Error: No file uploaded.");
@@ -50,10 +52,20 @@ namespace FileVaultBackend.Routes
 
 
 
-            // Map the /download/{fileName} route to handle file downloads
-            app.MapGet("/download/{fileName}", async (string fileName, HttpContext context, FileServices file, DatabaseServices db) =>
+            app.MapGet("/download/{fileName}", async (string fileName, FileServices file, DatabaseServices db) =>
             {
-                return await file.DownloadFile(fileName, context, db);
+                var result = await file.DownloadFile(fileName, db);
+
+                if (!result.Success || result.FileContent == null || result.FileName == null)
+                {
+                    return Results.BadRequest(result.Message);
+                }
+
+                return Results.File(
+                    fileContents: result.FileContent,
+                    contentType: "application/octet-stream",
+                    fileDownloadName: result.FileName
+                );
             });
 
 

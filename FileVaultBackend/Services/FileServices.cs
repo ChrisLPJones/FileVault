@@ -1,22 +1,18 @@
+using static FileVaultBackend.Routes.FileRoutes;
+
 namespace FileVaultBackend.Services;
 
-public class FileServices
+public class FileServices(IConfiguration config)
 {
     // Root directory for file storage, injected through configuration
-    private readonly string _storageRoot;
-
-    // Constructor to initialize the FileService with the storage root path from the configuration
-    public FileServices(IConfiguration config)
-    {
-        _storageRoot = config.GetValue<string>("StorageRoot");
-    }
+    private readonly string _storageRoot = config.GetValue<string>("StorageRoot");
 
 
 
 
 
     // Method to upload a file to the storage
-    public async Task<(bool success, string? Message, string? OrigonalFileName)> UploadFile(IFormFile file, DatabaseServices db)
+    public async Task<(bool success, string Message, string OrigonalFileName)> UploadFile(IFormFile file, DatabaseServices db)
     {
         // Get the file name
         var fileName = Path.GetFileName(file.FileName);
@@ -48,32 +44,23 @@ public class FileServices
     }
 
 
-
-
-
     // Method to download a file from the storage
-    internal async Task<IResult> DownloadFile(string fileName, HttpContext context, DatabaseServices db)
+    internal async Task<HttpResult> DownloadFile(string fileName, DatabaseServices db)
     {
-        // Sanitize the filename and get the full path to the file
         var sanitizedFilename = Path.GetFileName(fileName);
         await db.CheckConnection();
+
         var fileGUID = await db.GetFileGUIDAsync(sanitizedFilename);
+        if (fileGUID == null)
+            return new HttpResult(false, "File not found.", null, null);
+
         var fullFilePath = Path.Combine(_storageRoot, fileGUID);
-
-        // If the file doesn't exist, return a 404 error
         if (!File.Exists(fullFilePath))
-        {
-            context.Response.StatusCode = 404;
-            return Results.NotFound("File not found.");
-        }
+            return new HttpResult(false, "File not found.", null, null);
 
-        // Set the response content type and headers for downloading the file
-        context.Response.ContentType = "application/octet-stream";
-        context.Response.Headers.Append("Content-Disposition", $"attachment; filename={sanitizedFilename}");
-
-        // Send the file content to the response stream
-        await context.Response.SendFileAsync(fullFilePath);
-        return Results.Empty;
+        // Read file into memory
+        var fileBytes = await File.ReadAllBytesAsync(fullFilePath);
+        return new HttpResult(true, null, sanitizedFilename, fileBytes);
     }
 
 
@@ -111,16 +98,8 @@ public class FileServices
             return Results.BadRequest("Error: File delete failed.");
         }
     }
-
-
-
-
-
-    // Method to get a list of all files in the storage
-    public List<string> GetFileList()
-    {
-        // Get the list of all file names from the storage directory
-        var files = Directory.GetFiles(_storageRoot).Select(Path.GetFileName).ToList();
-        return files;
-    }
 }
+
+
+
+
