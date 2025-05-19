@@ -137,4 +137,9 @@ public class DatabaseServices
             return null;
         }
     }
+
+    internal void RegisterUser(string userName, string password)
+    {
+        throw new NotImplementedException();
+    }
 }
