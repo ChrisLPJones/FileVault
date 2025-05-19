@@ -12,6 +12,7 @@ namespace FileVaultBackend
             // Inject Services
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<DatabaseServices>();
+            builder.Services.AddScoped<AuthServices>();
            
             var app = builder.Build();
 

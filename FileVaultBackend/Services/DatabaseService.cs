@@ -138,8 +138,29 @@ public class DatabaseServices
         }
     }
 
-    internal void RegisterUser(string userName, string password)
+    internal async void RegisterUser(string Username, string Email, string PasswordHash)
     {
-        throw new NotImplementedException();
+        using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string query = "INSERT INTO Users (Username, Email, PasswordHash) VALUES (@UserName, @Email, @PasswordHash)";
+        using SqlCommand command = new SqlCommand(@query, connection);
+
+        command.Parameters.AddWithValue("@Username", Username);
+        command.Parameters.AddWithValue("@PasswordHash", PasswordHash);
+        command.Parameters.AddWithValue("@Email", Email);
+
+        int rowsAffected = await command.ExecuteNonQueryAsync();
+
+        if (rowsAffected > 0) 
+        {
+            Console.WriteLine("Success");
+        }
+        else
+        {
+            Console.WriteLine("Failed");
+        }
+
+
     }
 }

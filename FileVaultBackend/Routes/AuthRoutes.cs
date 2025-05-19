@@ -11,28 +11,15 @@ namespace FileVaultBackend.Routes
             // Get tokens
 
             // Create User
-            app.MapPost("/register", async (HttpRequest request, DatabaseServices db, AuthServices auth) =>
+            app.MapPost("/register", async (UserModel user, HttpRequest request, DatabaseServices db, AuthServices auth) =>
             {
                 string body;
 
-                using (var reader = new StreamReader(request.Body))
-                {
-                    body = await reader.ReadToEndAsync();    
-                }
+                Console.WriteLine($"Recived: {user}");
 
-                try
-                {
-                    var user = JsonSerializer.
-                    Deserialize<UserModel>(body);
+                await auth.HashAndRegisterUserAsync(user, db);
 
-                    await auth.HashAndRegisterUserAsync(user, db);
-
-                    return Results.Created("", $"User {user.UserName} created.");
-                }
-                catch (JsonException ex)
-                {
-                    return Results.BadRequest($"Invalid Json: {ex}");
-                }
+                return Results.Created("", $"User {user.UserName} created");
             });
 
 
