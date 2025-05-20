@@ -13,13 +13,10 @@ namespace FileVaultBackend.Routes
             // Create User
             app.MapPost("/register", async (UserModel user, HttpRequest request, DatabaseServices db, AuthServices auth) =>
             {
-                string body;
 
-                Console.WriteLine($"Recived: {user}");
+                HttpReturnResult result = await auth.HashAndRegisterUserAsync(user, db);
 
-                await auth.HashAndRegisterUserAsync(user, db);
-
-                return Results.Created("", $"User {user.UserName} created");
+                return Results.Created("", result.Message);
             });
 
 

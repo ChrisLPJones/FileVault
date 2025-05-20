@@ -14,6 +14,7 @@ public class DatabaseServices
 
 
 
+
     // Check connection to 
     public async Task CheckConnection()
     {
@@ -138,29 +139,31 @@ public class DatabaseServices
         }
     }
 
-    internal async void RegisterUser(string Username, string Email, string PasswordHash)
+
+
+
+
+
+    internal async Task<HttpReturnResult> RegisterUser(string Username, string Email, string PasswordHash)
     {
         using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "INSERT INTO Users (Username, Email, PasswordHash) VALUES (@UserName, @Email, @PasswordHash)";
+        string query = "INSERT INTO Users (Username, Email, PasswordHash) VALUES (@Username, @Email, @PasswordHash)";
         using SqlCommand command = new SqlCommand(@query, connection);
 
         command.Parameters.AddWithValue("@Username", Username);
         command.Parameters.AddWithValue("@PasswordHash", PasswordHash);
         command.Parameters.AddWithValue("@Email", Email);
 
-        int rowsAffected = await command.ExecuteNonQueryAsync();
-
-        if (rowsAffected > 0) 
+        try
         {
-            Console.WriteLine("Success");
+            await command.ExecuteNonQueryAsync();
+            return new HttpReturnResult(true, $"Successfully added user {Username}",null,null);
         }
-        else
+        catch (SqlException)
         {
-            Console.WriteLine("Failed");
+            return new HttpReturnResult(false, $"User {Username} already exists.", null, null);
         }
-
-
     }
 }

@@ -4,11 +4,14 @@ using FileVaultBackend.Services;
 
 namespace FileVaultBackend
 {
+    public record HttpReturnResult(bool Success, string? Message, string? FileName, byte[]? FileContent);
     public partial class Program
     {
         private static void Main(string[] args)
         {
-            var builder = WebApplication.CreateBuilder(args);
+
+
+        var builder = WebApplication.CreateBuilder(args);
             // Inject Services
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<DatabaseServices>();
