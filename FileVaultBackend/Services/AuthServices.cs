@@ -8,7 +8,7 @@ namespace FileVaultBackend.Services
     public class AuthServices
     {
         // Add user to database
-        internal async Task<HttpReturnResult> HashAndRegisterUserAsync(UserModel user, DatabaseServices db)
+        internal async Task<HttpReturnResult> HashAndRegisterUser(UserModel user, DatabaseServices db)
         {
             string userName = user.UserName;
             string email = user.Email;

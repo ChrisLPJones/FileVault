@@ -1,3 +1,4 @@
+using FileVaultBackend.Models;
 using static FileVaultBackend.Routes.FileRoutes;
 
 namespace FileVaultBackend.Services;

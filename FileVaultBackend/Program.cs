@@ -4,7 +4,6 @@ using FileVaultBackend.Services;
 
 namespace FileVaultBackend
 {
-    public record HttpReturnResult(bool Success, string? Message, string? FileName, byte[]? FileContent);
     public partial class Program
     {
         private static void Main(string[] args)

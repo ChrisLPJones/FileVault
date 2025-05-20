@@ -6,16 +6,6 @@ namespace FileVaultBackend.Routes
 
     public static class FileRoutes
     { 
-
-
-
-
-        // Records
-        public record HttpReturnResult(bool Success, string? Message, string? FileName, byte[]? FileContent);
-
-
-
-
         // Main
         public static void MapFileRoutes(this IEndpointRouteBuilder app)
         {

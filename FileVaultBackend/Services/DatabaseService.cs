@@ -1,3 +1,4 @@
+using FileVaultBackend.Models;
 using Microsoft.Data.SqlClient;
 
 namespace FileVaultBackend.Services;
@@ -144,7 +145,7 @@ public class DatabaseServices
 
 
 
-    internal async Task<HttpReturnResult> RegisterUser(string Username, string Email, string PasswordHash)
+    public async Task<HttpReturnResult> RegisterUser(string Username, string Email, string PasswordHash)
     {
         using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
