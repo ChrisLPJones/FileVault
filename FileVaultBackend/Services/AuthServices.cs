@@ -11,9 +11,14 @@ namespace FileVaultBackend.Services
         public async Task<HttpReturnResult> HashAndRegisterUser(UserModel user, DatabaseServices db)
         {
 
-            string password = BCrypt.Net.BCrypt.HashPassword(user.Password);
+            string password = GeneratePasswordHash(user.Password);
 
             return await db.RegisterUser(user.UserName, user.Email, password);
+        }
+
+        public string GeneratePasswordHash(string password)
+        {
+            return BCrypt.Net.BCrypt.HashPassword(password);
         }
 
         // Delete user

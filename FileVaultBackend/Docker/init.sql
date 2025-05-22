@@ -18,6 +18,8 @@ BEGIN
         FileName NVARCHAR(50),
         GUID NVARCHAR(50)
     );
+    ALTER TABLE Files
+    ADD CONSTRAINT UQ_Files_GUID UNIQUE (GUID);
     PRINT ''Table "Files" created.'';
 END
 ELSE
