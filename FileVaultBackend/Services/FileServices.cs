@@ -33,14 +33,14 @@ public class FileServices(IConfiguration config)
             await db.AddFile(fileName, guid);
 
             // Return a success response with the file's path
-            return new HttpReturnResult(true, null, fileName, null);
+            return new HttpReturnResult(true, null, fileName);
         }
         catch (Exception ex)
         {
             if (File.Exists(fullFilePath))
                 File.Delete(fullFilePath);
 
-            return new HttpReturnResult(false, $"Error: {ex.Message}", null, null);
+            return new HttpReturnResult(false, $"Error: {ex.Message}");
         }
     }
 
@@ -56,11 +56,11 @@ public class FileServices(IConfiguration config)
 
         var fileGUID = await db.GetFileGUIDAsync(sanitizedFilename);
         if (fileGUID == null)
-            return new HttpReturnResult(false, "File not found.", null, null);
+            return new HttpReturnResult(false, "File not found.");
 
         var fullFilePath = Path.Combine(_storageRoot, fileGUID);
         if (!File.Exists(fullFilePath))
-            return new HttpReturnResult(false, "File not found.", null, null);
+            return new HttpReturnResult(false, "File not found.");
 
         // Read file into memory
         var fileBytes = await File.ReadAllBytesAsync(fullFilePath);
@@ -80,7 +80,7 @@ public class FileServices(IConfiguration config)
         string fileGuid = await db.GetFileGUIDAsync(sanitizedFilename);
         if (fileGuid == null)
         {
-            return new HttpReturnResult(false, "Error: File not found.", null, null); 
+            return new HttpReturnResult(false, "Error: File not found."); 
         }
 
         var fullFilePath = Path.Combine(_storageRoot, fileGuid);
@@ -88,18 +88,18 @@ public class FileServices(IConfiguration config)
 
         // If the file doesn't exist, return a bad request error
         if (!File.Exists(fullFilePath))
-            return new HttpReturnResult(false, "Error: File doesn't exist.", null, null);
+            return new HttpReturnResult(false, "Error: File doesn't exist.");
         
         try
         {
             // Delete the file from the storage
             await db.DeleteFileMetadata(fileName);
             File.Delete(fullFilePath);
-            return new HttpReturnResult(true, $"File deleted: {fileName}", null,null); 
+            return new HttpReturnResult(true, $"File deleted: {fileName}"); 
         }
         catch (Exception)
         {
-            return new HttpReturnResult(false, "Error: File delete failed.", null, null );
+            return new HttpReturnResult(false, "Error: File delete failed.");
         }
     }
 }

@@ -153,18 +153,23 @@ public class DatabaseServices
         string query = "INSERT INTO Users (Username, Email, PasswordHash) VALUES (@Username, @Email, @PasswordHash)";
         using SqlCommand command = new SqlCommand(@query, connection);
 
-        command.Parameters.AddWithValue("@Username", Username);
+        command.Parameters.AddWithValue("@Username", Username.Trim());
+        command.Parameters.AddWithValue("@Email", Email.Trim().ToLower());
         command.Parameters.AddWithValue("@PasswordHash", PasswordHash);
-        command.Parameters.AddWithValue("@Email", Email);
 
         try
         {
             await command.ExecuteNonQueryAsync();
-            return new HttpReturnResult(true, $"Successfully added user {Username}",null,null);
+            return new HttpReturnResult(true, $"Successfully added user {Username}");
         }
-        catch (SqlException)
+        catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
         {
-            return new HttpReturnResult(false, $"User {Username} already exists.", null, null);
+            return new HttpReturnResult(false, $"User {Username} already exists.");
+        }
+        catch (SqlException ex)
+        {
+            Console.WriteLine (ex.Message);
+            return new HttpReturnResult(false, "Database Error");
         }
     }
 }
