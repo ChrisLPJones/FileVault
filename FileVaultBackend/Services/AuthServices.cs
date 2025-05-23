@@ -1,36 +1,110 @@
-﻿using System.Data.Common;
-using Azure.Identity;
-using FileVaultBackend.Models;
-using Microsoft.AspNetCore.Authentication.OAuth.Claims;
+﻿using FileVaultBackend.Models;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
+using System.Text;
 
 namespace FileVaultBackend.Services
 {
     public class AuthServices
     {
+        private readonly IConfiguration _config;
+
+
+
+
+
+        public AuthServices(IConfiguration config)
+        {
+            _config = config;
+        }
+
+
+
+
+
         // Add user to database
         public async Task<HttpReturnResult> HashAndRegisterUser(UserModel user, DatabaseServices db)
         {
 
             string password = GeneratePasswordHash(user.Password);
 
-            return await db.RegisterUser(user.UserName, user.Email, password);
+            return await db.RegisterUser(user.Username, user.Email, password);
         }
 
+
+
+
+
+        // Get Password Hash
         public string GeneratePasswordHash(string password)
         {
             return BCrypt.Net.BCrypt.HashPassword(password);
         }
 
-        // Delete user
 
-        // Get password hash
 
-        // Get JWT tokes
+
+
+        // Get JWT Token
+        public string GetJWTToken(UserModel user)
+        {
+            var jwtConfig = _config.GetSection("Jwt");
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"]));
+            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+            var claims = new[]
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.Username.ToString()),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            };
+
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
+                Expires = DateTime.UtcNow.AddMinutes(Convert.ToDouble(jwtConfig["ExpireMinutes"])),
+                Issuer = jwtConfig["Issuer"],
+                Audience = jwtConfig["Audience"],
+                SigningCredentials = credentials,
+            };
+
+            var handler = new JsonWebTokenHandler();
+
+            string token = handler.CreateToken(tokenDescriptor);
+
+            return token;
+        }
+
+
+
+
+
+        // Validate User
+        public async Task<HttpReturnResult> ValidateUser(
+            LoginModel user, DatabaseServices db, AuthServices auth)
+        {
+            var userRecord = await db.GetUserByUsername(user.Username);
+            if (userRecord == null) 
+                return new HttpReturnResult(false, "User not found");
+
+
+
+            bool isValid = BCrypt.Net.BCrypt.Verify(user.Password, userRecord.Password);
+            if(!isValid)
+                return new HttpReturnResult(false, "Password incorrect");
+
+            string token = auth.GetJWTToken(userRecord);
+
+            return new HttpReturnResult(true, token);
+        }
+        
+        
+        
 
         // update token
 
-        // log user out
+        // logout
 
-        // Get user info
     }
 }

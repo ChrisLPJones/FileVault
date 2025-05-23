@@ -1,8 +1,5 @@
 ﻿using FileVaultBackend.Models;
 using FileVaultBackend.Services;
-using System.ComponentModel.DataAnnotations;
-using System.Data.Common;
-using System.Text.Json;
 
 namespace FileVaultBackend.Routes
 {
@@ -10,23 +7,28 @@ namespace FileVaultBackend.Routes
     {
         public static void MapAuthRoutes(this IEndpointRouteBuilder app)
         {
-            // Get tokens
-
-
-
-
-
-
             // Create User
-            app.MapPost("/register", async (
+            app.MapPost("/user/register", async (
                 UserModel user, HttpRequest request, DatabaseServices db, AuthServices auth) =>
             {
-
                 HttpReturnResult result = await auth.HashAndRegisterUser(user, db);
 
                 return Results.Created("", result.Message);
             });
 
+
+
+
+            // Login
+            app.MapPost("/user/login", async (
+                LoginModel user, AuthServices auth, DatabaseServices db) =>
+            {
+                var result = await auth.ValidateUser(user, db, auth);
+                if (!result.Success)
+                    return Results.BadRequest(new { Error = result.Message });
+                
+                return Results.Ok(new { Success = result.Message });
+            });
 
 
 
@@ -47,7 +49,7 @@ namespace FileVaultBackend.Routes
 
                 return Results.Ok(new
                 {
-                    username = user.UserName,
+                    username = user.Username,
                     email = user.Email
                 });
             });
@@ -58,19 +60,19 @@ namespace FileVaultBackend.Routes
 
             // Update User
             app.MapPut("/user/{username}", async (
-                string username, 
-                UserModel updateUser, 
-                DatabaseServices db, 
+                string username,
+                UserModel updateUser,
+                DatabaseServices db,
                 AuthServices auth) =>
             {
                 if (updateUser == null)
-                    return Results.BadRequest(new { Error = "Request body is missing or invalid JSON"});
+                    return Results.BadRequest(new { Error = "Request body is missing or invalid JSON" });
 
                 if (!string.IsNullOrEmpty(updateUser.Password))
                     updateUser.Password = auth.GeneratePasswordHash(updateUser.Password);
-                 
+
                 var user = await db.GetUserByUsername(username);
-                if(user == null)
+                if (user == null)
                     return Results.NotFound(new
                     {
                         Error = "User not found"
@@ -89,7 +91,7 @@ namespace FileVaultBackend.Routes
 
 
             // Delete User
-            app.MapDelete("/user/delete/{username}", async (
+            app.MapDelete("/user/{username}", async (
                 string username,
                 DatabaseServices db) =>
             {

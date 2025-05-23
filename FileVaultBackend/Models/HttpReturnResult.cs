@@ -4,7 +4,7 @@
     public record HttpReturnResult
     {
         public bool Success { get; init; }
-        public string? Message{ get; init; }
+        public string? Message { get; init; }
         public string? FileName { get; init; }
         public byte[]? FileContent { get; init; }
 
@@ -13,13 +13,13 @@
             this.Success = success;
         }
 
-        public HttpReturnResult(bool success, string? message) 
+        public HttpReturnResult(bool success, string? message)
             : this(success)
         {
             this.Message = message;
         }
 
-        public HttpReturnResult(bool success, string? message, string? fileName) 
+        public HttpReturnResult(bool success, string? message, string? fileName)
             : this(success, message)
         {
             this.FileName = fileName;

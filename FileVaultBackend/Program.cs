@@ -1,4 +1,3 @@
-using FileVaultBackend.Models;
 using FileVaultBackend.Routes;
 using FileVaultBackend.Services;
 
@@ -10,12 +9,12 @@ namespace FileVaultBackend
         {
 
 
-        var builder = WebApplication.CreateBuilder(args);
+            var builder = WebApplication.CreateBuilder(args);
             // Inject Services
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();
-           
+
             var app = builder.Build();
 
             // Map Routes

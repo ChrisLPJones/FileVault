@@ -1,5 +1,4 @@
 ﻿using FileVaultBackend.Services;
-using System.Runtime.CompilerServices;
 
 namespace FileVaultBackend.Routes
 {

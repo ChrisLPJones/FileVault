@@ -1,5 +1,4 @@
 using FileVaultBackend.Models;
-using static FileVaultBackend.Routes.FileRoutes;
 
 namespace FileVaultBackend.Services;
 
@@ -80,7 +79,7 @@ public class FileServices(IConfiguration config)
         string fileGuid = await db.GetFileGUIDAsync(sanitizedFilename);
         if (fileGuid == null)
         {
-            return new HttpReturnResult(false, "Error: File not found."); 
+            return new HttpReturnResult(false, "Error: File not found.");
         }
 
         var fullFilePath = Path.Combine(_storageRoot, fileGuid);
@@ -89,13 +88,13 @@ public class FileServices(IConfiguration config)
         // If the file doesn't exist, return a bad request error
         if (!File.Exists(fullFilePath))
             return new HttpReturnResult(false, "Error: File doesn't exist.");
-        
+
         try
         {
             // Delete the file from the storage
             await db.DeleteFileMetadata(fileName);
             File.Delete(fullFilePath);
-            return new HttpReturnResult(true, $"File deleted: {fileName}"); 
+            return new HttpReturnResult(true, $"File deleted: {fileName}");
         }
         catch (Exception)
         {

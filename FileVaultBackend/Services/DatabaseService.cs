@@ -6,6 +6,11 @@ namespace FileVaultBackend.Services;
 // Service responsible for interacting with the SQL database
 public class DatabaseServices
 {
+
+
+
+
+
     // Connection string for db access, injected through configuration
     private readonly string _connectionString;
 
@@ -13,6 +18,11 @@ public class DatabaseServices
     {
         _connectionString = config.GetConnectionString("DefaultConnection");
     }
+
+
+
+
+
 
     // Checks if the database connection can be successfully opened
     public async Task CheckConnection()
@@ -22,6 +32,11 @@ public class DatabaseServices
             await connection.OpenAsync();
         }
     }
+
+
+
+
+
 
     // Adds a file record to the Files table with the provided filename and GUID
     public async Task AddFile(string fileName, string guid)
@@ -51,6 +66,11 @@ public class DatabaseServices
         }
     }
 
+
+
+
+
+
     // Deletes file metadata from the database by file name
     public async Task DeleteFileMetadata(string fileName)
     {
@@ -76,6 +96,11 @@ public class DatabaseServices
         }
     }
 
+
+
+
+
+
     // Retrieves all filenames from the Files table and returns them as a list
     public List<string> GetFilesFromDb()
     {
@@ -99,6 +124,11 @@ public class DatabaseServices
         return filesList;
     }
 
+
+
+
+
+
     // Retrieves the GUID associated with a given filename
     public async Task<string> GetFileGUIDAsync(string fileName)
     {
@@ -121,6 +151,11 @@ public class DatabaseServices
             return null;
         }
     }
+
+
+
+
+
 
     // Registers a new user in the Users table
     public async Task<HttpReturnResult> RegisterUser(string Username, string Email, string PasswordHash)
@@ -152,13 +187,18 @@ public class DatabaseServices
         }
     }
 
+
+
+
+
+
     // Retrieves user info from the Users table by username
     internal async Task<UserModel> GetUserByUsername(string username)
     {
         using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Username, Email FROM Users WHERE Username = @Username";
+        string query = "SELECT Username, Email, PasswordHash FROM Users WHERE Username = @Username";
         using SqlCommand command = new SqlCommand(query, connection);
 
         command.Parameters.AddWithValue("username", username);
@@ -169,13 +209,19 @@ public class DatabaseServices
         {
             return new UserModel
             {
-                UserName = reader.GetString(0),
+                Username = reader.GetString(0),
                 Email = reader.GetString(1),
+                Password = reader.GetString(2),
             };
         }
 
         return null;
     }
+
+
+
+
+
 
     // Updates user info in the Users table; only updates fields that are not null/empty
     public async Task<HttpReturnResult> UpdateUser(string username, UserModel updateUser)
@@ -187,14 +233,16 @@ public class DatabaseServices
         using var command = new SqlCommand();
         command.Connection = connection;
 
+        var user = await GetUserByUsername(username);
+
         // Add parameters and update clauses conditionally
-        if (!string.IsNullOrWhiteSpace(updateUser.UserName))
+        if (!string.IsNullOrWhiteSpace(updateUser.Username) && user.Username != updateUser.Username)
         {
             updates.Add("Username = @NewUsername");
-            command.Parameters.AddWithValue("@NewUsername", updateUser.UserName);
+            command.Parameters.AddWithValue("@NewUsername", updateUser.Username);
         }
 
-        if (!string.IsNullOrWhiteSpace(updateUser.Email))
+        if (!string.IsNullOrWhiteSpace(updateUser.Email) && user.Email != updateUser.Email)
         {
             updates.Add("Email = @Email");
             command.Parameters.AddWithValue("@Email", updateUser.Email);
@@ -209,6 +257,11 @@ public class DatabaseServices
         if (updates.Count == 0)
             return new HttpReturnResult(false, "Nothing to update");
 
+
+
+
+
+
         // Compose final SQL query dynamically based on which fields are being updated
         string setClause = string.Join(", ", updates);
         string query = $"UPDATE Users SET {setClause} Where Username = @Username";
@@ -217,7 +270,9 @@ public class DatabaseServices
 
         try
         {
-            await command.ExecuteNonQueryAsync();
+            int rowsAffected = await command.ExecuteNonQueryAsync();
+            if (rowsAffected == 0)
+                return new HttpReturnResult(true, "Nothing changes where made");
             return new HttpReturnResult(true, "Updated user info");
         }
         catch (Exception ex)
@@ -225,6 +280,11 @@ public class DatabaseServices
             return new HttpReturnResult(false, $"Error: {ex.Message}");
         }
     }
+
+
+
+
+
 
     // Deletes a user from the Users table based on username
     public void DeleteUser(string username)
@@ -235,9 +295,15 @@ public class DatabaseServices
         string query = "DELETE FROM Users WHERE Username = @Username";
 
         using SqlCommand command = new SqlCommand(query, connection);
-
         command.Parameters.AddWithValue("@Username", username);
 
-        command.ExecuteNonQueryAsync();
+        try
+        {
+            command.ExecuteNonQueryAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
     }
 }
