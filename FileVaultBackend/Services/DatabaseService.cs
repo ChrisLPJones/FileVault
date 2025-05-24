@@ -1,5 +1,6 @@
 using FileVaultBackend.Models;
 using Microsoft.Data.SqlClient;
+using System.Security.Claims;
 
 namespace FileVaultBackend.Services;
 
@@ -39,19 +40,20 @@ public class DatabaseServices
 
 
     // Adds a file record to the Files table with the provided filename and GUID
-    public async Task AddFile(string fileName, string guid)
+    public async Task AddFile(string fileName, string guid, string userId)
     {
         await using (var connection = new SqlConnection(_connectionString))
         {
             await connection.OpenAsync();
             string query = @"
-            INSERT INTO Files (FileName, guid)
-            VALUES (@FileName, @guid);";
+            INSERT INTO Files (FileName, guid, UserId)
+            VALUES (@FileName, @guid, @UserId);";
 
             using (SqlCommand command = new SqlCommand(query, connection))
             {
                 command.Parameters.AddWithValue("@FileName", fileName);
                 command.Parameters.AddWithValue("@guid", guid);
+                command.Parameters.AddWithValue("@UserId", userId);
 
                 try
                 {
@@ -72,16 +74,17 @@ public class DatabaseServices
 
 
     // Deletes file metadata from the database by file name
-    public async Task DeleteFileMetadata(string fileName)
+    public async Task DeleteFileMetadata(string fileName, string userId)
     {
         using (var connection = new SqlConnection(_connectionString))
         {
             await connection.OpenAsync();
-            string query = @"DELETE FROM Files WHERE FileName = @FileName;";
+            string query = @"DELETE FROM Files WHERE UserId = @UserId AND FileName = @FileName;";
 
             using (SqlCommand command = new SqlCommand(query, connection))
             {
                 command.Parameters.AddWithValue("FileName", fileName);
+                command.Parameters.AddWithValue("userId", userId);
 
                 try
                 {
@@ -102,7 +105,7 @@ public class DatabaseServices
 
 
     // Retrieves all filenames from the Files table and returns them as a list
-    public List<string> GetFilesFromDb()
+    public List<string> GetFilesFromDb(string userId)
     {
         string fileName = null;
         List<string> filesList = [];
@@ -110,9 +113,12 @@ public class DatabaseServices
         using SqlConnection connection = new SqlConnection(_connectionString);
         connection.Open();
 
-        string query = "SELECT * FROM FILES WHERE FileName IS NOT NULL";
+        string query = "SELECT * FROM FILES WHERE FileName IS NOT NULL AND UserId = @UserId";
 
         using SqlCommand command = new SqlCommand(query, connection);
+
+        command.Parameters.AddWithValue("@UserId", userId);
+
         using var reader = command.ExecuteReader();
 
         while (reader.Read())
@@ -130,14 +136,15 @@ public class DatabaseServices
 
 
     // Retrieves the GUID associated with a given filename
-    public async Task<string> GetFileGUIDAsync(string fileName)
+    public async Task<string> GetFileGUIDAsync(string fileName, string userId)
     {
         using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT GUID from Files where FileName = @FileName";
+        string query = "SELECT GUID from Files where UserId = @UserId AND FileName = @FileName";
         using SqlCommand command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@FileName", fileName);
+        command.Parameters.AddWithValue("@UserId", userId);
 
         using var reader = await command.ExecuteReaderAsync();
 
@@ -198,7 +205,7 @@ public class DatabaseServices
         using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Username, Email, PasswordHash FROM Users WHERE Username = @Username";
+        string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Username = @Username";
         using SqlCommand command = new SqlCommand(query, connection);
 
         command.Parameters.AddWithValue("username", username);
@@ -209,9 +216,10 @@ public class DatabaseServices
         {
             return new UserModel
             {
-                Username = reader.GetString(0),
-                Email = reader.GetString(1),
-                Password = reader.GetString(2),
+                Id = reader.GetGuid(0),
+                Username = reader.GetString(1),
+                Email = reader.GetString(2),
+                Password = reader.GetString(3),
             };
         }
 
@@ -305,5 +313,31 @@ public class DatabaseServices
         {
             Console.WriteLine(ex.Message);
         }
+    }
+
+    internal async Task<UserModel> GetUserByUserId(string userId)
+    {
+        using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Id = @Id";
+        using SqlCommand command = new SqlCommand(query, connection);
+
+        command.Parameters.AddWithValue("Id", userId);
+
+        using SqlDataReader reader = command.ExecuteReader();
+
+        if (await reader.ReadAsync())
+        {
+            return new UserModel
+            {
+                Id = reader.GetGuid(0),
+                Username = reader.GetString(1),
+                Email = reader.GetString(2),
+                Password = reader.GetString(3),
+            };
+        }
+
+        return null;
     }
 }

@@ -1,4 +1,5 @@
 using FileVaultBackend.Models;
+using System.Security.Claims;
 
 namespace FileVaultBackend.Services;
 
@@ -12,7 +13,10 @@ public class FileServices(IConfiguration config)
 
 
     // Method to upload a file to the storage
-    public async Task<HttpReturnResult> UploadFile(IFormFile file, DatabaseServices db)
+    public async Task<HttpReturnResult> UploadFile(
+        IFormFile file, 
+        DatabaseServices db, 
+        string userId)
     {
         // Get the file name
         var fileName = Path.GetFileName(file.FileName);
@@ -29,7 +33,7 @@ public class FileServices(IConfiguration config)
                 await file.CopyToAsync(stream);
 
             // Add metadata to Database
-            await db.AddFile(fileName, guid);
+            await db.AddFile(fileName, guid, userId);
 
             // Return a success response with the file's path
             return new HttpReturnResult(true, null, fileName);
@@ -48,12 +52,15 @@ public class FileServices(IConfiguration config)
 
 
     // Method to download a file from the storage
-    internal async Task<HttpReturnResult> DownloadFile(string fileName, DatabaseServices db)
+    internal async Task<HttpReturnResult> DownloadFile(
+        string fileName, 
+        DatabaseServices db, 
+        string userId)
     {
         var sanitizedFilename = Path.GetFileName(fileName);
         await db.CheckConnection();
 
-        var fileGUID = await db.GetFileGUIDAsync(sanitizedFilename);
+        var fileGUID = await db.GetFileGUIDAsync(sanitizedFilename, userId);
         if (fileGUID == null)
             return new HttpReturnResult(false, "File not found.");
 
@@ -71,19 +78,19 @@ public class FileServices(IConfiguration config)
 
 
     // Method to delete a file from the storage
-    public async Task<HttpReturnResult> DeleteFile(string fileName, DatabaseServices db)
+    public async Task<HttpReturnResult> DeleteFile(
+        string fileName, 
+        DatabaseServices db,
+        string userId)
     {
         // Sanitize the filename and get the full path to the file
         var sanitizedFilename = Path.GetFileName(fileName);
 
-        string fileGuid = await db.GetFileGUIDAsync(sanitizedFilename);
+        string fileGuid = await db.GetFileGUIDAsync(sanitizedFilename, userId);
         if (fileGuid == null)
-        {
             return new HttpReturnResult(false, "Error: File not found.");
-        }
 
         var fullFilePath = Path.Combine(_storageRoot, fileGuid);
-
 
         // If the file doesn't exist, return a bad request error
         if (!File.Exists(fullFilePath))
@@ -92,7 +99,7 @@ public class FileServices(IConfiguration config)
         try
         {
             // Delete the file from the storage
-            await db.DeleteFileMetadata(fileName);
+            await db.DeleteFileMetadata(fileName, userId);
             File.Delete(fullFilePath);
             return new HttpReturnResult(true, $"File deleted: {fileName}");
         }

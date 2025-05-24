@@ -1,5 +1,6 @@
 ﻿using FileVaultBackend.Models;
 using FileVaultBackend.Services;
+using System.Security.Claims;
 
 namespace FileVaultBackend.Routes
 {
@@ -9,7 +10,10 @@ namespace FileVaultBackend.Routes
         {
             // Create User
             app.MapPost("/user/register", async (
-                UserModel user, HttpRequest request, DatabaseServices db, AuthServices auth) =>
+                UserModel user, 
+                HttpRequest request, 
+                DatabaseServices db, 
+                AuthServices auth) =>
             {
                 HttpReturnResult result = await auth.HashAndRegisterUser(user, db);
 
@@ -19,9 +23,12 @@ namespace FileVaultBackend.Routes
 
 
 
+
             // Login
             app.MapPost("/user/login", async (
-                LoginModel user, AuthServices auth, DatabaseServices db) =>
+                LoginModel user, 
+                AuthServices auth, 
+                DatabaseServices db) =>
             {
                 var result = await auth.ValidateUser(user, db, auth);
                 if (!result.Success)
@@ -35,9 +42,14 @@ namespace FileVaultBackend.Routes
 
 
             // Get users info
-            app.MapGet("/user/{username}", async (string username, DatabaseServices db) =>
+            app.MapGet("/user/info", async (
+                ClaimsPrincipal user,
+                string username, 
+                DatabaseServices db) =>
             {
-                var user = await db.GetUserByUsername(username);
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier).Value;
+
+                var userInfo = await db.GetUserByUserId(userId);
 
                 if (user == null)
                 {
@@ -49,13 +61,13 @@ namespace FileVaultBackend.Routes
 
                 return Results.Ok(new
                 {
-                    username = user.Username,
-                    email = user.Email
+                    username = userInfo.Username,
+                    email = userInfo.Email
                 });
-            });
+            }).RequireAuthorization();
 
 
-
+            // Need to add JWT to update user and delete user 
 
 
             // Update User
@@ -84,7 +96,7 @@ namespace FileVaultBackend.Routes
 
                 return Results.Ok(new { Success = "Updated user info" });
 
-            });
+            }).RequireAuthorization();
 
 
 
@@ -113,7 +125,7 @@ namespace FileVaultBackend.Routes
                     Console.WriteLine(ex.Message);
                     return Results.BadRequest(new { Error = "sql error" });
                 }
-            });
+            }).RequireAuthorization();
 
             // Refresh token
 

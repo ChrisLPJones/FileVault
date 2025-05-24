@@ -1,6 +1,6 @@
 ﻿using FileVaultBackend.Models;
-using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 
@@ -55,10 +55,10 @@ namespace FileVaultBackend.Services
 
             var claims = new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, user.Username.ToString()),
-                new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            };
+        new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+        new Claim(JwtRegisteredClaimNames.Email, user.Email),
+        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+    };
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
@@ -69,11 +69,9 @@ namespace FileVaultBackend.Services
                 SigningCredentials = credentials,
             };
 
-            var handler = new JsonWebTokenHandler();
-
-            string token = handler.CreateToken(tokenDescriptor);
-
-            return token;
+            var handler = new JwtSecurityTokenHandler();
+            var token = handler.CreateToken(tokenDescriptor);
+            return handler.WriteToken(token);
         }
 
 
