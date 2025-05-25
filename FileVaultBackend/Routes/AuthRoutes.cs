@@ -117,16 +117,13 @@ namespace FileVaultBackend.Routes
                 var userModel = await db.GetUserByUserId(userId);
 
                 if (userModel == null)
-                    return Results.BadRequest(new { Error = "Request body is missing or invalid JSON" });
-
-                
-                if (userModel == null)
                     return Results.BadRequest(new { Error = "User not found" });
 
                 try
                 {
-                    await db.DeleteUserById(userId, fs);
-                    return Results.Ok(new { Success = "User deleted" });
+                    var response = await db.DeleteUserAndFilesById(userId, fs);
+                    
+                    return Results.Ok(new { response.Message });
                 }
                 catch (Exception ex)
                 {

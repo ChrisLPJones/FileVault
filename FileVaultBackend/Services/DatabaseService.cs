@@ -14,10 +14,13 @@ public class DatabaseServices
 
     // Connection string for db access, injected through configuration
     private readonly string _connectionString;
+    private readonly string _storageRoot;
 
     public DatabaseServices(IConfiguration config)
     {
         _connectionString = config.GetConnectionString("DefaultConnection");
+        _storageRoot = config.GetValue<string>("StorageRoot");
+
     }
 
 
@@ -217,7 +220,8 @@ public class DatabaseServices
         using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Username = @Username";
+        string query = 
+            "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Username = @Username";
         using SqlCommand command = new SqlCommand(query, connection);
 
         command.Parameters.AddWithValue("username", username);
@@ -303,31 +307,67 @@ public class DatabaseServices
 
 
     // Deletes a user from the Users table based on username
-    public async Task DeleteUserById(
+    public async Task<HttpReturnResult> DeleteUserAndFilesById(
         string userId, 
         FileServices fs)
     {
-        SqlConnection connection = new SqlConnection(_connectionString);
-
+        var files = new List<string>();
+        using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
-
-        fs.DeleteAllFilesFromUser(userId);
-
-        // delete all file metadata
-
-        string query = "DELETE FROM Users WHERE Id = @UserId";
-
-        using SqlCommand command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
+        using var transaction = connection.BeginTransaction();
 
         try
         {
-            await command.ExecuteNonQueryAsync();
+            // Get files to delete
+            var commandGetFiles = new SqlCommand("" +
+                "SELECT GUID FROM Files WHERE UserId = @UserId", connection, transaction);
+            commandGetFiles.Parameters.AddWithValue("@UserId", userId);
+
+            using var reader = await commandGetFiles.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                files.Add(reader.GetString(0));
+            }
+            await reader.CloseAsync();
+
+            // Delete file metadata
+            var commandDeleteFiles = new SqlCommand(
+                "DELETE FROM Files Where UserId = @UserId", connection, transaction);
+            commandDeleteFiles.Parameters.AddWithValue("@UserId", userId);
+            await commandDeleteFiles.ExecuteNonQueryAsync();
+
+            // Delete user
+            var commandDeleteUser = new SqlCommand(
+                "DELETE FROM Users WHERE Id = @UserId", connection, transaction);
+            commandDeleteUser.Parameters.AddWithValue("@UserId", userId);
+            await commandDeleteUser.ExecuteNonQueryAsync();
+
+            await transaction.CommitAsync();
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex.Message);
+            await transaction.RollbackAsync();
+            Console.WriteLine($"SQL error: {ex.Message}");
+
+            return new HttpReturnResult(false, "Error deleting user and files");
         }
+
+        // Move Method into FileServices
+
+        foreach (var file in files) 
+        {
+            try
+            {
+                var fullPath = Path.Combine(_storageRoot, file);
+                File.Delete(fullPath);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting files: {ex.Message}");
+            }
+        }
+
+        return new HttpReturnResult(true, "Users Files and account deleted");
     }
 
 
