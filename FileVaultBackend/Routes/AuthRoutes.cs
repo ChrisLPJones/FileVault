@@ -67,30 +67,33 @@ namespace FileVaultBackend.Routes
             }).RequireAuthorization();
 
 
-            // Need to add JWT to update user and delete user 
 
 
             // Update User
-            app.MapPut("/user/{username}", async (
-                string username,
+            app.MapPut("/user", async (
+                ClaimsPrincipal user,
                 UserModel updateUser,
                 DatabaseServices db,
                 AuthServices auth) =>
             {
+
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier).Value;
+
                 if (updateUser == null)
                     return Results.BadRequest(new { Error = "Request body is missing or invalid JSON" });
 
                 if (!string.IsNullOrEmpty(updateUser.Password))
                     updateUser.Password = auth.GeneratePasswordHash(updateUser.Password);
 
-                var user = await db.GetUserByUsername(username);
+                var oldUser = await db.GetUserByUserId(userId);
+                
                 if (user == null)
                     return Results.NotFound(new
                     {
                         Error = "User not found"
                     });
 
-                var response = await db.UpdateUser(username, updateUser);
+                var response = await db.UpdateUser(oldUser, updateUser, userId);
                 if (!response.Success)
                     return Results.BadRequest(new { Error = response.Message });
 
@@ -100,24 +103,29 @@ namespace FileVaultBackend.Routes
 
 
 
+            // Need to add JWT to delete user 
 
 
             // Delete User
-            app.MapDelete("/user/{username}", async (
-                string username,
-                DatabaseServices db) =>
+            app.MapDelete("/user", async (
+                ClaimsPrincipal user,
+                DatabaseServices db,
+                FileServices fs) =>
             {
-                if (string.IsNullOrEmpty(username))
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier).Value;
+                
+                var userModel = await db.GetUserByUserId(userId);
+
+                if (userModel == null)
                     return Results.BadRequest(new { Error = "Request body is missing or invalid JSON" });
 
-                var user = await db.GetUserByUsername(username);
-                //Console.WriteLine(user.UserName);
-                if (user == null)
+                
+                if (userModel == null)
                     return Results.BadRequest(new { Error = "User not found" });
 
                 try
                 {
-                    db.DeleteUser(username);
+                    await db.DeleteUserById(userId, fs);
                     return Results.Ok(new { Success = "User deleted" });
                 }
                 catch (Exception ex)
@@ -127,10 +135,10 @@ namespace FileVaultBackend.Routes
                 }
             }).RequireAuthorization();
 
-            // Refresh token
+            // Refresh token /auth/refresh
 
 
-            // Logout
+            // Logout /auth/logout
 
 
         }

@@ -12,9 +12,9 @@ namespace FileVaultBackend.Routes
             // Map the /ping route, which returns "Pong" to indicate the app is alive
             app.MapGet("/ping", (ClaimsPrincipal user) =>
             {
-                var id = user.FindFirst(ClaimTypes.NameIdentifier).Value;
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier).Value;
 
-                return Results.Ok($"Pong from {id}");
+                return Results.Ok($"Pong from {userId}");
             });
 
 

@@ -108,6 +108,11 @@ public class FileServices(IConfiguration config)
             return new HttpReturnResult(false, "Error: File delete failed.");
         }
     }
+
+    internal void DeleteAllFilesFromUser(string userId)
+    {
+        // Delete All Users Files
+    }
 }
 
 
