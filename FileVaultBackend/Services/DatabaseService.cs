@@ -353,19 +353,7 @@ public class DatabaseServices
         }
 
         // Move Method into FileServices
-
-        foreach (var file in files) 
-        {
-            try
-            {
-                var fullPath = Path.Combine(_storageRoot, file);
-                File.Delete(fullPath);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error deleting files: {ex.Message}");
-            }
-        }
+        await fs.DeleteAllFilesFromUser(files);
 
         return new HttpReturnResult(true, "Users Files and account deleted");
     }

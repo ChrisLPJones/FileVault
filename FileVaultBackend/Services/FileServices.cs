@@ -109,9 +109,22 @@ public class FileServices(IConfiguration config)
         }
     }
 
-    internal void DeleteAllFilesFromUser(string userId)
+    internal async Task DeleteAllFilesFromUser(List<string> files)
     {
-        // Delete All Users Files
+        foreach (var file in files)
+        {
+            try
+            {
+                var fullPath = Path.Combine(_storageRoot, file);
+                
+                if (File.Exists(fullPath))
+                    await Task.Run(() => File.Delete(fullPath));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting file {file}: {ex.Message}");
+            }
+        }
     }
 }
 
