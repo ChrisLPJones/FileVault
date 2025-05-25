@@ -8,55 +8,43 @@ namespace FileVaultBackend.Routes
     {
         public static void MapAuthRoutes(this IEndpointRouteBuilder app)
         {
-            // Create User
+            // Registers a new user with hashed password
             app.MapPost("/user/register", async (
-                UserModel user, 
-                HttpRequest request, 
-                DatabaseServices db, 
+                UserModel user,
+                HttpRequest request,
+                DatabaseServices db,
                 AuthServices auth) =>
             {
-                HttpReturnResult result = await auth.HashAndRegisterUser(user, db);
-
+                var result = await auth.HashAndRegisterUser(user, db);
                 return Results.Created("", result.Message);
             });
 
-
-
-
-
-            // Login
+            // Logs in a user and returns a success message or error
             app.MapPost("/user/login", async (
-                LoginModel user, 
-                AuthServices auth, 
+                LoginModel user,
+                AuthServices auth,
                 DatabaseServices db) =>
             {
                 var result = await auth.ValidateUser(user, db, auth);
                 if (!result.Success)
                     return Results.BadRequest(new { Error = result.Message });
-                
+
                 return Results.Ok(new { Success = result.Message });
             });
 
-
-
-
-
-            // Get users info
+            // Retrieves authenticated user's information
             app.MapGet("/user/info", async (
                 ClaimsPrincipal user,
-                string username, 
+                string username,
                 DatabaseServices db) =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier).Value;
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
                 var userInfo = await db.GetUserByUserId(userId);
 
-                if (user == null)
+                if (userInfo == null)
                 {
-                    return Results.NotFound(new
-                    {
-                        Error = $"User not found"
-                    });
+                    return Results.NotFound(new { Error = "User not found" });
                 }
 
                 return Results.Ok(new
@@ -66,18 +54,14 @@ namespace FileVaultBackend.Routes
                 });
             }).RequireAuthorization();
 
-
-
-
-            // Update User
+            // Updates authenticated user's account information
             app.MapPut("/user", async (
                 ClaimsPrincipal user,
                 UserModel updateUser,
                 DatabaseServices db,
                 AuthServices auth) =>
             {
-
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier).Value;
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
                 if (updateUser == null)
                     return Results.BadRequest(new { Error = "Request body is missing or invalid JSON" });
@@ -86,34 +70,25 @@ namespace FileVaultBackend.Routes
                     updateUser.Password = auth.GeneratePasswordHash(updateUser.Password);
 
                 var oldUser = await db.GetUserByUserId(userId);
-                
-                if (user == null)
-                    return Results.NotFound(new
-                    {
-                        Error = "User not found"
-                    });
+
+                if (oldUser == null)
+                    return Results.NotFound(new { Error = "User not found" });
 
                 var response = await db.UpdateUser(oldUser, updateUser, userId);
                 if (!response.Success)
                     return Results.BadRequest(new { Error = response.Message });
 
                 return Results.Ok(new { Success = "Updated user info" });
-
             }).RequireAuthorization();
 
-
-
-            // Need to add JWT to delete user 
-
-
-            // Delete User
+            // Deletes the authenticated user's account and all their files
             app.MapDelete("/user", async (
                 ClaimsPrincipal user,
                 DatabaseServices db,
                 FileServices fs) =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier).Value;
-                
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
                 var userModel = await db.GetUserByUserId(userId);
 
                 if (userModel == null)
@@ -122,22 +97,16 @@ namespace FileVaultBackend.Routes
                 try
                 {
                     var response = await db.DeleteUserAndFilesById(userId, fs);
-                    
                     return Results.Ok(new { response.Message });
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(ex.Message);
-                    return Results.BadRequest(new { Error = "sql error" });
+                    return Results.BadRequest(new { Error = "SQL error occurred" });
                 }
             }).RequireAuthorization();
 
-            // Refresh token /auth/refresh
-
-
-            // Logout /auth/logout
-
-
+            // TODO: Implement token refresh and logout endpoints
         }
     }
 }

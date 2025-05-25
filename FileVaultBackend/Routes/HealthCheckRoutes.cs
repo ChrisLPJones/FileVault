@@ -9,14 +9,13 @@ namespace FileVaultBackend.Routes
     {
         public static void MapHealthCheckRoutes(this IEndpointRouteBuilder app)
         {
-            // Map the /ping route, which returns "Pong" to indicate the app is alive
+            // Health check endpoint to verify the API is running
             app.MapGet("/ping", () =>
             {
-                return Results.Ok($"Pong ");
+                return Results.Ok("Pong");
             });
 
-
-            // Map the /pingsql rout, which return "Pong" to indicate the Sql Server successfully connected
+            // Health check endpoint to verify the SQL Server connection is working
             app.MapGet("/pingsql", async (DatabaseServices db) =>
             {
                 try
@@ -26,7 +25,7 @@ namespace FileVaultBackend.Routes
                 }
                 catch (SqlException)
                 {
-                    return Results.BadRequest($"Connection to Sql failed");
+                    return Results.BadRequest("Connection to SQL failed");
                 }
             });
         }

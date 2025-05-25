@@ -10,55 +10,38 @@ namespace FileVaultBackend.Services
     {
         private readonly IConfiguration _config;
 
-
-
-
-
         public AuthServices(IConfiguration config)
         {
             _config = config;
         }
 
-
-
-
-
-        // Add user to database
+        // Hashes the user's password and registers them in the database
         public async Task<HttpReturnResult> HashAndRegisterUser(UserModel user, DatabaseServices db)
         {
-
             string password = GeneratePasswordHash(user.Password);
-
             return await db.RegisterUser(user.Username, user.Email, password);
         }
 
-
-
-
-
-        // Get Password Hash
+        // Hashes a plain-text password using BCrypt
         public string GeneratePasswordHash(string password)
         {
             return BCrypt.Net.BCrypt.HashPassword(password);
         }
 
-
-
-
-
-        // Get JWT Token
+        // Generates a JWT token for a valid user
         public string GetJWTToken(UserModel user)
         {
             var jwtConfig = _config.GetSection("Jwt");
+
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"]));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
             var claims = new[]
             {
-        new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-        new Claim(JwtRegisteredClaimNames.Email, user.Email),
-        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-    };
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
@@ -74,35 +57,23 @@ namespace FileVaultBackend.Services
             return handler.WriteToken(token);
         }
 
-
-
-
-
-        // Validate User
-        public async Task<HttpReturnResult> ValidateUser(
-            LoginModel user, DatabaseServices db, AuthServices auth)
+        // Validates user credentials and returns a JWT if successful
+        public async Task<HttpReturnResult> ValidateUser(LoginModel user, DatabaseServices db, AuthServices auth)
         {
             var userRecord = await db.GetUserByUsername(user.Username);
-            if (userRecord == null) 
+            if (userRecord == null)
                 return new HttpReturnResult(false, "User not found");
 
-
-
             bool isValid = BCrypt.Net.BCrypt.Verify(user.Password, userRecord.Password);
-            if(!isValid)
+            if (!isValid)
                 return new HttpReturnResult(false, "Password incorrect");
 
             string token = auth.GetJWTToken(userRecord);
-
             return new HttpReturnResult(true, token);
         }
-        
-        
-        
 
-        // update token
+        // TODO: implement token refresh
 
-        // logout
-
+        // TODO: implement logout
     }
 }

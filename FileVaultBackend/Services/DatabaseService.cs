@@ -4,31 +4,20 @@ using System.Security.Claims;
 
 namespace FileVaultBackend.Services;
 
-// Service responsible for interacting with the SQL database
 public class DatabaseServices
 {
-
-
-
-
-
-    // Connection string for db access, injected through configuration
+    // Store database connection string from configuration
     private readonly string _connectionString;
+    // Store root directory path for file storage from configuration
     private readonly string _storageRoot;
 
     public DatabaseServices(IConfiguration config)
     {
         _connectionString = config.GetConnectionString("DefaultConnection");
         _storageRoot = config.GetValue<string>("StorageRoot");
-
     }
 
-
-
-
-
-
-    // Checks if the database connection can be successfully opened
+    // Check if the database connection can be opened successfully
     public async Task CheckConnection()
     {
         using (SqlConnection connection = new SqlConnection(_connectionString))
@@ -37,123 +26,87 @@ public class DatabaseServices
         }
     }
 
-
-
-
-
-
-    // Adds a file record to the Files table with the provided filename and GUID
-    public async Task AddFile(
-        string fileName, 
-        string guid, 
-        string userId)
+    // Add a new file record to the database with filename, guid, and user ID
+    public async Task AddFile(string fileName, string guid, string userId)
     {
-        await using (var connection = new SqlConnection(_connectionString))
-        {
-            await connection.OpenAsync();
-            string query = @"
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string query = @"
             INSERT INTO Files (FileName, guid, UserId)
             VALUES (@FileName, @guid, @UserId);";
 
-            using (SqlCommand command = new SqlCommand(query, connection))
-            {
-                command.Parameters.AddWithValue("@FileName", fileName);
-                command.Parameters.AddWithValue("@guid", guid);
-                command.Parameters.AddWithValue("@UserId", userId);
+        using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@FileName", fileName);
+        command.Parameters.AddWithValue("@guid", guid);
+        command.Parameters.AddWithValue("@UserId", userId);
 
-                try
-                {
-                    await command.ExecuteNonQueryAsync();
-                    Console.WriteLine("File metadata added to db");
-                }
-                catch (SqlException ex)
-                {
-                    Console.WriteLine($"Error: {ex}");
-                }
-            }
-        }
-    }
-
-
-
-
-
-
-    // Deletes file metadata from the database by file name
-    public async Task DeleteFileMetadata(
-        string fileName, 
-        string userId)
-    {
-        using (var connection = new SqlConnection(_connectionString))
+        try
         {
-            await connection.OpenAsync();
-            string query = @"DELETE FROM Files WHERE UserId = @UserId AND FileName = @FileName;";
-
-            using (SqlCommand command = new SqlCommand(query, connection))
-            {
-                command.Parameters.AddWithValue("FileName", fileName);
-                command.Parameters.AddWithValue("userId", userId);
-
-                try
-                {
-                    await command.ExecuteNonQueryAsync();
-                    Console.WriteLine("File metadata deleted from db");
-                }
-                catch (SqlException)
-                {
-                    Console.WriteLine("Error: metadata not found ");
-                }
-            }
+            await command.ExecuteNonQueryAsync();
+            Console.WriteLine("File metadata added to db");
+        }
+        catch (SqlException ex)
+        {
+            Console.WriteLine($"Error: {ex}");
         }
     }
 
-
-
-
-
-
-    // Retrieves all filenames from the Files table and returns them as a list
-    public List<string> GetFilesFromDb(
-        string userId)
+    // Remove file metadata from the database for the given user and filename
+    public async Task DeleteFileMetadata(string fileName, string userId)
     {
-        string fileName = null;
-        List<string> filesList = [];
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
 
-        using SqlConnection connection = new SqlConnection(_connectionString);
+        string query = @"DELETE FROM Files WHERE UserId = @UserId AND FileName = @FileName;";
+
+        using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@FileName", fileName);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        try
+        {
+            await command.ExecuteNonQueryAsync();
+            Console.WriteLine("File metadata deleted from db");
+        }
+        catch (SqlException)
+        {
+            Console.WriteLine("Error: metadata not found ");
+        }
+    }
+
+    // Retrieve all filenames that belong to a specific user
+    public List<string> GetFilesFromDb(string userId)
+    {
+        var filesList = new List<string>();
+
+        using var connection = new SqlConnection(_connectionString);
         connection.Open();
 
-        string query = "SELECT * FROM FILES WHERE FileName IS NOT NULL AND UserId = @UserId";
+        string query = "SELECT FileName FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
 
-        using SqlCommand command = new SqlCommand(query, connection);
-
+        using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
 
         using var reader = command.ExecuteReader();
 
         while (reader.Read())
         {
-            fileName = reader["FileName"].ToString();
-            filesList.Add(fileName);
+            filesList.Add(reader["FileName"].ToString());
         }
 
         return filesList;
     }
 
-
-
-
-
-
-    // Retrieves the GUID associated with a given filename
-    public async Task<string> GetFileGUIDAsync(
-        string fileName, 
-        string userId)
+    // Get the unique identifier (GUID) for a specific file owned by the user
+    public async Task<string> GetFileGUIDAsync(string fileName, string userId)
     {
-        using SqlConnection connection = new SqlConnection(_connectionString);
+        using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT GUID from Files where UserId = @UserId AND FileName = @FileName";
-        using SqlCommand command = new SqlCommand(query, connection);
+        string query = "SELECT GUID FROM Files WHERE UserId = @UserId AND FileName = @FileName";
+
+        using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@FileName", fileName);
         command.Parameters.AddWithValue("@UserId", userId);
 
@@ -165,28 +118,19 @@ public class DatabaseServices
         }
         else
         {
-            Console.WriteLine($"Error: File does not exist in db");
+            Console.WriteLine("Error: File does not exist in db");
             return null;
         }
     }
 
-
-
-
-
-
-    // Registers a new user in the Users table
-    public async Task<HttpReturnResult> RegisterUser(
-        string Username, 
-        string Email, 
-        string PasswordHash)
+    // Register a new user in the database, handling duplicate username or email errors
+    public async Task<HttpReturnResult> RegisterUser(string Username, string Email, string PasswordHash)
     {
-        using SqlConnection connection = new SqlConnection(_connectionString);
+        using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "INSERT INTO Users (Username, Email, PasswordHash) " +
-            "VALUES (@Username, @Email, @PasswordHash)";
-        using SqlCommand command = new SqlCommand(@query, connection);
+        string query = "INSERT INTO Users (Username, Email, PasswordHash) VALUES (@Username, @Email, @PasswordHash)";
+        using var command = new SqlCommand(query, connection);
 
         command.Parameters.AddWithValue("@Username", Username.Trim());
         command.Parameters.AddWithValue("@Email", Email.Trim().ToLower());
@@ -199,6 +143,7 @@ public class DatabaseServices
         }
         catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
         {
+            // Duplicate username or email detected
             return new HttpReturnResult(false, $"User {Username} already exists.");
         }
         catch (SqlException ex)
@@ -208,25 +153,18 @@ public class DatabaseServices
         }
     }
 
-
-
-
-
-
-    // Retrieves user info from the Users table by username
-    internal async Task<UserModel> GetUserByUsername(
-        string username)
+    // Retrieve a user's information from the database by username
+    internal async Task<UserModel> GetUserByUsername(string username)
     {
-        using SqlConnection connection = new SqlConnection(_connectionString);
+        using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = 
-            "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Username = @Username";
-        using SqlCommand command = new SqlCommand(query, connection);
+        string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Username = @Username";
+        using var command = new SqlCommand(query, connection);
 
-        command.Parameters.AddWithValue("username", username);
+        command.Parameters.AddWithValue("@Username", username);
 
-        using SqlDataReader reader = command.ExecuteReader();
+        using var reader = await command.ExecuteReaderAsync();
 
         if (await reader.ReadAsync())
         {
@@ -242,25 +180,15 @@ public class DatabaseServices
         return null;
     }
 
-
-
-
-
-
-    // Updates user info in the Users table; only updates fields that are not null/empty
-    public async Task<HttpReturnResult> UpdateUser(
-        UserModel oldUser, 
-        UserModel updateUser, 
-        string userId)
+    // Update user data only for fields that have been changed
+    public async Task<HttpReturnResult> UpdateUser(UserModel oldUser, UserModel updateUser, string userId)
     {
-        using SqlConnection connection = new SqlConnection(_connectionString);
+        using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         var updates = new List<string>();
-        using var command = new SqlCommand();
-        command.Connection = connection;
+        using var command = new SqlCommand { Connection = connection };
 
-        // Add parameters and update clauses conditionally
         if (!string.IsNullOrWhiteSpace(updateUser.Username) && oldUser.Username != updateUser.Username)
         {
             updates.Add("Username = @NewUsername");
@@ -282,17 +210,15 @@ public class DatabaseServices
         if (updates.Count == 0)
             return new HttpReturnResult(false, "Nothing to update");
 
-        // Compose final SQL query dynamically based on which fields are being updated
         string setClause = string.Join(", ", updates);
-        string query = $"UPDATE Users SET {setClause} Where Id = @UserId";
-        command.CommandText = query;
+        command.CommandText = $"UPDATE Users SET {setClause} WHERE Id = @UserId";
         command.Parameters.AddWithValue("@UserId", userId);
 
         try
         {
             int rowsAffected = await command.ExecuteNonQueryAsync();
             if (rowsAffected == 0)
-                return new HttpReturnResult(true, "Nothing changes where made");
+                return new HttpReturnResult(true, "Nothing changes were made");
             return new HttpReturnResult(true, "Updated user info");
         }
         catch (Exception ex)
@@ -301,26 +227,20 @@ public class DatabaseServices
         }
     }
 
-
-
-
-
-
-    // Deletes a user from the Users table based on username
-    public async Task<HttpReturnResult> DeleteUserAndFilesById(
-        string userId, 
-        FileServices fs)
+    // Remove user and all their files metadata from database and delete files from storage
+    public async Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs)
     {
         var files = new List<string>();
+
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
-        using var transaction = connection.BeginTransaction();
+
+        using var transaction = await connection.BeginTransactionAsync();
 
         try
         {
-            // Get files to delete
-            var commandGetFiles = new SqlCommand("" +
-                "SELECT GUID FROM Files WHERE UserId = @UserId", connection, transaction);
+            // Get all GUIDs of files for this user
+            var commandGetFiles = new SqlCommand("SELECT GUID FROM Files WHERE UserId = @UserId", connection, (SqlTransaction)transaction);
             commandGetFiles.Parameters.AddWithValue("@UserId", userId);
 
             using var reader = await commandGetFiles.ExecuteReaderAsync();
@@ -330,15 +250,13 @@ public class DatabaseServices
             }
             await reader.CloseAsync();
 
-            // Delete file metadata
-            var commandDeleteFiles = new SqlCommand(
-                "DELETE FROM Files Where UserId = @UserId", connection, transaction);
+            // Delete file metadata entries for this user
+            var commandDeleteFiles = new SqlCommand("DELETE FROM Files WHERE UserId = @UserId", connection, (SqlTransaction)transaction);
             commandDeleteFiles.Parameters.AddWithValue("@UserId", userId);
             await commandDeleteFiles.ExecuteNonQueryAsync();
 
-            // Delete user
-            var commandDeleteUser = new SqlCommand(
-                "DELETE FROM Users WHERE Id = @UserId", connection, transaction);
+            // Delete the user record
+            var commandDeleteUser = new SqlCommand("DELETE FROM Users WHERE Id = @UserId", connection, (SqlTransaction)transaction);
             commandDeleteUser.Parameters.AddWithValue("@UserId", userId);
             await commandDeleteUser.ExecuteNonQueryAsync();
 
@@ -348,32 +266,27 @@ public class DatabaseServices
         {
             await transaction.RollbackAsync();
             Console.WriteLine($"SQL error: {ex.Message}");
-
             return new HttpReturnResult(false, "Error deleting user and files");
         }
 
-        // Move Method into FileServices
+        // Remove all user's files from storage after successful DB transaction
         await fs.DeleteAllFilesFromUser(files);
 
-        return new HttpReturnResult(true, "Users Files and account deleted");
+        return new HttpReturnResult(true, "User's files and account deleted");
     }
 
-
-
-
-
-
+    // Retrieve user details by their user ID
     internal async Task<UserModel> GetUserByUserId(string userId)
     {
-        using SqlConnection connection = new SqlConnection(_connectionString);
+        using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Id = @Id";
-        using SqlCommand command = new SqlCommand(query, connection);
+        using var command = new SqlCommand(query, connection);
 
-        command.Parameters.AddWithValue("Id", userId);
+        command.Parameters.AddWithValue("@Id", userId);
 
-        using SqlDataReader reader = command.ExecuteReader();
+        using var reader = await command.ExecuteReaderAsync();
 
         if (await reader.ReadAsync())
         {
