@@ -10,11 +10,9 @@ namespace FileVaultBackend.Routes
         public static void MapHealthCheckRoutes(this IEndpointRouteBuilder app)
         {
             // Map the /ping route, which returns "Pong" to indicate the app is alive
-            app.MapGet("/ping", (ClaimsPrincipal user) =>
+            app.MapGet("/ping", () =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier).Value;
-
-                return Results.Ok($"Pong from {userId}");
+                return Results.Ok($"Pong ");
             });
 
 
