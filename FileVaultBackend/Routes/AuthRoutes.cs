@@ -11,7 +11,6 @@ namespace FileVaultBackend.Routes
             // Registers a new user with hashed password
             app.MapPost("/user/register", async (
                 UserModel user,
-                HttpRequest request,
                 DatabaseServices db,
                 AuthServices auth) =>
             {
