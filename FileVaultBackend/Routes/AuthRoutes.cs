@@ -15,7 +15,13 @@ namespace FileVaultBackend.Routes
                 DatabaseServices db,
                 AuthServices auth) =>
             {
+
+                var checkUser = db.GetUserByUsername(user.Username);
+                if (checkUser != null)
+                    return Results.BadRequest(new { error = "User already exists." });
+
                 var result = await auth.HashAndRegisterUser(user, db);
+                
                 return Results.Created("", result.Message);
             });
 
