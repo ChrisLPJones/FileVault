@@ -1,6 +1,8 @@
 using FileVaultBackend.Models;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
 using System.Security.Claims;
+using System.Threading.Tasks;
 
 namespace FileVaultBackend.Services;
 
@@ -300,5 +302,20 @@ public class DatabaseServices
         }
 
         return null;
+    }
+
+    // 
+    internal async Task UpdateUserLastLogin(LoginModel user)
+    {
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string query = "Update Users SET LastLogin = @LastLogin WHERE Username = @Username";
+        using var command = new SqlCommand(query, connection);
+
+        command.Parameters.AddWithValue("@LastLogin", DateTime.UtcNow);
+        command.Parameters.AddWithValue("@Username", user.Username);
+
+        await command.ExecuteNonQueryAsync();
     }
 }

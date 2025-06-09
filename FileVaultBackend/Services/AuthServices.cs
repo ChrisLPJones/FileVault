@@ -69,6 +69,9 @@ namespace FileVaultBackend.Services
                 return new HttpReturnResult(false, "Password incorrect");
 
             string token = auth.GetJWTToken(userRecord);
+
+            await db.UpdateUserLastLogin(user);
+            
             return new HttpReturnResult(true, token);
         }
 
