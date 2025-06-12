@@ -17,5 +17,6 @@
             "username": "sa",
             "password": "YourStrong!Passw0rd"
         }
-    ]
+    ],
+    "cSpell.words": ["Hmac", "Passw"]
 }
