@@ -1,17 +1,12 @@
 using FileVaultBackend.Models;
-using System.Security.Claims;
 
 namespace FileVaultBackend.Services;
 
-public class FileServices
+public class FileServices(IConfiguration config)
 {
-    private readonly string _storageRoot;
+    private readonly string _storageRoot = config.GetValue<string>("StorageRoot");
 
-    public FileServices(IConfiguration config)
-    {
-        // Root directory for file storage, injected via configuration
-        _storageRoot = config.GetValue<string>("StorageRoot");
-    }
+    // Root directory for file storage, injected via configuration
 
     // Uploads a file, saves it to disk, and stores metadata in the database
     public async Task<HttpReturnResult> UploadFile(
@@ -27,7 +22,7 @@ public class FileServices
         try
         {
             // Save file to disk
-            using (var stream = new FileStream(fullFilePath, FileMode.Create))
+            await using (var stream = new FileStream(fullFilePath, FileMode.Create))
                 await file.CopyToAsync(stream);
 
             // Add file metadata to database
@@ -54,11 +49,11 @@ public class FileServices
         var sanitizedFilename = Path.GetFileName(fileName); // Sanitize input
         await db.CheckConnection();
 
-        var fileGUID = await db.GetFileGUIDAsync(sanitizedFilename, userId); // Lookup GUID
-        if (fileGUID == null)
+        var fileGuid = await db.GetFileGUIDAsync(sanitizedFilename, userId); // Lookup GUID
+        if (fileGuid == null)
             return new HttpReturnResult(false, "File not found.");
 
-        var fullFilePath = Path.Combine(_storageRoot, fileGUID);
+        var fullFilePath = Path.Combine(_storageRoot, fileGuid);
         if (!File.Exists(fullFilePath))
             return new HttpReturnResult(false, "File not found.");
 
