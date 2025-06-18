@@ -18,5 +18,13 @@
             "password": "YourStrong!Passw0rd"
         }
     ],
-    "cSpell.words": ["Dockerized", "Hmac", "Passw", "xunit"]
+    "cSpell.words": [
+        "Dockerized",
+        "Hmac",
+        "Passw",
+        "sqlcmd",
+        "sqlinit",
+        "sqlservr",
+        "xunit"
+    ]
 }

@@ -1,6 +1,7 @@
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
     environment:
       SA_PASSWORD: "YourStrong!Passw0rd"
       ACCEPT_EULA: "Y"
@@ -8,8 +9,20 @@ services:
       - "1433:1433"
     volumes:
       - sql_data:/var/opt/mssql
-    user: "mssql"
-    
+
+  sqlinit:
+    image: mcr.microsoft.com/mssql-tools
+    container_name: sqlinit
+    depends_on:
+      - sqlserver
+    volumes:
+      - ./db/init.sql:/init.sql
+    entrypoint: >
+      bash -c "
+        echo 'Waiting for SQL Server to be available...' &&
+        sleep 20 &&
+        /opt/mssql-tools/bin/sqlcmd -S sqlserver -U SA -P 'YourStrong!Passw0rd' -i /init.sql
+      "
+
 volumes:
   sql_data:
-    driver: local

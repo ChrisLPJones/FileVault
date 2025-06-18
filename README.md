@@ -34,7 +34,7 @@ git clone https://github.com/ChrisLPJones/FileVault.git
 cd FileVault
 ```
 
-### Run with Docker
+### Run Docker in first terminal
 
 ```bash
 cd Backend
@@ -42,17 +42,18 @@ cd Docker
 docker-compose up --build
 ```
 
-This will start the backend server and a SQL Server container with pre-configured settings.
+This will start the backend SQL Server container with pre-configured settings.
 
 
 
-Run the application in a new terminal:
+### Run C# API Backend in a second terminal
 
 ```bash
 cd Backend
 dotnet restore
 dotnet run
 ```
+This will start the backend api server. 
 
 ## API Documentation
 
