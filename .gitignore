@@ -364,7 +364,7 @@ ASALocalRun/
 # MFractors (Xamarin productivity tool) working folder
 .mfractor/
 
-FileVaultBackend/SecureVaultStorage/*
+Backend/SecureVaultStorage/*
 !.gitkeep
 # Local History for Visual Studio
 .localhistory/

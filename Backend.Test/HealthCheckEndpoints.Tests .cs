@@ -2,7 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 
-namespace FileVaultBackend.Test
+namespace Backend.Test
 {
     public class HealthCheckEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
     {

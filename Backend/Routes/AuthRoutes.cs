@@ -1,8 +1,8 @@
-﻿using FileVaultBackend.Models;
-using FileVaultBackend.Services;
+﻿using Backend.Models;
+using Backend.Services;
 using System.Security.Claims;
 
-namespace FileVaultBackend.Routes
+namespace Backend.Routes
 {
     public static class AuthRoutes
     {

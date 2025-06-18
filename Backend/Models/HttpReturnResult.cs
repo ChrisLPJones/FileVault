@@ -1,4 +1,4 @@
-﻿namespace FileVaultBackend.Models
+﻿namespace Backend.Models
 {
 #nullable enable
     public record HttpReturnResult

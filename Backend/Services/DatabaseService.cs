@@ -1,10 +1,10 @@
-using FileVaultBackend.Models;
+using Backend.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
-namespace FileVaultBackend.Services;
+namespace Backend.Services;
 
 public class DatabaseServices
 {

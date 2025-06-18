@@ -1,6 +1,6 @@
-using FileVaultBackend.Models;
+using Backend.Models;
 
-namespace FileVaultBackend.Services;
+namespace Backend.Services;
 
 public class FileServices(IConfiguration config)
 {

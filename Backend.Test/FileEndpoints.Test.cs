@@ -4,7 +4,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 
-namespace FileVaultBackend.Test
+namespace Backend.Test
 {
     public class FileEndpointsTest : IClassFixture<WebApplicationFactory<Program>>
     {

@@ -1,10 +1,10 @@
-using FileVaultBackend.Routes;
-using FileVaultBackend.Services;
+using Backend.Routes;
+using Backend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
-namespace FileVaultBackend
+namespace Backend
 {
     public partial class Program
     {

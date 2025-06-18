@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FileVaultBackend\FileVaultBackend.csproj" />
+    <ProjectReference Include="..\Backend\Backend.csproj" />
   </ItemGroup>
 
   <ItemGroup>

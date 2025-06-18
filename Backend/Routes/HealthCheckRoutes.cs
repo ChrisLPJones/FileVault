@@ -1,7 +1,7 @@
-﻿using FileVaultBackend.Services;
+﻿using Backend.Services;
 using Microsoft.Data.SqlClient;
 
-namespace FileVaultBackend.Routes
+namespace Backend.Routes
 {
     public static class HealthCheckRoutes
     {
