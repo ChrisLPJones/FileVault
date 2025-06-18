@@ -15,7 +15,7 @@ namespace FileVaultBackend.Routes
                 AuthServices auth) =>
             {
 
-                var checkUser = db.GetUserByUsername(user.Username);
+                var checkUser = await db.GetUserByUsername(user.Username);
                 if (checkUser != null)
                     return Results.BadRequest(new { error = "User already exists." });
 
