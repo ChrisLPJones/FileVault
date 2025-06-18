@@ -47,10 +47,10 @@ This will start the backend server and a SQL Server container with pre-configure
 
 
 
-Run the application:
+Run the application in a new terminal:
 
 ```bash
-cd ..
+cd Backend
 dotnet restore
 dotnet run
 ```
