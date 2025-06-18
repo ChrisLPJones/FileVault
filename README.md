@@ -26,7 +26,6 @@
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/)
 - [Docker](https://www.docker.com/)
-- [SQL Server](https://www.microsoft.com/en-us/sql-server) (or use the Dockerized version)
 
 ### Clone the Repository
 
