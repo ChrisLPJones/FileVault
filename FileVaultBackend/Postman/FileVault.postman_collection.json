@@ -1,0 +1,369 @@
+{
+	"info": {
+		"_postman_id": "311f8fc0-26a7-4e0f-b088-1a9593732c38",
+		"name": "FileVault",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "37976201"
+	},
+	"item": [
+		{
+			"name": "Ping",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2N2ViMzkzNy0zNGI3LTQyNjctOTg0ZS1iNzlkYzY3ZjBhYzMiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJqdGkiOiI2ZWUyYTE3Ny00ZGExLTQ1NDItOWU4Ny01YmYwZGQwMDM1MWYiLCJuYmYiOjE3NDgxNDQzOTksImV4cCI6MTc0ODE0Nzk5OSwiaWF0IjoxNzQ4MTQ0Mzk5LCJpc3MiOiJhcHBfSXNzdWVyIiwiYXVkIjoiYXBwX0F1ZGllbmNlIn0.f6Fw3-xx_COeE3h9TdRzWFf_21X-AoAxbte1Sak3lw4",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/ping",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"ping"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Ping Sql",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/pingsql",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"pingsql"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Register User",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"userName\": \"chrisjones\",\r\n  \"email\": \"chrisjones@email.com\",\r\n  \"password\": \"password123\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:3000/user/register",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"user",
+						"register"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "User Login",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"username\": \"chrisjones\",\r\n    \"password\": \"password123\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:3000/user/login",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"user",
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get User Info",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2N2ViMzkzNy0zNGI3LTQyNjctOTg0ZS1iNzlkYzY3ZjBhYzMiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJqdGkiOiIwYWNmYTBlZS00ZWU0LTQxNjItOWIzNi1mNDZmNDg0NmY5MDYiLCJuYmYiOjE3NDgxMDY2NDQsImV4cCI6MTc0ODExMDI0NCwiaWF0IjoxNzQ4MTA2NjQ0LCJpc3MiOiJhcHBfSXNzdWVyIiwiYXVkIjoiYXBwX0F1ZGllbmNlIn0.irAWcPu4eT89PJ1J356gD226LucQK7kG98D6Tzd2eew",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/user/info",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"user",
+						"info"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update User Info",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2N2ViMzkzNy0zNGI3LTQyNjctOTg0ZS1iNzlkYzY3ZjBhYzMiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJqdGkiOiI2ZWUyYTE3Ny00ZGExLTQ1NDItOWU4Ny01YmYwZGQwMDM1MWYiLCJuYmYiOjE3NDgxNDQzOTksImV4cCI6MTc0ODE0Nzk5OSwiaWF0IjoxNzQ4MTQ0Mzk5LCJpc3MiOiJhcHBfSXNzdWVyIiwiYXVkIjoiYXBwX0F1ZGllbmNlIn0.f6Fw3-xx_COeE3h9TdRzWFf_21X-AoAxbte1Sak3lw4",
+							"type": "string"
+						}
+					]
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"userName\": \"user\",\r\n  \"email\": \"test@example.com\",\r\n  \"password\": \"asdasd\"\r\n}"
+				},
+				"url": {
+					"raw": "http://localhost:3000/user",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"user"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete User",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4YWI5ZGQzYS0zNWQ1LTQxZmMtYjRiMy1iMjI1ZGQzNTMzZTciLCJlbWFpbCI6ImNocmlzam9uZXNAZW1haWwuY29tIiwianRpIjoiNjNjNjVjOGItNmEwNi00NGE2LThmNmYtNzU3NTEyNDM5OGM1IiwibmJmIjoxNzQ4MTg3NjIxLCJleHAiOjE3NDgxOTEyMjEsImlhdCI6MTc0ODE4NzYyMSwiaXNzIjoiYXBwX0lzc3VlciIsImF1ZCI6ImFwcF9BdWRpZW5jZSJ9.0M7kXdhRSRmhLUkyq_lQOOyJt8qvpHuPT0zQgBK3DiE",
+							"type": "string"
+						}
+					]
+				},
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/user",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"user"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Upload File",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiNGJlMTEzYS1mZTIwLTRjMjAtOTI2Zi1jYTgxYjcwNjQ0ODYiLCJlbWFpbCI6ImNocmlzam9uZXNAZW1haWwuY29tIiwianRpIjoiOGJlNDkyNWUtMWQwOC00ZTNkLTgzY2MtYmQzYjhjMmZmNGIxIiwibmJmIjoxNzQ4MTg3NzE3LCJleHAiOjE3NDgxOTEzMTcsImlhdCI6MTc0ODE4NzcxNywiaXNzIjoiYXBwX0lzc3VlciIsImF1ZCI6ImFwcF9BdWRpZW5jZSJ9.9dbIkCe_vvQiyCfAz8etK29E4j8m5jD7aK4UVX1v9CI",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "File.txt",
+							"value": "",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "",
+							"type": "file",
+							"src": "postman-cloud:///1f03218c-4048-45c0-bfff-c32f91e114fb"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:3000/upload",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"upload"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Files",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiNGJlMTEzYS1mZTIwLTRjMjAtOTI2Zi1jYTgxYjcwNjQ0ODYiLCJlbWFpbCI6ImNocmlzam9uZXNAZW1haWwuY29tIiwianRpIjoiYjYzNGEyMDAtOWI1My00OGRiLTk2ODYtMTVmYTQ4MDBkZmEzIiwibmJmIjoxNzQ4MTg4OTcxLCJleHAiOjE3NDgxOTI1NzEsImlhdCI6MTc0ODE4ODk3MSwiaXNzIjoiYXBwX0lzc3VlciIsImF1ZCI6ImFwcF9BdWRpZW5jZSJ9.YHFex2wVsUHNIGCPUF2M-zsLF22u9BEsoLiWQJViFDQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/files",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"files"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Download File",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/download/TextFile.txt",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"download",
+						"TextFile.txt"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete File",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiNGJlMTEzYS1mZTIwLTRjMjAtOTI2Zi1jYTgxYjcwNjQ0ODYiLCJlbWFpbCI6ImNocmlzam9uZXNAZW1haWwuY29tIiwianRpIjoiOGJlNDkyNWUtMWQwOC00ZTNkLTgzY2MtYmQzYjhjMmZmNGIxIiwibmJmIjoxNzQ4MTg3NzE3LCJleHAiOjE3NDgxOTEzMTcsImlhdCI6MTc0ODE4NzcxNywiaXNzIjoiYXBwX0lzc3VlciIsImF1ZCI6ImFwcF9BdWRpZW5jZSJ9.9dbIkCe_vvQiyCfAz8etK29E4j8m5jD7aK4UVX1v9CI",
+							"type": "string"
+						}
+					]
+				},
+				"method": "DELETE",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "File.txt",
+							"value": "",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "asdasd",
+							"type": "file",
+							"src": "postman-cloud:///1f03218c-4048-45c0-bfff-c32f91e114fb"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:3000/delete/Test.txt",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"delete",
+						"Test.txt"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
