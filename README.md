@@ -16,7 +16,7 @@
 
 - **Backend**: C# (.NET 8 Minimal APIs)
 - **Database**: SQL Server
-- **Frontend**: T
+- **Frontend**: 
 - **Storage**: Filesystem-based storage
 - **Containerization**: Docker + Docker Compose
 
