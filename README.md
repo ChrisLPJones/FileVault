@@ -51,6 +51,7 @@ Run the application:
 
 ```bash
 cd ..
+dotnet restore
 dotnet run
 ```
 
