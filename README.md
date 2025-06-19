@@ -34,7 +34,7 @@ git clone https://github.com/ChrisLPJones/FileVault.git
 cd FileVault
 ```
 
-### Run Docker in first terminal
+### Run Docker in first terminal. 'make sure docker desktop is running'
 
 ```bash
 cd Backend
