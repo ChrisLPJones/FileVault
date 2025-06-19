@@ -39,7 +39,7 @@ cd FileVault
 ```bash
 cd Backend
 cd Docker
-docker-compose up --build
+docker compose up --build
 ```
 
 This will start the backend SQL Server container with pre-configured settings.
