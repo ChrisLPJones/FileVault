@@ -38,27 +38,61 @@ namespace Backend.Test
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
             // Act
-            HttpResponseMessage response = await _client.PostAsync("/user/register", content);
-            string responseBody = await response.Content.ReadAsStringAsync();
+            HttpResponseMessage responseMessageRegister = await _client.PostAsync("/user/register", content);
+            string responseBody = await responseMessageRegister.Content.ReadAsStringAsync();
 
             /// Assert
-            response.StatusCode.Should().Be(HttpStatusCode.Created);
+            responseMessageRegister.StatusCode.Should().Be(HttpStatusCode.Created);
             responseBody.Should().Be("\"Successfully added user testuser\"");
 
 
             /* Login User */
 
+            // Arrange
+            LoginModel userLogin = new()
+            {
+                Username = "testuser",
+                Password = "testpassword"
+            };
+
+            string jsonLogin = JsonSerializer.Serialize(userLogin);
+            StringContent contentLogin = new(json, Encoding.UTF8, "application/json");
+
+            // Act
+            HttpResponseMessage responseMessageLogin = await _client.PostAsync("/user/login", contentLogin);
+            string responseBodyLogin = await responseMessageLogin.Content.ReadAsStringAsync();
+
+            using var jsonDoc = JsonDocument.Parse(responseBodyLogin);
+            string jwt = jsonDoc.RootElement.GetProperty("success").GetString();
+            _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jwt);
+
+            // Assert
+            responseMessageLogin.StatusCode.Should().Be(HttpStatusCode.OK);
+            responseBodyLogin.Should().Contain("success");
+
+
+
             /* Get User */
+            // Arrange
+            HttpResponseMessage responseMessageGetUser = await _client.GetAsync("/user/info");
+            string responseBodyGetUser = await responseMessageGetUser.Content.ReadAsStringAsync();
+
+            // Act
+
+            // Assert
+
 
             /* Update User */
+            // Arrange
 
-            /* Delete User */
+            // Act
+
+            // Assert
 
 
 
 
-
-            // /* Upload */
+            // /* Upload File */
 
             // Arrange
             // var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes("Dummy file content"));
@@ -74,7 +108,7 @@ namespace Backend.Test
             // response.StatusCode.Should().Be(HttpStatusCode.OK);
             // var content = await response.Content.ReadAsStringAsync();
             // content.Should().Be("\"File Uploaded: test.txt\"");
-            // /* List */
+            // /* List File */
 
             // // Act
             // response = await _client.GetAsync("/files");
@@ -84,7 +118,7 @@ namespace Backend.Test
             // content = await response.Content.ReadAsStringAsync();
             // content.Should().Contain("test.txt");
 
-            // /* Download */
+            // /* Download File */
 
             // // Act
             // response = await _client.GetAsync("download/test.txt");
@@ -94,7 +128,7 @@ namespace Backend.Test
             // content = await response.Content.ReadAsStringAsync();
             // content.Should().Be("Dummy file content");
 
-            // /* Delete */
+            // /* Delete File */
 
             // // Act
             // response = await _client.DeleteAsync("/delete/test.txt");
@@ -105,6 +139,11 @@ namespace Backend.Test
             // content.Should().Be("\"File deleted: test.txt\"");
 
             /* Delete User */
+            // Arrange
+
+            // Act
+
+            // Assert
 
 
         }
