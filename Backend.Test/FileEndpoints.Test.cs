@@ -63,7 +63,7 @@ namespace Backend.Test
             string responseBodyLogin = await responseMessageLogin.Content.ReadAsStringAsync();
 
             using var jsonDoc = JsonDocument.Parse(responseBodyLogin);
-            string jwt = jsonDoc.RootElement.GetProperty("success").GetString();
+            string? jwt = jsonDoc.RootElement.GetProperty("success").GetString();
             _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jwt);
 
             // Assert
@@ -72,10 +72,19 @@ namespace Backend.Test
 
 
 
+
             /* Get User */
             // Arrange
+
+            // Act 
             HttpResponseMessage responseMessageGetUser = await _client.GetAsync("/user/info");
             string responseBodyGetUser = await responseMessageGetUser.Content.ReadAsStringAsync();
+            
+            // Assert
+            responseMessageGetUser.StatusCode.Should().Be(HttpStatusCode.OK);
+            responseBodyGetUser.Should().Be("{\"username\":\"testuser\",\"email\":\"testemail@address.com\"}");
+
+
 
             // Act
 
