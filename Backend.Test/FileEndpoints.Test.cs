@@ -9,7 +9,10 @@ namespace Backend.Test
 {
     public class FileEndpointsTest : IClassFixture<WebApplicationFactory<Program>>
     {
+
+
         private readonly HttpClient _client;
+
 
         public FileEndpointsTest(WebApplicationFactory<Program> factory)
         {
@@ -19,13 +22,16 @@ namespace Backend.Test
 
 
 
-
-
         [Fact]
         public async Task Upload_List_Download_Delete_WithValidRequest_ReturnsSuccess()
         {
-            /* Register User */
 
+
+
+
+
+
+            /* Register User */
             // Arrange
             UserModel user = new()
             {
@@ -33,7 +39,6 @@ namespace Backend.Test
                 Email = "testemail@address.com",
                 Password = "testpassword"
             };
-
             string json = JsonSerializer.Serialize(user);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
@@ -46,8 +51,11 @@ namespace Backend.Test
             responseBody.Should().Be("\"Successfully added user testuser\"");
 
 
-            /* Login User */
 
+
+
+
+            /* Login User */
             // Arrange
             LoginModel userLogin = new()
             {
@@ -56,12 +64,11 @@ namespace Backend.Test
             };
 
             string jsonLogin = JsonSerializer.Serialize(userLogin);
-            StringContent contentLogin = new(json, Encoding.UTF8, "application/json");
+            StringContent contentLogin = new(jsonLogin, Encoding.UTF8, "application/json");
 
             // Act
             HttpResponseMessage responseMessageLogin = await _client.PostAsync("/user/login", contentLogin);
             string responseBodyLogin = await responseMessageLogin.Content.ReadAsStringAsync();
-
             using var jsonDoc = JsonDocument.Parse(responseBodyLogin);
             string? jwt = jsonDoc.RootElement.GetProperty("success").GetString();
             _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jwt);
@@ -73,22 +80,22 @@ namespace Backend.Test
 
 
 
+
+
             /* Get User */
             // Arrange
 
             // Act 
             HttpResponseMessage responseMessageGetUser = await _client.GetAsync("/user/info");
             string responseBodyGetUser = await responseMessageGetUser.Content.ReadAsStringAsync();
-            
+
             // Assert
             responseMessageGetUser.StatusCode.Should().Be(HttpStatusCode.OK);
             responseBodyGetUser.Should().Be("{\"username\":\"testuser\",\"email\":\"testemail@address.com\"}");
 
 
 
-            // Act
 
-            // Assert
 
 
             /* Update User */
@@ -101,8 +108,9 @@ namespace Backend.Test
 
 
 
-            // /* Upload File */
 
+
+            // /* Upload File */
             // Arrange
             // var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes("Dummy file content"));
             // fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("text/plain");
@@ -127,8 +135,12 @@ namespace Backend.Test
             // content = await response.Content.ReadAsStringAsync();
             // content.Should().Contain("test.txt");
 
-            // /* Download File */
 
+
+
+
+
+            // /* Download File */
             // // Act
             // response = await _client.GetAsync("download/test.txt");
 
@@ -137,8 +149,12 @@ namespace Backend.Test
             // content = await response.Content.ReadAsStringAsync();
             // content.Should().Be("Dummy file content");
 
-            // /* Delete File */
 
+
+
+
+
+            // /* Delete File */
             // // Act
             // response = await _client.DeleteAsync("/delete/test.txt");
 
@@ -147,10 +163,16 @@ namespace Backend.Test
             // content = await response.Content.ReadAsStringAsync();
             // content.Should().Be("\"File deleted: test.txt\"");
 
+
+
+
+
+
             /* Delete User */
             // Arrange
 
             // Act
+            await _client.DeleteAsync($"/user");
 
             // Assert
 
