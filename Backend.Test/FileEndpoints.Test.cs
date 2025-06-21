@@ -108,7 +108,7 @@ namespace Backend.Test
                 Password = "asdasd"
             };
             string updateUserJson = JsonSerializer.Serialize(updateUser);
-            StringContent updateUserContent = new (updateUserJson, Encoding.UTF8, "application/json");
+            StringContent updateUserContent = new(updateUserJson, Encoding.UTF8, "application/json");
 
             // Act
             HttpResponseMessage updateUserResponseMessage = await _client.PutAsync("/user", updateUserContent);
@@ -143,10 +143,10 @@ namespace Backend.Test
 
             // Act
             response = await _client.GetAsync("/files");
+            content = await response.Content.ReadAsStringAsync();
 
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content = await response.Content.ReadAsStringAsync();
             content.Should().Contain("test.txt");
 
 
@@ -157,10 +157,10 @@ namespace Backend.Test
             /* Download File */
             // Act
             response = await _client.GetAsync("download/test.txt");
+            content = await response.Content.ReadAsStringAsync();
 
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content = await response.Content.ReadAsStringAsync();
             content.Should().Be("Dummy file content");
 
 
@@ -171,10 +171,10 @@ namespace Backend.Test
             /* Delete File */
             // Act
             response = await _client.DeleteAsync("/delete/test.txt");
+            content = await response.Content.ReadAsStringAsync();
 
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content = await response.Content.ReadAsStringAsync();
             content.Should().Be("\"File deleted: test.txt\"");
 
 
@@ -186,11 +186,11 @@ namespace Backend.Test
             // Arrange
 
             // Act
-            await _client.DeleteAsync($"/user");
+            HttpResponseMessage deleteUserResponseMessage = await _client.DeleteAsync($"/user");
+            string deleteUserResponseContent = await deleteUserResponseMessage.Content.ReadAsStringAsync();
 
-        // Assert
-
-
-    }
+            // Assert
+            deleteUserResponseMessage.StatusCode.Should().Be(HttpStatusCode.OK);
+            deleteUserResponseContent.Should().Be("{\"message\":\"User's files and account deleted\"}");}
 }
 }
