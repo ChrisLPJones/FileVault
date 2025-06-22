@@ -20,7 +20,7 @@ namespace Backend.Routes
                     var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
                     if (!request.HasFormContentType)
-                        return Results.BadRequest("Error: Expected form-data content type.");
+                        return Results.BadRequest(new { error = "Expected form-data content type" });
 
                     var form = await request.ReadFormAsync();
                     var file = form.Files.Count > 0 ? form.Files[0] : null;
