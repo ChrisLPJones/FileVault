@@ -49,7 +49,7 @@ namespace Backend.Test
 
             /// Assert
             registerResponseMessage.StatusCode.Should().Be(HttpStatusCode.Created);
-            registerResponseBody.Should().Be("\"Successfully added user testuser\"");
+            registerResponseBody.Should().Be("{\"success\":\"Added user testuser\"}");
 
 
 
@@ -138,7 +138,7 @@ namespace Backend.Test
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             var content = await response.Content.ReadAsStringAsync();
-            content.Should().Be("\"File Uploaded: test.txt\"");
+            content.Should().Be("{\"success\":\"File Uploaded: test.txt\"}");
             /* List File */
 
             // Act
@@ -175,7 +175,7 @@ namespace Backend.Test
 
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be("\"File deleted: test.txt\"");
+            content.Should().Be("{\"success\":\"File deleted: test.txt\"}");
 
 
 

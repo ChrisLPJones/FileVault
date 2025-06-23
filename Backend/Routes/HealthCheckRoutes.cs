@@ -13,7 +13,7 @@ namespace Backend.Routes
 
 
             // Health check endpoint to verify the API is running
-            app.MapGet("/ping", () => Results.Ok("Pong"));
+            app.MapGet("/ping", () => Results.Ok(new { success = "Pong" }));
 
 
 
