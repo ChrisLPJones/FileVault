@@ -8,12 +8,26 @@ namespace Backend.Services
 {
     public class AuthServices
     {
+
+
+
+
+
         private readonly IConfiguration _config;
+
+
+
+
 
         public AuthServices(IConfiguration config)
         {
             _config = config;
         }
+
+
+
+
+
 
         // Hashes the user's password and registers them in the database
         public async Task<HttpReturnResult> HashAndRegisterUser(UserModel user, DatabaseServices db)
@@ -22,11 +36,21 @@ namespace Backend.Services
             return await db.RegisterUser(user.Username, user.Email, password);
         }
 
+
+
+
+
+
         // Hashes a plain-text password using BCrypt
         public string GeneratePasswordHash(string password)
         {
             return BCrypt.Net.BCrypt.HashPassword(password);
         }
+
+
+
+
+
 
         // Generates a JWT token for a valid user
         public string GetJWTToken(UserModel user)
@@ -57,6 +81,11 @@ namespace Backend.Services
             return handler.WriteToken(token);
         }
 
+
+
+
+
+
         // Validates user credentials and returns a JWT if successful
         public async Task<HttpReturnResult> ValidateUser(LoginModel user, DatabaseServices db, AuthServices auth)
         {
@@ -71,11 +100,21 @@ namespace Backend.Services
             string token = auth.GetJWTToken(userRecord);
 
             await db.UpdateUserLastLogin(user);
-            
+
             return new HttpReturnResult(true, token);
         }
 
+
+
+
+
+
         // TODO: implement token refresh
+
+
+
+
+
 
         // TODO: implement logout
     }

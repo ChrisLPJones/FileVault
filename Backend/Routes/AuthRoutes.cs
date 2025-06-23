@@ -11,6 +11,8 @@ namespace Backend.Routes
 
 
 
+
+
             // Registers a new user with hashed password
             app.MapPost("/user/register", async (
                 UserModel user,
@@ -31,8 +33,10 @@ namespace Backend.Routes
 
                 var result = await auth.HashAndRegisterUser(user, db);
 
-                return Results.Created("", result.Message);
+                return Results.Created("", new{ success = result.Message} );
             });
+
+
 
 
 
@@ -60,6 +64,8 @@ namespace Backend.Routes
 
 
 
+
+
             // Retrieves authenticated user's information
             app.MapGet("/user/info", async (
                 ClaimsPrincipal user,
@@ -80,6 +86,8 @@ namespace Backend.Routes
                     email = userInfo.Email
                 });
             }).RequireAuthorization();
+
+
 
 
 
@@ -119,6 +127,8 @@ namespace Backend.Routes
 
                 return Results.Ok(new { Success = "Updated user info" });
             }).RequireAuthorization();
+
+
 
 
 

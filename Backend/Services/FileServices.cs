@@ -4,9 +4,17 @@ namespace Backend.Services;
 
 public class FileServices(IConfiguration config)
 {
+
+
+
+
+
     private readonly string _storageRoot = config.GetValue<string>("StorageRoot");
 
-    // Root directory for file storage, injected via configuration
+
+
+
+
 
     // Uploads a file, saves it to disk, and stores metadata in the database
     public async Task<HttpReturnResult> UploadFile(
@@ -40,6 +48,11 @@ public class FileServices(IConfiguration config)
         }
     }
 
+
+
+
+
+
     // Downloads a file by filename for the specified user
     internal async Task<HttpReturnResult> DownloadFile(
         string fileName,
@@ -60,6 +73,11 @@ public class FileServices(IConfiguration config)
         var fileBytes = await File.ReadAllBytesAsync(fullFilePath); // Read bytes
         return new HttpReturnResult(true, null, sanitizedFilename, fileBytes); // Return file content
     }
+
+
+
+
+
 
     // Deletes a file and its metadata for the given user
     public async Task<HttpReturnResult> DeleteFile(
@@ -90,6 +108,11 @@ public class FileServices(IConfiguration config)
             return new HttpReturnResult(false, "Error: File delete failed.");
         }
     }
+
+
+
+
+
 
     // Deletes all files from the user based on a list of file GUIDs
     internal async Task DeleteAllFilesFromUser(List<string> files)
