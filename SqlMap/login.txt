@@ -1,0 +1,11 @@
+POST /user/login HTTP/1.1
+Host: localhost:3000
+User-Agent: curl/8.2.1
+Accept: */*
+Content-Type: application/json
+Content-Length: 63
+
+{
+    "username": "chrisjones",
+    "password": "password123"
+}
