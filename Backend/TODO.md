@@ -2,9 +2,6 @@
 
 
 - File encryption
-- Dockerization for easy deployment
-- Unit & integration testing
-- Add missing return error for not authorized.
 - Add console logs to API endpoint.
 - Add refresh token.
 - Add folder structure to file storage for front end display.
@@ -12,3 +9,4 @@
 - Add user avatar.
 - Add more info on files in database (e.g., file size, file extension).
 - Add user storage limits in database and limit checking before storage.
+- Manual de-serialize json from request

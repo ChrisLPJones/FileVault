@@ -25,7 +25,7 @@ namespace Backend
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(option =>
                 {
-                    option.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+                    option.TokenValidationParameters = new TokenValidationParameters
                     {
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"])),
                         ValidIssuer = jwtConfig["Issuer"],
@@ -36,7 +36,7 @@ namespace Backend
                         ValidateAudience = true
                     };
 
-                    option.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+                    option.Events = new JwtBearerEvents
                     {
                         OnChallenge = context =>
                         {
