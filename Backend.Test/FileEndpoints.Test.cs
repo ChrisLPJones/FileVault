@@ -10,28 +10,17 @@ namespace Backend.Test
 {
     public class FileEndpointsTest : IClassFixture<WebApplicationFactory<Program>>
     {
-
-
         private readonly HttpClient _client;
 
-
         public FileEndpointsTest(WebApplicationFactory<Program> factory)
+
         {
             _client = factory.CreateClient();
         }
 
-
-
-
         [Fact]
         public async Task Upload_List_Download_Delete_WithValidRequest_ReturnsSuccess()
         {
-
-
-
-
-
-
             /* Register User */
             // Arrange
             UserModel registerUser = new()
@@ -48,13 +37,8 @@ namespace Backend.Test
             string registerResponseBody = await registerResponseMessage.Content.ReadAsStringAsync();
 
             /// Assert
-            registerResponseMessage.StatusCode.Should().Be(HttpStatusCode.Created);
-            registerResponseBody.Should().Be("{\"success\":\"Added user testuser\"}");
-
-
-
-
-
+            registerResponseMessage.StatusCode.Should().Be(HttpStatusCode.OK);
+            registerResponseBody.Should().Be("{\"success\":\"User testuser registered\"}");
 
             /* Login User */
             // Arrange
@@ -79,13 +63,7 @@ namespace Backend.Test
             loginResponseMessage.StatusCode.Should().Be(HttpStatusCode.OK);
             loginResponseBody.Should().Contain("success");
 
-
-
-
-
-
             /* Get User */
-
             // Act 
             HttpResponseMessage getUserResponseMessage = await _client.GetAsync("/user/info");
             string GetUserResponseBody = await getUserResponseMessage.Content.ReadAsStringAsync();
@@ -93,11 +71,6 @@ namespace Backend.Test
             // Assert
             getUserResponseMessage.StatusCode.Should().Be(HttpStatusCode.OK);
             GetUserResponseBody.Should().Be("{\"username\":\"testuser\",\"email\":\"testemail@address.com\"}");
-
-
-
-
-
 
             /* Update User */
             // Arrange
@@ -118,11 +91,6 @@ namespace Backend.Test
             // Assert
             updateUserResponseMessage.StatusCode.Should().Be(HttpStatusCode.OK);
             updateUserResponseBody.Should().Be("{\"success\":\"Updated user info\"}");
-
-
-
-
-
 
             /* Upload File */
             //Arrange
@@ -149,11 +117,6 @@ namespace Backend.Test
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             content.Should().Contain("test.txt");
 
-
-
-
-
-
             /* Download File */
             // Act
             response = await _client.GetAsync("download/test.txt");
@@ -162,11 +125,6 @@ namespace Backend.Test
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             content.Should().Be("Dummy file content");
-
-
-
-
-
 
             /* Delete File */
             // Act
@@ -177,11 +135,6 @@ namespace Backend.Test
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             content.Should().Be("{\"success\":\"File deleted: test.txt\"}");
 
-
-
-
-
-
             /* Delete User */
             // Arrange
 
@@ -191,6 +144,7 @@ namespace Backend.Test
 
             // Assert
             deleteUserResponseMessage.StatusCode.Should().Be(HttpStatusCode.OK);
-            deleteUserResponseContent.Should().Be("{\"message\":\"User's files and account deleted\"}");}
-}
+            deleteUserResponseContent.Should().Be("{\"message\":\"User's files and account deleted\"}");
+        }
+    }
 }

@@ -7,18 +7,9 @@ namespace Backend.Routes
     {
         public static void MapHealthCheckRoutes(this IEndpointRouteBuilder app)
         {
-
-
-
-
-
+            
             // Health check endpoint to verify the API is running
             app.MapGet("/ping", () => Results.Ok(new { success = "Pong" }));
-
-
-
-
-
 
             // Health check endpoint to verify the SQL Server connection is working
             app.MapGet("/pingsql", async (DatabaseServices db) =>

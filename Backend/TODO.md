@@ -1,6 +1,5 @@
 ## Backend Todo
 
-
 - File encryption
 - Add console logs to API endpoint.
 - Add refresh token.
@@ -9,4 +8,3 @@
 - Add user avatar.
 - Add more info on files in database (e.g., file size, file extension).
 - Add user storage limits in database and limit checking before storage.
-- Manual de-serialize json from request
