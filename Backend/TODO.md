@@ -2,7 +2,6 @@
 
 - File encryption
 - Dockerization for easy deployment
-- Unit & integration testing
 - Add missing return error for not authorized.
 - Add console logs to API endpoint.
 - Add refresh token.
