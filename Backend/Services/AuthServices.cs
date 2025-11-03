@@ -9,17 +9,17 @@ namespace Backend.Services
     public class AuthServices
     {
         private readonly IConfiguration _config;
-
         public AuthServices(IConfiguration config)
         {
             _config = config;
         }
 
         // Hashes the user's password and registers them in the database
-        public async Task<HttpReturnResult> HashAndRegisterUser(UserModel user, DatabaseServices db)
+        public async Task HashAndRegisterUser(UserModel user, DatabaseServices db)
         {
-            string password = GeneratePasswordHash(user.Password);
-            return await db.RegisterUser(user.Username, user.Email, password);
+            string password =  BCrypt.Net.BCrypt.HashPassword(user.Password);
+            user.Password = password;
+            await db.RegisterUser(user);
         }
 
         // Hashes a plain-text password using BCrypt
@@ -71,7 +71,7 @@ namespace Backend.Services
             string token = auth.GetJWTToken(userRecord);
 
             await db.UpdateUserLastLogin(user);
-            
+
             return new HttpReturnResult(true, token);
         }
 

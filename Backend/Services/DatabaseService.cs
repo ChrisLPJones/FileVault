@@ -10,9 +10,9 @@ public class DatabaseServices
 {
     // Store database connection string from configuration
     private readonly string _connectionString;
+
     // Store root directory path for file storage from configuration
     private readonly string _storageRoot;
-
     public DatabaseServices(IConfiguration config)
     {
         _connectionString = config.GetConnectionString("DefaultConnection");
@@ -126,7 +126,7 @@ public class DatabaseServices
     }
 
     // Register a new user in the database, handling duplicate username or email errors
-    public async Task<HttpReturnResult> RegisterUser(string Username, string Email, string PasswordHash)
+    public async Task RegisterUser(UserModel user)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -134,29 +134,16 @@ public class DatabaseServices
         string query = "INSERT INTO Users (Username, Email, PasswordHash) VALUES (@Username, @Email, @PasswordHash)";
         using var command = new SqlCommand(query, connection);
 
-        command.Parameters.AddWithValue("@Username", Username.Trim());
-        command.Parameters.AddWithValue("@Email", Email.Trim().ToLower());
-        command.Parameters.AddWithValue("@PasswordHash", PasswordHash);
+        command.Parameters.AddWithValue("@Username", user.Username.Trim());
+        command.Parameters.AddWithValue("@Email", user.Email.Trim().ToLower());
+        command.Parameters.AddWithValue("@PasswordHash", user.Password);
 
-        try
-        {
-            await command.ExecuteNonQueryAsync();
-            return new HttpReturnResult(true, $"Successfully added user {Username}");
-        }
-        catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
-        {
-            // Duplicate username or email detected
-            return new HttpReturnResult(false, $"User {Username} already exists.");
-        }
-        catch (SqlException ex)
-        {
-            Console.WriteLine(ex.Message);
-            return new HttpReturnResult(false, "Database Error");
-        }
+        await command.ExecuteNonQueryAsync();
+        
     }
 
     // Retrieve a user's information from the database by username
-    internal async Task<UserModel> GetUserByUsername(string username)
+    public async Task<UserModel> GetUserByUsername(string username)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -178,7 +165,6 @@ public class DatabaseServices
                 Password = reader.GetString(3),
             };
         }
-
         return null;
     }
 
@@ -229,7 +215,7 @@ public class DatabaseServices
         }
     }
 
-    // Remove user and all their files metadata from database and delete files from storage
+    // Remove user and all file metadata from database and delete files from storage
     public async Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs)
     {
         var files = new List<string>();
@@ -278,7 +264,7 @@ public class DatabaseServices
     }
 
     // Retrieve user details by their user ID
-    internal async Task<UserModel> GetUserByUserId(string userId)
+    public async Task<UserModel> GetUserByUserId(string userId)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -305,7 +291,7 @@ public class DatabaseServices
     }
 
     // 
-    internal async Task UpdateUserLastLogin(LoginModel user)
+    public async Task UpdateUserLastLogin(LoginModel user)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -317,5 +303,35 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@Username", user.Username);
 
         await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<bool> UserExistsByUsername(string username)
+    {
+        using SqlConnection connection = new(_connectionString);
+        await connection.OpenAsync();
+
+        string query = "SELECT COUNT(1) FROM Users WHERE Username = @Username";
+
+        using SqlCommand command = new(query, connection);
+        command.Parameters.AddWithValue("@Username", username);
+
+        int count = (int)await command.ExecuteScalarAsync();
+
+        return count > 0;
+    }
+
+    public async Task<bool> UserExistsByEmail(string email)
+    {
+        using SqlConnection connection = new(_connectionString);
+        await connection.OpenAsync();
+
+        string query = "SELECT COUNT(1) FROM Users WHERE Email = @Email";
+
+        using SqlCommand command = new(query, connection);
+        command.Parameters.AddWithValue("@Email", email);
+
+        int count = (int)await command.ExecuteScalarAsync();
+
+        return count > 0;
     }
 }

@@ -14,7 +14,7 @@ namespace Backend
 
             var builder = WebApplication.CreateBuilder(args);
             var jwtConfig = builder.Configuration.GetSection("Jwt");
-            
+
             // Inject Services
 
             builder.Services.AddScoped<FileServices>();
@@ -22,9 +22,9 @@ namespace Backend
             builder.Services.AddScoped<AuthServices>();
             builder.Services.AddAuthorization();
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                .AddJwtBearer(x =>
+                .AddJwtBearer(option =>
                 {
-                    x.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+                    option.TokenValidationParameters = new TokenValidationParameters
                     {
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"])),
                         ValidIssuer = jwtConfig["Issuer"],
@@ -33,6 +33,21 @@ namespace Backend
                         ValidateLifetime = true,
                         ValidateIssuer = true,
                         ValidateAudience = true
+                    };
+
+                    option.Events = new JwtBearerEvents
+                    {
+                        OnChallenge = context =>
+                        {
+                            // Skip the default response
+                            context.HandleResponse();
+
+                            context.Response.StatusCode = 401;
+                            context.Response.ContentType = "application/json";
+                            var result = System.Text.Json.JsonSerializer.Serialize(new { error = "Invalid token" });
+
+                            return context.Response.WriteAsync(result);
+                        }
                     };
                 });
 

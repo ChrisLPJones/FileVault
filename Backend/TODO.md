@@ -1,8 +1,4 @@
 ## Backend Todo
-
-- File encryption
-- Dockerization for easy deployment
-- Add missing return error for not authorized.
 - Add console logs to API endpoint.
 - Add refresh token.
 - Add folder structure to file storage for front end display.

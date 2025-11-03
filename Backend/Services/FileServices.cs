@@ -6,13 +6,8 @@ public class FileServices(IConfiguration config)
 {
     private readonly string _storageRoot = config.GetValue<string>("StorageRoot");
 
-    // Root directory for file storage, injected via configuration
-
     // Uploads a file, saves it to disk, and stores metadata in the database
-    public async Task<HttpReturnResult> UploadFile(
-        IFormFile file,
-        DatabaseServices db,
-        string userId)
+    public async Task<HttpReturnResult> UploadFile(IFormFile file, DatabaseServices db, string userId)
     {
         var fileName = Path.GetFileName(file.FileName); // Get original filename
         var guid = Guid.NewGuid().ToString(); // Generate unique ID for storage
@@ -41,10 +36,7 @@ public class FileServices(IConfiguration config)
     }
 
     // Downloads a file by filename for the specified user
-    internal async Task<HttpReturnResult> DownloadFile(
-        string fileName,
-        DatabaseServices db,
-        string userId)
+    public async Task<HttpReturnResult> DownloadFile(string fileName, DatabaseServices db, string userId)
     {
         var sanitizedFilename = Path.GetFileName(fileName); // Sanitize input
         await db.CheckConnection();
@@ -62,10 +54,7 @@ public class FileServices(IConfiguration config)
     }
 
     // Deletes a file and its metadata for the given user
-    public async Task<HttpReturnResult> DeleteFile(
-        string fileName,
-        DatabaseServices db,
-        string userId)
+    public async Task<HttpReturnResult> DeleteFile(string fileName, DatabaseServices db, string userId)
     {
         var sanitizedFilename = Path.GetFileName(fileName); // Sanitize input
 
@@ -92,7 +81,7 @@ public class FileServices(IConfiguration config)
     }
 
     // Deletes all files from the user based on a list of file GUIDs
-    internal async Task DeleteAllFilesFromUser(List<string> files)
+    public async Task DeleteAllFilesFromUser(List<string> files)
     {
         foreach (var file in files)
         {

@@ -22,6 +22,7 @@
         "Dockerized",
         "Hmac",
         "Passw",
+        "pingsql",
         "sqlcmd",
         "sqlinit",
         "sqlservr",
