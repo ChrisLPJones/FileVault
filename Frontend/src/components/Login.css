@@ -26,12 +26,12 @@
 
 .login-button {
     width: 100%;
-    
+
 }
 
 .login-alert{
-    margin-top: 20px;
     padding: 10px;
     text-align: center;
-    
+	margin: 20px auto 0;
+	width: 50%
 }
