@@ -60,7 +60,7 @@ namespace Backend.Services
         // Validates user credentials and returns a JWT if successful
         public async Task<HttpReturnResult> ValidateUser(LoginModel user, DatabaseServices db, AuthServices auth)
         {
-            var userRecord = await db.GetUserByUsername(user.Username);
+            var userRecord = await db.GetUserByEmail(user.Email);
             if (userRecord == null)
                 return new HttpReturnResult(false, "User not found");
 

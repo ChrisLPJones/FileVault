@@ -92,7 +92,7 @@ namespace Backend.Routes
 
 
                     if (user == null ||
-                    string.IsNullOrWhiteSpace(user.Username) ||
+                    string.IsNullOrWhiteSpace(user.Email) ||
                     string.IsNullOrWhiteSpace(user.Password))
                     {
                         return Results.BadRequest(new { Error = "Invalid JSON" });
@@ -101,6 +101,7 @@ namespace Backend.Routes
                     var result = await auth.ValidateUser(user, db, auth);
                     if (!result.Success)
                         return Results.BadRequest(new { Error = result.Message });
+                        //return Results.Unauthorized();
 
                     return Results.Ok(new { Success = result.Message });
                 }

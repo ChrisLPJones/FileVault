@@ -143,15 +143,15 @@ public class DatabaseServices
     }
 
     // Retrieve a user's information from the database by username
-    public async Task<UserModel> GetUserByUsername(string username)
+    public async Task<UserModel> GetUserByEmail(string email)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Username = @Username";
+        string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Email = @Email";
         using var command = new SqlCommand(query, connection);
 
-        command.Parameters.AddWithValue("@Username", username);
+        command.Parameters.AddWithValue("@Email", email);
 
         using var reader = await command.ExecuteReaderAsync();
 
@@ -300,7 +300,7 @@ public class DatabaseServices
         using var command = new SqlCommand(query, connection);
 
         command.Parameters.AddWithValue("@LastLogin", DateTime.UtcNow);
-        command.Parameters.AddWithValue("@Username", user.Username);
+        command.Parameters.AddWithValue("@Username", user.Email);
 
         await command.ExecuteNonQueryAsync();
     }
