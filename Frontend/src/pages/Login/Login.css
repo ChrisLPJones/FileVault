@@ -35,3 +35,8 @@
 	margin: 20px auto 0;
 	width: 50%
 }
+
+.server-alert{
+    padding: 10px;
+    text-align: center;
+}

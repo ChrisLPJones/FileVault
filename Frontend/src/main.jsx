@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import 'bootstrap/dist/css/bootstrap.min.css'
-import Login from './components/Login.jsx'
+import Login from './pages/Login/Login'
 
 
 

@@ -100,8 +100,8 @@ namespace Backend.Routes
 
                     var result = await auth.ValidateUser(user, db, auth);
                     if (!result.Success)
-                        return Results.BadRequest(new { Error = result.Message });
-                        //return Results.Unauthorized();
+                        //return Results.BadRequest(new { Error = result.Message });
+                        return Results.Unauthorized();
 
                     return Results.Ok(new { Success = result.Message });
                 }
