@@ -1,8 +1,7 @@
-// Login.js:
-import React, { useState } from "react";
-import { Form, Button, Container, Row, Col, Alert } from "react-bootstrap";
+import { useState } from "react";
+import { Form, Button, Alert } from "react-bootstrap";
 import "./register.css";
-import { login } from "../../services/Auth";
+import { register } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
 
 function Register() {
@@ -10,37 +9,70 @@ function Register() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [passwordVerify, setPasswordVerify] = useState("");
-    const [showPassword, setShowPassword] = useState(false);
-    const [showPasswordVerify, setShowPasswordVerify] = useState(false);
+    const [passwordMatchMessage, setPasswordMatchMessage] = useState("");
+    const [passwordMatchValid, setPasswordMatchValid] = useState(null);
     const [errors, setErrors] = useState({});
-    const [loginStatus, setLoginStatus] = useState(null);
+    const [registerStatus, setLoginStatus] = useState(null);
+    const [returnMessage, setReturnMessage] = useState("");
 
+    // Live password match check
+    const validatePasswordMatch = (pass, passVerify) => {
+        if (!passVerify) {
+            setPasswordMatchMessage("");
+            setPasswordMatchValid(null);
+            return;
+        }
+
+        if (pass === passVerify) {
+            setPasswordMatchMessage("Passwords match!");
+            setPasswordMatchValid(true);
+        } else {
+            setPasswordMatchMessage("Passwords do not match!");
+            setPasswordMatchValid(false);
+        }
+    };
+
+    // Submit validation
     const validateForm = () => {
         const newErrors = {};
+
         if (!email) newErrors.email = "Email is required";
         else if (!/\S+@\S+\.\S+/.test(email))
             newErrors.email = "Email is invalid";
+
         if (!password) newErrors.password = "Password is required";
         else if (password.length < 6)
             newErrors.password = "Password must be at least 6 characters";
-        else if (password != passwordVerify)
+
+        if (password !== passwordVerify)
             newErrors.passwordVerify = "Passwords do not match!";
+
         return newErrors;
     };
 
     const handleSubmit = async (event) => {
         event.preventDefault();
         const formErrors = validateForm();
+
         if (Object.keys(formErrors).length > 0) {
             setErrors(formErrors);
-        } else {
-            setErrors({});
-            const userData = await login(email, password);
-            if (userData.status === 200) {
+            return;
+        }
+
+        setErrors({});
+
+        try {
+            const response = await register(username, email, password);
+            setReturnMessage("");
+            if (response?.status === 200) {
+                setReturnMessage(response.data.success);
                 setLoginStatus(true);
             } else {
+                setReturnMessage(response.data.error);
                 setLoginStatus(false);
             }
+        } catch (err) {
+            setLoginStatus(false);
         }
     };
 
@@ -49,22 +81,25 @@ function Register() {
             <div className="register-form-container">
                 <ServerStatus />
                 <h2 className="register-title">Register</h2>
+
                 <Form onSubmit={handleSubmit} className="register-form">
+                    {/* USERNAME */}
                     <Form.Group className="mb-3" controlId="formBasicUsername">
                         <Form.Label>Username</Form.Label>
                         <Form.Control
-                            type="username"
-                            placeholder="Your username"
+                            type="text"
+                            placeholder="Enter username"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                         />
                     </Form.Group>
 
+                    {/* EMAIL */}
                     <Form.Group className="mb-3" controlId="formBasicEmail">
                         <Form.Label>Email address</Form.Label>
                         <Form.Control
                             type="email"
-                            placeholder="Your Email"
+                            placeholder="Enter email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             isInvalid={!!errors.email}
@@ -74,13 +109,20 @@ function Register() {
                         </Form.Control.Feedback>
                     </Form.Group>
 
+                    {/* PASSWORD */}
                     <Form.Group className="mb-3" controlId="formBasicPassword">
                         <Form.Label>Password</Form.Label>
                         <Form.Control
                             type="password"
-                            placeholder="Password"
+                            placeholder="Enter password"
                             value={password}
-                            onChange={(e) => setPassword(e.target.value)}
+                            onChange={(e) => {
+                                setPassword(e.target.value);
+                                validatePasswordMatch(
+                                    e.target.value,
+                                    passwordVerify
+                                );
+                            }}
                             isInvalid={!!errors.password}
                         />
                         <Form.Control.Feedback type="invalid">
@@ -88,6 +130,7 @@ function Register() {
                         </Form.Control.Feedback>
                     </Form.Group>
 
+                    {/* PASSWORD VERIFY */}
                     <Form.Group
                         className="mb-3"
                         controlId="formBasicPasswordVerify"
@@ -96,14 +139,32 @@ function Register() {
                             type="password"
                             placeholder="Repeat your password"
                             value={passwordVerify}
-                            onChange={(e) => setPasswordVerify(e.target.value)}
-                            isInvalid={!!errors.password || !!errors.passwordVerify}
+                            onChange={(e) => {
+                                setPasswordVerify(e.target.value);
+                                validatePasswordMatch(password, e.target.value);
+                            }}
+                            isInvalid={!!errors.passwordVerify}
                         />
+
+                        {/* LIVE MATCH INDICATOR */}
+                        {passwordMatchValid !== null && (
+                            <div
+                                style={{
+                                    color: passwordMatchValid ? "green" : "red",
+                                    fontSize: "0.9rem",
+                                    marginTop: "5px",
+                                }}
+                            >
+                                {passwordMatchMessage}
+                            </div>
+                        )}
+
                         <Form.Control.Feedback type="invalid">
-                            {errors.password || errors.passwordVerify}
+                            {errors.passwordVerify}
                         </Form.Control.Feedback>
                     </Form.Group>
 
+                    {/* SUBMIT BUTTON */}
                     <Button
                         variant="primary"
                         type="submit"
@@ -111,14 +172,16 @@ function Register() {
                     >
                         Register
                     </Button>
-                    {loginStatus !== null &&
-                        (loginStatus ? (
+
+                    {/* LOGIN STATUS MESSAGE */}
+                    {registerStatus !== null &&
+                        (registerStatus ? (
                             <Alert className="register-alert" variant="success">
-                                Login Successful
+                                {returnMessage}
                             </Alert>
                         ) : (
                             <Alert className="register-alert" variant="danger">
-                                Login Failed
+                                {returnMessage}
                             </Alert>
                         ))}
                 </Form>

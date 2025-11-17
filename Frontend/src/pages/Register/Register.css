@@ -26,21 +26,23 @@
 
 .register-button {
     width: 100%;
-
 }
 
-.register-alert{
+.register-alert {
     padding: 10px;
     text-align: center;
-	margin: 20px auto 0;
-	width: 50%
+    margin: 20px auto 0;
+    width: 50%;
 }
 
-.server-alert{
+.server-alert {
     padding: 10px;
     text-align: center;
 }
 
-
-
-
+.password-match-ok {
+    color: green;
+}
+.password-match-bad {
+    color: red;
+}

@@ -6,13 +6,13 @@ namespace Backend.Models
     {
         public Guid Id { get; set; }
 
-        [JsonPropertyName("username")]
+        [JsonPropertyName("Username")]
         public string Username { get; set; }
 
-        [JsonPropertyName("email")]
+        [JsonPropertyName("Email")]
         public string Email { get; set; }
 
-        [JsonPropertyName("password")]
+        [JsonPropertyName("Password")]
         public string Password { get; set; }
     }
 }

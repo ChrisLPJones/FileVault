@@ -29,14 +29,11 @@ function Login() {
             setErrors(formErrors);
         } else {
             setErrors({});
-            //console.log("Login attempted with:", { email, password });
-            const userData = await login(email, password);
-            if (userData.status === 200) {
+            const response = await login(email, password);
+            if (response.status === 200) {
                 setLoginStatus(true);
-                //console.log("Login Success");
             } else {
                 setLoginStatus(false);
-                //  console.log(userData.status);
             }
         }
     };

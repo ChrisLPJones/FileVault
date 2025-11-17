@@ -296,11 +296,11 @@ public class DatabaseServices
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "Update Users SET LastLogin = @LastLogin WHERE Username = @Username";
+        string query = "Update Users SET LastLogin = @LastLogin WHERE Email = @Email";
         using var command = new SqlCommand(query, connection);
 
         command.Parameters.AddWithValue("@LastLogin", DateTime.UtcNow);
-        command.Parameters.AddWithValue("@Username", user.Email);
+        command.Parameters.AddWithValue("@Email", user.Email);
 
         await command.ExecuteNonQueryAsync();
     }

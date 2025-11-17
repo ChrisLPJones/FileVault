@@ -43,14 +43,13 @@ namespace Backend.Routes
 
                     // Check if User exists by email
                     if (await db.UserExistsByEmail(user.Email))
-                        return Results.BadRequest(new { error = "User already exists" });
+                        return Results.BadRequest(new { error = "Email already exists" });
 
                     // Check if user exists by username
                     if (await db.UserExistsByUsername(user.Username))
-                        return Results.BadRequest(new { error = "User already exists" });
+                        return Results.BadRequest(new { error = "Username already exists" });
 
                     // Hash and register user
-
                     await auth.HashAndRegisterUser(user, db);
 
                     // Return 200 OK 
