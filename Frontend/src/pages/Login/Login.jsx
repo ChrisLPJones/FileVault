@@ -1,15 +1,23 @@
 // Login.js:
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Form, Button, Container, Row, Col, Alert } from "react-bootstrap";
 import "./Login.css";
 import { login } from "../../services/Auth";
-import  ServerStatus  from "../../components/ServerStatus";
+import ServerStatus from "../../components/ServerStatus";
+import { useLocation } from "react-router-dom";
 
 function Login() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [errors, setErrors] = useState({});
     const [loginStatus, setLoginStatus] = useState(null);
+    const location = useLocation();
+    const [regStatus, setRegStatus] = useState(false);
+    const registrationSuccess = location.state?.registrationSuccess;
+
+    useEffect(() => {
+        registrationSuccess && setRegStatus(true);
+    }, [registrationSuccess]);
 
     const validateForm = () => {
         const newErrors = {};
@@ -24,7 +32,9 @@ function Login() {
 
     const handleSubmit = async (event) => {
         event.preventDefault();
+        setRegStatus(false);
         const formErrors = validateForm();
+
         if (Object.keys(formErrors).length > 0) {
             setErrors(formErrors);
         } else {
@@ -79,6 +89,11 @@ function Login() {
                     >
                         Login
                     </Button>
+                    {regStatus && (
+                        <Alert className="login-alert" variant="success">
+                            Registration Successful
+                        </Alert>
+                    )}
                     {loginStatus !== null &&
                         (loginStatus ? (
                             <Alert className="login-alert" variant="success">

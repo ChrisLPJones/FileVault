@@ -26,14 +26,13 @@
 
 .login-button {
     width: 100%;
-
 }
 
 .login-alert{
     padding: 10px;
     text-align: center;
 	margin: 20px auto 0;
-	width: 50%
+	width: 60%
 }
 
 .server-alert{

@@ -3,6 +3,7 @@ import { Form, Button, Alert } from "react-bootstrap";
 import "./register.css";
 import { register } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
+import { useNavigate } from "react-router-dom";
 
 function Register() {
     const [username, setUsername] = useState("");
@@ -14,6 +15,8 @@ function Register() {
     const [errors, setErrors] = useState({});
     const [registerStatus, setLoginStatus] = useState(null);
     const [returnMessage, setReturnMessage] = useState("");
+
+    const navigate = useNavigate();
 
     // Live password match check
     const validatePasswordMatch = (pass, passVerify) => {
@@ -67,12 +70,15 @@ function Register() {
             if (response?.status === 200) {
                 setReturnMessage(response.data.success);
                 setLoginStatus(true);
+                navigate("/login");
+                navigate("/login", { state: { registrationSuccess: true } });
             } else {
                 setReturnMessage(response.data.error);
                 setLoginStatus(false);
             }
         } catch (err) {
             setLoginStatus(false);
+            console.log(response);
         }
     };
 
