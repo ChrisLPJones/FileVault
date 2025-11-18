@@ -52,7 +52,9 @@ function Register() {
     const validateForm = () => {
         const newErrors = {};
 
-        if (!email) newErrors.email = "Email is required";
+        if (!username) newErrors.username = "Username is required"
+
+        else if (!email) newErrors.email = "Email is required";
         else if (!/\S+@\S+\.\S+/.test(email))
             newErrors.email = "Email is invalid";
 
@@ -110,7 +112,11 @@ function Register() {
                             placeholder="Enter username"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
+                            isInvalid={!!errors.username}
                         />
+                        <Form.Control.Feedback type="invalid">
+                            {errors.username}
+                        </Form.Control.Feedback>
                     </Form.Group>
 
                     {/* EMAIL */}
