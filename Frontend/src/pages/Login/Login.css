@@ -28,14 +28,14 @@
     width: 100%;
 }
 
-.login-alert{
+.login-alert {
     padding: 10px;
     text-align: center;
-	margin: 20px auto 0;
-	width: 60%
+    margin: 20px auto 0;
+    width: 60%;
 }
 
-.server-alert{
+.server-alert {
     padding: 10px;
     text-align: center;
 }

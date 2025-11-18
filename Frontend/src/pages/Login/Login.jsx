@@ -4,6 +4,7 @@ import "./Login.css";
 import { login } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
 import { useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 function Login() {
     const [email, setEmail] = useState("");
@@ -13,6 +14,7 @@ function Login() {
     const location = useLocation();
     const [regStatus, setRegStatus] = useState(false);
     const registrationSuccess = location.state?.registrationSuccess;
+    const navigate = useNavigate();
 
     useEffect(() => {
         registrationSuccess && setRegStatus(true);
@@ -38,8 +40,12 @@ function Login() {
             setErrors(formErrors);
         } else {
             setErrors({});
+
             const response = await login(email, password);
+
             if (response.status === 200) {
+                localStorage.setItem("token", response.data.success);
+                navigate("/dashboard", { replace: true });
                 setLoginStatus(true);
             } else {
                 setLoginStatus(false);

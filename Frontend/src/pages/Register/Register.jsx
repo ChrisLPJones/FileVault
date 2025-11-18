@@ -52,8 +52,7 @@ function Register() {
     const validateForm = () => {
         const newErrors = {};
 
-        if (!username) newErrors.username = "Username is required"
-
+        if (!username) newErrors.username = "Username is required";
         else if (!email) newErrors.email = "Email is required";
         else if (!/\S+@\S+\.\S+/.test(email))
             newErrors.email = "Email is invalid";
@@ -148,8 +147,6 @@ function Register() {
                             }}
                             isInvalid={!!errors.password}
                         />
-
-                        
 
                         <Form.Control.Feedback type="invalid">
                             {errors.password}

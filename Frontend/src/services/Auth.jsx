@@ -16,13 +16,13 @@ export const login = async (Email, Password) => {
 };
 
 export const register = async (Username, Email, Password) => {
-	const response = await axios.post(
-    `${API_URL}/user/register`,
+    const response = await axios.post(
+        `${API_URL}/user/register`,
         { Username, Email, Password },
         {
             // don’t throw, consider all HTTP responses as valid.
             validateStatus: () => true,
         }
-	);
-	return response
+    );
+    return response;
 };
