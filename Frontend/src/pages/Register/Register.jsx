@@ -15,9 +15,8 @@ function Register() {
     const [errors, setErrors] = useState({});
     const [registerStatus, setLoginStatus] = useState(null);
     const [returnMessage, setReturnMessage] = useState("");
-
-    // New states for password requirements
-    const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
+    const [showPasswordRequirements, setShowPasswordRequirements] =
+        useState(false);
     const [passwordValid, setPasswordValid] = useState(false);
 
     const navigate = useNavigate();
@@ -136,14 +135,9 @@ function Register() {
                             type="password"
                             placeholder="Enter password"
                             value={password}
-                            onFocus={() => setShowPasswordRequirements(true)}
-                            onBlur={() => {
-                                if (passwordValid) setShowPasswordRequirements(false);
-                            }}
                             onChange={(e) => {
                                 const value = e.target.value;
                                 setPassword(value);
-                                checkPasswordRequirements(value);
                                 validatePasswordMatch(value, passwordVerify);
                             }}
                             isInvalid={!!errors.password}
@@ -157,7 +151,10 @@ function Register() {
                     </Form.Group>
 
                     {/* PASSWORD VERIFY */}
-                    <Form.Group className="mb-3" controlId="formBasicPasswordVerify">
+                    <Form.Group
+                        className="mb-3"
+                        controlId="formBasicPasswordVerify"
+                    >
                         <Form.Control
                             type="password"
                             placeholder="Repeat your password"
@@ -168,46 +165,64 @@ function Register() {
                             }}
                             isInvalid={!!errors.passwordVerify}
                         />
-                        {/* PASSWORD REQUIREMENTS */}
-                        {showPasswordRequirements && !passwordValid && (
-                            <div
-                                className="password-Requirements"
-                                style={{ fontSize: "0.9rem", marginTop: "5px" }}
+                        {/* PASSWORD REQUIREMENTS & MATCH MESSAGE */}
+                        <div style={{ fontSize: "0.9rem", marginTop: "5px" }}>
+                            <ul
+                                style={{ paddingLeft: "20px", margin: "2px 0" }}
                             >
-                                <ul style={{ paddingLeft: "20px", margin: 0 }}>
-                                    <li style={{ color: password.length >= 6 ? "green" : "red" }}>
-                                        At least 6 characters
+                                <li
+                                    style={{
+                                        color:
+                                            password.length >= 6
+                                                ? "green"
+                                                : "red",
+                                    }}
+                                >
+                                    At least 6 characters
+                                </li>
+                                <li
+                                    style={{
+                                        color: /\d/.test(password)
+                                            ? "green"
+                                            : "red",
+                                    }}
+                                >
+                                    At least one number
+                                </li>
+                                <li
+                                    style={{
+                                        color: /[A-Z]/.test(password)
+                                            ? "green"
+                                            : "red",
+                                    }}
+                                >
+                                    At least one uppercase letter
+                                </li>
+                                {/* Show password match if available */}
+                                {passwordMatchValid !== null && (
+                                    <li
+                                        style={{
+                                            color: passwordMatchValid
+                                                ? "green"
+                                                : "red",
+                                        }}
+                                    >
+                                        {passwordMatchMessage}
                                     </li>
-                                    <li style={{ color: /\d/.test(password) ? "green" : "red" }}>
-                                        At least one number
-                                    </li>
-                                    <li style={{ color: /[A-Z]/.test(password) ? "green" : "red" }}>
-                                        At least one uppercase letter
-                                    </li>
-                                </ul>
-                            </div>
-                        )}
-
-                        {/* LIVE MATCH INDICATOR */}
-                        {passwordMatchValid !== null && (
-                            <div
-                                style={{
-                                    color: passwordMatchValid ? "green" : "red",
-                                    fontSize: "0.9rem",
-                                    marginTop: "5px",
-                                }}
-                            >
-                                {passwordMatchMessage}
-                            </div>
-                        )}
-
+                                )}
+                            </ul>
+                        </div>
                         <Form.Control.Feedback type="invalid">
                             {errors.passwordVerify}
                         </Form.Control.Feedback>
                     </Form.Group>
 
                     {/* SUBMIT BUTTON */}
-                    <Button variant="primary" type="submit" className="register-button">
+                    <Button
+                        variant="primary"
+                        type="submit"
+                        className="register-button"
+                    >
                         Register
                     </Button>
 
