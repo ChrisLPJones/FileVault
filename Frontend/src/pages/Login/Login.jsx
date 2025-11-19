@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Form, Button, Container, Row, Col, Alert } from "react-bootstrap";
 import "./Login.css";
 import { login } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
-import { useLocation } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 function Login() {
     const [email, setEmail] = useState("");
@@ -40,7 +38,6 @@ function Login() {
             setErrors(formErrors);
         } else {
             setErrors({});
-
             const response = await login(email, password);
 
             if (response.status === 200) {
@@ -58,58 +55,40 @@ function Login() {
             <div className="login-form-container">
                 <ServerStatus />
                 <h2 className="login-title">Login</h2>
-                <Form onSubmit={handleSubmit} className="login-form">
-                    <Form.Group className="mb-3" controlId="formBasicEmail">
-                        <Form.Label>Email address</Form.Label>
-                        <Form.Control
+                <form onSubmit={handleSubmit} className="login-form">
+                    <div className="form-group">
+                        <label>Email address</label>
+                        <input
                             type="email"
                             placeholder="Enter email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            isInvalid={!!errors.email}
+                            className={errors.email ? "input-error" : ""}
                         />
-                        <Form.Control.Feedback type="invalid">
-                            {errors.email}
-                        </Form.Control.Feedback>
-                    </Form.Group>
+                        {errors.email && <div className="error-message">{errors.email}</div>}
+                    </div>
 
-                    <Form.Group className="mb-3" controlId="formBasicPassword">
-                        <Form.Label>Password</Form.Label>
-                        <Form.Control
+                    <div className="form-group">
+                        <label>Password</label>
+                        <input
                             type="password"
                             placeholder="Password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            isInvalid={!!errors.password}
+                            className={errors.password ? "input-error" : ""}
                         />
-                        <Form.Control.Feedback type="invalid">
-                            {errors.password}
-                        </Form.Control.Feedback>
-                    </Form.Group>
+                        {errors.password && <div className="error-message">{errors.password}</div>}
+                    </div>
 
-                    <Button
-                        variant="primary"
-                        type="submit"
-                        className="login-button"
-                    >
-                        Login
-                    </Button>
-                    {regStatus && (
-                        <Alert className="login-alert" variant="success">
-                            Registration Successful
-                        </Alert>
+                    <button type="submit" className="login-button">Login</button>
+
+                    {regStatus && <div className="alert success">Registration Successful</div>}
+                    {loginStatus !== null && (
+                        loginStatus ? 
+                        <div className="alert success">Login Successful</div> : 
+                        <div className="alert danger">Login Failed</div>
                     )}
-                    {loginStatus !== null &&
-                        (loginStatus ? (
-                            <Alert className="login-alert" variant="success">
-                                Login Successful
-                            </Alert>
-                        ) : (
-                            <Alert className="login-alert" variant="danger">
-                                Login Failed
-                            </Alert>
-                        ))}
-                </Form>
+                </form>
             </div>
         </div>
     );

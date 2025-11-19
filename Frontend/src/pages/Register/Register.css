@@ -20,29 +20,70 @@
     margin-bottom: 20px;
 }
 
-.register-form {
+.form-group {
     margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+input {
+    width: 100%;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.input-error {
+    border-color: red !important;
+}
+
+.error-message {
+    color: red;
+    font-size: 12px;
+    margin-top: 4px;
 }
 
 .register-button {
     width: 100%;
+    padding: 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.register-button:hover {
+    background-color: #0056b3;
 }
 
 .register-alert {
     padding: 10px;
     text-align: center;
     margin: 20px auto 0;
-    width: 50%;
+    width: 60%;
+    border-radius: 4px;
 }
 
-.server-alert {
-    padding: 10px;
-    text-align: center;
+.register-alert.success {
+    background-color: #d4edda;
+    color: #155724;
 }
 
-.password-match-ok {
-    color: green;
+.register-alert.danger {
+    background-color: #f8d7da;
+    color: #721c24;
 }
-.password-match-bad {
-    color: red;
+
+.password-rules {
+    padding-left: 20px;
+    margin-top: 5px;
+    font-size: 0.9rem;
 }

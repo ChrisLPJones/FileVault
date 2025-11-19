@@ -1,6 +1,5 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import "bootstrap/dist/css/bootstrap.min.css";
 import ErrorPage from "./pages/Error/Errorpage";
 import Login from "./pages/Login/Login";
 import Register from "./pages/Register/Register";
@@ -9,6 +8,7 @@ import Layout from "./pages/Layout/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import PublicRoute from "./components/PublicRoute";
+
 
 const router = createBrowserRouter([
     {

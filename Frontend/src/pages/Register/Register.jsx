@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Form, Button, Alert } from "react-bootstrap";
 import "./register.css";
 import { register } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
@@ -13,15 +12,12 @@ function Register() {
     const [passwordMatchMessage, setPasswordMatchMessage] = useState("");
     const [passwordMatchValid, setPasswordMatchValid] = useState(null);
     const [errors, setErrors] = useState({});
-    const [registerStatus, setLoginStatus] = useState(null);
+    const [registerStatus, setRegisterStatus] = useState(null);
     const [returnMessage, setReturnMessage] = useState("");
-    const [showPasswordRequirements, setShowPasswordRequirements] =
-        useState(false);
     const [passwordValid, setPasswordValid] = useState(false);
 
     const navigate = useNavigate();
 
-    // Password requirement check
     const checkPasswordRequirements = (pass) => {
         const lengthOK = pass.length >= 6;
         const hasNumber = /\d/.test(pass);
@@ -31,7 +27,6 @@ function Register() {
         return lengthOK && hasNumber && hasUpper;
     };
 
-    // Live password match check
     const validatePasswordMatch = (pass, passVerify) => {
         if (!passVerify) {
             setPasswordMatchMessage("");
@@ -48,12 +43,11 @@ function Register() {
         }
     };
 
-    // Submit validation
     const validateForm = () => {
         const newErrors = {};
 
         if (!username) newErrors.username = "Username is required";
-        else if (!email) newErrors.email = "Email is required";
+        if (!email) newErrors.email = "Email is required";
         else if (!/\S+@\S+\.\S+/.test(email))
             newErrors.email = "Email is invalid";
 
@@ -84,14 +78,14 @@ function Register() {
 
             if (response?.status === 200) {
                 setReturnMessage(response.data.success);
-                setLoginStatus(true);
+                setRegisterStatus(true);
                 navigate("/login", { state: { registrationSuccess: true } });
             } else {
                 setReturnMessage(response.data.error);
-                setLoginStatus(false);
+                setRegisterStatus(false);
             }
         } catch (err) {
-            setLoginStatus(false);
+            setRegisterStatus(false);
             console.log(err);
         }
     };
@@ -102,63 +96,61 @@ function Register() {
                 <ServerStatus />
                 <h2 className="register-title">Register</h2>
 
-                <Form onSubmit={handleSubmit} className="register-form">
+                <form onSubmit={handleSubmit} className="register-form">
+
                     {/* USERNAME */}
-                    <Form.Group className="mb-3" controlId="formBasicUsername">
-                        <Form.Label>Username</Form.Label>
-                        <Form.Control
+                    <div className="form-group">
+                        <label>Username</label>
+                        <input
                             type="text"
                             placeholder="Enter username"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            isInvalid={!!errors.username}
+                            className={errors.username ? "input-error" : ""}
                         />
-                        <Form.Control.Feedback type="invalid">
-                            {errors.username}
-                        </Form.Control.Feedback>
-                    </Form.Group>
+                        {errors.username && (
+                            <div className="error-message">{errors.username}</div>
+                        )}
+                    </div>
 
                     {/* EMAIL */}
-                    <Form.Group className="mb-3" controlId="formBasicEmail">
-                        <Form.Label>Email address</Form.Label>
-                        <Form.Control
+                    <div className="form-group">
+                        <label>Email address</label>
+                        <input
                             type="email"
                             placeholder="Enter email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            isInvalid={!!errors.email}
+                            className={errors.email ? "input-error" : ""}
                         />
-                        <Form.Control.Feedback type="invalid">
-                            {errors.email}
-                        </Form.Control.Feedback>
-                    </Form.Group>
+                        {errors.email && (
+                            <div className="error-message">{errors.email}</div>
+                        )}
+                    </div>
 
                     {/* PASSWORD */}
-                    <Form.Group className="mb-3" controlId="formBasicPassword">
-                        <Form.Label>Password</Form.Label>
-                        <Form.Control
+                    <div className="form-group">
+                        <label>Password</label>
+                        <input
                             type="password"
                             placeholder="Enter password"
                             value={password}
                             onChange={(e) => {
                                 const value = e.target.value;
                                 setPassword(value);
+                                checkPasswordRequirements(value);
                                 validatePasswordMatch(value, passwordVerify);
                             }}
-                            isInvalid={!!errors.password}
+                            className={errors.password ? "input-error" : ""}
                         />
-
-                        <Form.Control.Feedback type="invalid">
-                            {errors.password}
-                        </Form.Control.Feedback>
-                    </Form.Group>
+                        {errors.password && (
+                            <div className="error-message">{errors.password}</div>
+                        )}
+                    </div>
 
                     {/* PASSWORD VERIFY */}
-                    <Form.Group
-                        className="mb-3"
-                        controlId="formBasicPasswordVerify"
-                    >
-                        <Form.Control
+                    <div className="form-group">
+                        <input
                             type="password"
                             placeholder="Repeat your password"
                             value={passwordVerify}
@@ -166,81 +158,55 @@ function Register() {
                                 setPasswordVerify(e.target.value);
                                 validatePasswordMatch(password, e.target.value);
                             }}
-                            isInvalid={!!errors.passwordVerify}
+                            className={errors.passwordVerify ? "input-error" : ""}
                         />
-                        {/* PASSWORD REQUIREMENTS & MATCH MESSAGE */}
-                        <div style={{ fontSize: "0.9rem", marginTop: "5px" }}>
-                            <ul
-                                style={{ paddingLeft: "20px", margin: "2px 0" }}
-                            >
+
+                        {/* PASSWORD RULES + MATCH */}
+                        <ul className="password-rules">
+                            <li style={{ color: password.length >= 6 ? "green" : "red" }}>
+                                At least 6 characters
+                            </li>
+                            <li style={{ color: /\d/.test(password) ? "green" : "red" }}>
+                                At least one number
+                            </li>
+                            <li style={{ color: /[A-Z]/.test(password) ? "green" : "red" }}>
+                                At least one uppercase letter
+                            </li>
+
+                            {passwordMatchValid !== null && (
                                 <li
                                     style={{
-                                        color:
-                                            password.length >= 6
-                                                ? "green"
-                                                : "red",
+                                        color: passwordMatchValid ? "green" : "red",
                                     }}
                                 >
-                                    At least 6 characters
+                                    {passwordMatchMessage}
                                 </li>
-                                <li
-                                    style={{
-                                        color: /\d/.test(password)
-                                            ? "green"
-                                            : "red",
-                                    }}
-                                >
-                                    At least one number
-                                </li>
-                                <li
-                                    style={{
-                                        color: /[A-Z]/.test(password)
-                                            ? "green"
-                                            : "red",
-                                    }}
-                                >
-                                    At least one uppercase letter
-                                </li>
-                                {/* Show password match if available */}
-                                {passwordMatchValid !== null && (
-                                    <li
-                                        style={{
-                                            color: passwordMatchValid
-                                                ? "green"
-                                                : "red",
-                                        }}
-                                    >
-                                        {passwordMatchMessage}
-                                    </li>
-                                )}
-                            </ul>
-                        </div>
-                        <Form.Control.Feedback type="invalid">
-                            {errors.passwordVerify}
-                        </Form.Control.Feedback>
-                    </Form.Group>
+                            )}
+                        </ul>
+
+                        {errors.passwordVerify && (
+                            <div className="error-message">{errors.passwordVerify}</div>
+                        )}
+                    </div>
 
                     {/* SUBMIT BUTTON */}
-                    <Button
-                        variant="primary"
-                        type="submit"
-                        className="register-button"
-                    >
+                    <button type="submit" className="register-button">
                         Register
-                    </Button>
+                    </button>
 
-                    {/* LOGIN STATUS MESSAGE */}
-                    {registerStatus !== null &&
-                        (registerStatus ? (
-                            <Alert className="register-alert" variant="success">
-                                {returnMessage}
-                            </Alert>
-                        ) : (
-                            <Alert className="register-alert" variant="danger">
-                                {returnMessage}
-                            </Alert>
-                        ))}
-                </Form>
+                    {/* RESULT MESSAGE */}
+                    {registerStatus !== null && (
+                        <div
+                            className={
+                                registerStatus
+                                    ? "register-alert success"
+                                    : "register-alert danger"
+                            }
+                        >
+                            {returnMessage}
+                        </div>
+                    )}
+                </form>
             </div>
         </div>
     );

@@ -1,7 +1,10 @@
 {
   "dependencies": {
+    "i18next": "^25.6.2",
     "localforage": "^1.10.0",
     "match-sorter": "^8.1.0",
+    "react-collapsed": "^4.2.0",
+    "react-icons": "^5.5.0",
     "react-router-dom": "^7.9.6",
     "sort-by": "^1.2.0"
   }
