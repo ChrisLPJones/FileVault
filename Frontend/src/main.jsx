@@ -1,10 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import ErrorPage from "./pages/Error/Errorpage";
+import Layout from "./pages/Layout/Layout";
 import Login from "./pages/Login/Login";
 import Register from "./pages/Register/Register";
 import Dashboard from "./pages/Dashboard/Dashboard";
-import Layout from "./pages/Layout/Layout";
+import ErrorPage from "./pages/Error/Errorpage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import PublicRoute from "./components/PublicRoute";
@@ -16,7 +16,7 @@ const router = createBrowserRouter([
         element: <Layout />,
         errorElement: <ErrorPage />,
         children: [
-            { index: true, element: <Login /> }, // default for "/"
+            { index: true, element: <Login /> },
             {
                 path: "login",
                 element: (

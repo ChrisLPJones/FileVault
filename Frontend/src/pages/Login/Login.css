@@ -2,8 +2,9 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
+    /* min-height: 100vh; */
     padding: 20px;
+    min-height: calc(100vh - 100px);
 }
 
 .login-form-container {
