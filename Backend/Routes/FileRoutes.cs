@@ -54,7 +54,9 @@ namespace Backend.Routes
                 ClaimsPrincipal user) =>
             {
                 var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                return Results.Ok(new { success = db.GetFilesFromDb(userId) });
+                var files = db.GetFilesFromDb(userId);
+                
+                return Results.Ok(files);
             }).RequireAuthorization();
 
 
