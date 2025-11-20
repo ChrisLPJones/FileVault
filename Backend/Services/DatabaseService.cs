@@ -29,19 +29,29 @@ public class DatabaseServices
     }
 
     // Add a new file record to the database with filename, guid, and user ID
-    public async Task AddFile(string fileName, string guid, string userId)
+    public async Task AddFile(
+        string fileName, 
+        int isDirectory, 
+        string filePath,
+        string guid, 
+        string userId,
+        long size
+        )
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         string query = @"
-            INSERT INTO Files (FileName, guid, UserId)
-            VALUES (@FileName, @guid, @UserId);";
+            INSERT INTO Files (FileName, isDirectory, FilePath, guid, UserId, Size)
+            VALUES (@FileName, @isDirectory, @filePath, @guid, @UserId, @size);";
 
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@FileName", fileName);
+        command.Parameters.AddWithValue("@isDirectory", isDirectory);
+        command.Parameters.AddWithValue("@FilePath", filePath);
         command.Parameters.AddWithValue("@guid", guid);
         command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@Size", size);
 
         try
         {
@@ -78,14 +88,14 @@ public class DatabaseServices
     }
 
     // Retrieve all filenames that belong to a specific user
-    public List<string> GetFilesFromDb(string userId)
+    public List<FileModel> GetFilesFromDb(string userId)
     {
-        var filesList = new List<string>();
+        var filesList = new List<FileModel>();
 
         using var connection = new SqlConnection(_connectionString);
         connection.Open();
 
-        string query = "SELECT FileName FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
+        string query = "SELECT FileName, FilePath, UpdatedAt, GUID, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
 
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -94,7 +104,14 @@ public class DatabaseServices
 
         while (reader.Read())
         {
-            filesList.Add(reader["FileName"].ToString());
+            filesList.Add(new FileModel
+            {
+                Name = reader["FileName"].ToString(),
+                Path = reader["FilePath"].ToString(),
+                UpdatedAt = Convert.ToDateTime(reader["UpdatedAt"]),
+                Size = Convert.ToInt64(reader["Size"]),
+                IsDirectory = false // since these are files
+            });
         }
 
         return filesList;
@@ -139,7 +156,7 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@PasswordHash", user.Password);
 
         await command.ExecuteNonQueryAsync();
-        
+
     }
 
     // Retrieve a user's information from the database by username

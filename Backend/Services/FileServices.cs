@@ -1,4 +1,5 @@
 using Backend.Models;
+using Microsoft.VisualBasic;
 
 namespace Backend.Services;
 
@@ -11,7 +12,8 @@ public class FileServices(IConfiguration config)
     {
         var fileName = Path.GetFileName(file.FileName); // Get original filename
         var guid = Guid.NewGuid().ToString(); // Generate unique ID for storage
-
+        int isDirectory = 0;
+        var filePath = "/";
         var fullFilePath = Path.Combine(_storageRoot, guid); // Path to save file
 
         try
@@ -20,8 +22,12 @@ public class FileServices(IConfiguration config)
             await using (var stream = new FileStream(fullFilePath, FileMode.Create))
                 await file.CopyToAsync(stream);
 
+            var fileInfo = new FileInfo(fullFilePath);
+
+            long size = fileInfo.Length;
+            
             // Add file metadata to database
-            await db.AddFile(fileName, guid, userId);
+            await db.AddFile(fileName, isDirectory, filePath, guid, userId, size);
 
             return new HttpReturnResult(true, null, fileName); // Success
         }
