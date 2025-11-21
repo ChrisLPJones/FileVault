@@ -1,5 +1,9 @@
 ﻿using Backend.Services;
 using System.Security.Claims;
+using Backend.Models;
+using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
+using System.Runtime.Intrinsics.Arm;
 
 namespace Backend.Routes
 {
@@ -55,7 +59,7 @@ namespace Backend.Routes
             {
                 var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 var files = db.GetFilesFromDb(userId);
-                
+
                 return Results.Ok(files);
             }).RequireAuthorization();
 
@@ -87,22 +91,56 @@ namespace Backend.Routes
 
 
 
-
-
             // Deletes a specific file and its metadata for the authenticated user
-            app.MapDelete("/delete/{fileName}", async (
+            app.MapDelete("/delete/{fileId}", async (
                 ClaimsPrincipal user,
                 FileServices fs,
-                string fileName,
+                string fileId,
+                DatabaseServices db) =>
+                {
+                    var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                    var result = await fs.DeleteFile(fileId, db, userId);
+
+                    return result.Success
+                        ? Results.Ok(new { success = result.Message })
+                        : Results.BadRequest(new { error = result.Message });
+                }).RequireAuthorization();
+
+            // Delete multiple files and it metadata for the authenticated user
+            app.MapDelete("/delete", async (
+                ClaimsPrincipal user,
+                FileServices fs,
+                [FromBody] IsList request,
                 DatabaseServices db) =>
             {
                 var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-                var result = await fs.DeleteFile(fileName, db, userId);
+                List<string> ids = new();
 
-                return result.Success
-                    ? Results.Ok(new { success = result.Message })
-                    : Results.BadRequest(new { error = result.Message });
+                if (request.ids.ValueKind == JsonValueKind.String)
+                {
+                    ids.Add(request.ids.GetString());
+                }
+                else if (request.ids.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var element in request.ids.EnumerateArray())
+                    {
+                        ids.Add(element.GetString());
+                    }
+                }
+                else
+                {
+                    return Results.BadRequest("Invalid ids format");
+                }
+                foreach (var fileId in ids)
+                {
+                    var result = await fs.DeleteFile(fileId, db, userId);
+                    if (!result.Success)
+                        return Results.BadRequest(new { error = result.Message });
+                }
+
+                return Results.Ok(new { success = "Deleted Successfully" });
             }).RequireAuthorization();
         }
     }

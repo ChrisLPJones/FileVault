@@ -13,7 +13,7 @@ public class FileServices(IConfiguration config)
         var fileName = Path.GetFileName(file.FileName); // Get original filename
         var guid = Guid.NewGuid().ToString(); // Generate unique ID for storage
         int isDirectory = 0;
-        var filePath = "/";
+        var filePath = $"/{fileName}";
         var fullFilePath = Path.Combine(_storageRoot, guid); // Path to save file
 
         try
@@ -60,9 +60,9 @@ public class FileServices(IConfiguration config)
     }
 
     // Deletes a file and its metadata for the given user
-    public async Task<HttpReturnResult> DeleteFile(string fileName, DatabaseServices db, string userId)
+    public async Task<HttpReturnResult> DeleteFile(string fileId, DatabaseServices db, string userId)
     {
-        var sanitizedFilename = Path.GetFileName(fileName); // Sanitize input
+        var sanitizedFilename = Path.GetFileName(fileId); // Sanitize input
 
         string fileGuid = await db.GetFileGUIDAsync(sanitizedFilename, userId);
         if (fileGuid == null)
@@ -76,9 +76,9 @@ public class FileServices(IConfiguration config)
         try
         {
             // Remove metadata and delete file from storage
-            await db.DeleteFileMetadata(fileName, userId);
+            await db.DeleteFileMetadata(fileId, userId);
             File.Delete(fullFilePath);
-            return new HttpReturnResult(true, $"File deleted: {fileName}");
+            return new HttpReturnResult(true, $"File deleted: {fileId}");
         }
         catch (Exception)
         {

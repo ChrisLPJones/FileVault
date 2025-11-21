@@ -6,7 +6,7 @@ export const api = axios.create({
 
 // Add auth header for all requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token"); // or however you store it
+  const token = localStorage.getItem("token"); 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

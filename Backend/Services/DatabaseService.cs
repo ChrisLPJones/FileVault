@@ -65,15 +65,15 @@ public class DatabaseServices
     }
 
     // Remove file metadata from the database for the given user and filename
-    public async Task DeleteFileMetadata(string fileName, string userId)
+    public async Task DeleteFileMetadata(string fileId, string userId)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = @"DELETE FROM Files WHERE UserId = @UserId AND FileName = @FileName;";
+        string query = @"DELETE FROM Files WHERE UserId = @UserId AND Id = @Id;";
 
         using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@FileName", fileName);
+        command.Parameters.AddWithValue("@Id", fileId);
         command.Parameters.AddWithValue("@UserId", userId);
 
         try
@@ -95,7 +95,7 @@ public class DatabaseServices
         using var connection = new SqlConnection(_connectionString);
         connection.Open();
 
-        string query = "SELECT FileName, FilePath, UpdatedAt, GUID, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
+        string query = "SELECT Id, FileName, FilePath, UpdatedAt, GUID, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
 
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -106,6 +106,7 @@ public class DatabaseServices
         {
             filesList.Add(new FileModel
             {
+                _id = reader["Id"].ToString(),
                 Name = reader["FileName"].ToString(),
                 Path = reader["FilePath"].ToString(),
                 UpdatedAt = Convert.ToDateTime(reader["UpdatedAt"]),
@@ -118,15 +119,15 @@ public class DatabaseServices
     }
 
     // Get the unique identifier (GUID) for a specific file owned by the user
-    public async Task<string> GetFileGUIDAsync(string fileName, string userId)
+    public async Task<string> GetFileGUIDAsync(string fileId, string userId)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT GUID FROM Files WHERE UserId = @UserId AND FileName = @FileName";
+        string query = "SELECT GUID FROM Files WHERE UserId = @UserId AND Id = @Id";
 
         using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@FileName", fileName);
+        command.Parameters.AddWithValue("@Id", fileId);
         command.Parameters.AddWithValue("@UserId", userId);
 
         using var reader = await command.ExecuteReaderAsync();
