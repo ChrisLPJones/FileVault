@@ -84,6 +84,7 @@ function App() {
     const handleFileUploaded = (response) => {
         const uploadedFile = JSON.parse(response);
         setFiles((prev) => [...prev, uploadedFile]);
+        getFiles();
     };
     //
 

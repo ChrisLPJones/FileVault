@@ -105,7 +105,10 @@ function Register() {
                             type="text"
                             placeholder="Enter username"
                             value={username}
-                            onChange={(e) => setUsername(e.target.value)}
+                            onChange={(e) => {
+                                setUsername(e.target.value)
+                                setRegisterStatus(null)}
+                            }
                             className={errors.username ? "input-error" : ""}
                         />
                         {errors.username && (
@@ -120,7 +123,12 @@ function Register() {
                             type="email"
                             placeholder="Enter email"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            onChange={(e) =>{ 
+                                setEmail(e.target.value)
+                                setRegisterStatus(null)
+                            }
+                                
+                            }
                             className={errors.email ? "input-error" : ""}
                         />
                         {errors.email && (
@@ -184,9 +192,9 @@ function Register() {
                             )}
                         </ul>
 
-                        {errors.passwordVerify && (
+                        {/* {errors.passwordVerify && (
                             <div className="error-message">{errors.passwordVerify}</div>
-                        )}
+                        )} */}
                     </div>
 
                     {/* SUBMIT BUTTON */}
