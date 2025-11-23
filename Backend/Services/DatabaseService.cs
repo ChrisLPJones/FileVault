@@ -71,8 +71,8 @@ public class DatabaseServices
         await connection.OpenAsync();
 
         string query = @"
-            INSERT INTO Files (FileName, isDirectory, FilePath, GUID, UserId, size, parentId, mimeType)
-            VALUES (@FileName, @isDirectory, @FilePath, @GUID, @UserId, @size, @parentId, @mimeType);";
+        INSERT INTO Files (FileName, isDirectory, FilePath, GUID, UserId, size, parentId, mimeType)
+        VALUES (@FileName, @isDirectory, @FilePath, @GUID, @UserId, @size, @parentId, @mimeType);";
 
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", response.UserId);
@@ -80,19 +80,12 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@FileName", response.Name);
         command.Parameters.AddWithValue("@isDirectory", response.IsDirectory);
         command.Parameters.AddWithValue("@FilePath", response.Path);
-        command.Parameters.AddWithValue("@parentId", response.ParentId);
+        command.Parameters.AddWithValue("@parentId",
+            string.IsNullOrEmpty(response.ParentId) ? DBNull.Value : response.ParentId);
         command.Parameters.AddWithValue("@size", response.Size);
         command.Parameters.AddWithValue("@mimeType", response.MimeType);
 
-        try
-        {
-            await command.ExecuteNonQueryAsync();
-            Console.WriteLine("Folder metadata added to db");
-        }
-        catch (SqlException ex)
-        {
-            Console.WriteLine($"Error: {ex}");
-        }
+        await command.ExecuteNonQueryAsync();
     }
 
 

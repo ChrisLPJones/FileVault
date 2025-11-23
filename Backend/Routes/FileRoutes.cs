@@ -69,7 +69,7 @@ namespace Backend.Routes
 
                     return result.Success
                     ? Results.Ok(result.Folder)
-                    : Results.BadRequest(new { error = $"Folder not saved: {result.Message}" });
+                    : Results.BadRequest(new { error = result.Message });
 
                 }
                 catch (Exception ex)

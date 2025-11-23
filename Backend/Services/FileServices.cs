@@ -66,7 +66,7 @@ public class FileServices(IConfiguration config)
         try
         {
             await db.AddFolder(request);
-            return new HttpReturnResult(true, null, request.Name);
+            return new HttpReturnResult(true, null, request);
         }
         catch (Exception ex)
         {
