@@ -67,6 +67,8 @@ function App() {
     const handleCreateFolder = async (name, parentFolder) => {
         setIsLoading(true);
         const response = await createFolderAPI(name, parentFolder?._id);
+        console.log("Created folder response:", response.data);
+
         if (response.status === 200 || response.status === 201) {
             setFiles((prev) => [...prev, response.data]);
         } else {

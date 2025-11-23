@@ -30,10 +30,10 @@ public class DatabaseServices
 
     // Add a new file record to the database with filename, guid, and user ID
     public async Task AddFile(
-        string fileName, 
-        int isDirectory, 
+        string fileName,
+        int isDirectory,
         string filePath,
-        string guid, 
+        string guid,
         string userId,
         long size
         )
@@ -64,6 +64,39 @@ public class DatabaseServices
         }
     }
 
+
+    public async Task AddFolder(FolderModel response)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string query = @"
+            INSERT INTO Files (FileName, isDirectory, FilePath, GUID, UserId, size, parentId, mimeType)
+            VALUES (@FileName, @isDirectory, @FilePath, @GUID, @UserId, @size, @parentId, @mimeType);";
+
+        using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@UserId", response.UserId);
+        command.Parameters.AddWithValue("@GUID", response._id);
+        command.Parameters.AddWithValue("@FileName", response.Name);
+        command.Parameters.AddWithValue("@isDirectory", response.IsDirectory);
+        command.Parameters.AddWithValue("@FilePath", response.Path);
+        command.Parameters.AddWithValue("@parentId", response.ParentId);
+        command.Parameters.AddWithValue("@size", response.Size);
+        command.Parameters.AddWithValue("@mimeType", response.MimeType);
+
+        try
+        {
+            await command.ExecuteNonQueryAsync();
+            Console.WriteLine("Folder metadata added to db");
+        }
+        catch (SqlException ex)
+        {
+            Console.WriteLine($"Error: {ex}");
+        }
+    }
+
+
+
     // Remove file metadata from the database for the given user and filename
     public async Task DeleteFileMetadata(string fileId, string userId)
     {
@@ -87,6 +120,32 @@ public class DatabaseServices
         }
     }
 
+
+    public async Task<FolderModel> GetFolderById(string folderId)
+    {
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string query = "SELECT Id, FileName, FilePath, GUID, UserId, isDirectory FROM Files WHERE Id = @Id";
+        using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Id", folderId);
+
+        using var reader = await command.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            return new FolderModel
+            {
+                _id = reader["Id"].ToString(),
+                Name = reader["FileName"].ToString(),
+                Path = reader["FilePath"].ToString(),
+                IsDirectory = Convert.ToBoolean(reader["isDirectory"]),
+                UserId = reader["UserId"].ToString()
+            };
+        }
+
+        return null;
+    }
+
     // Retrieve all filenames that belong to a specific user
     public List<FileModel> GetFilesFromDb(string userId)
     {
@@ -95,7 +154,7 @@ public class DatabaseServices
         using var connection = new SqlConnection(_connectionString);
         connection.Open();
 
-        string query = "SELECT Id, FileName, FilePath, UpdatedAt, GUID, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
+        string query = "SELECT Id, FileName, FilePath, UpdatedAt, GUID, isDirectory, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
 
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -111,7 +170,7 @@ public class DatabaseServices
                 Path = reader["FilePath"].ToString(),
                 UpdatedAt = Convert.ToDateTime(reader["UpdatedAt"]),
                 Size = Convert.ToInt64(reader["Size"]),
-                IsDirectory = false // since these are files
+                IsDirectory = Convert.ToBoolean(reader["isDirectory"])
             });
         }
 

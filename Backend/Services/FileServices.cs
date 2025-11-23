@@ -25,7 +25,7 @@ public class FileServices(IConfiguration config)
             var fileInfo = new FileInfo(fullFilePath);
 
             long size = fileInfo.Length;
-            
+
             // Add file metadata to database
             await db.AddFile(fileName, isDirectory, filePath, guid, userId, size);
 
@@ -40,6 +40,41 @@ public class FileServices(IConfiguration config)
             return new HttpReturnResult(false, $"Error: {ex.Message}"); // Failure
         }
     }
+
+
+    public async Task<HttpReturnResult> CreateFolder(FolderModel request, DatabaseServices db, string userId)
+    {
+        request._id = Guid.NewGuid().ToString(); // Unique ID
+        request.IsDirectory = true;
+        request.UserId = userId;
+
+        string parentPath = "";
+        if (!string.IsNullOrEmpty(request.ParentId))
+        {
+            // Get parent folder from DB
+            var parentFolder = await db.GetFolderById(request.ParentId);
+            if (parentFolder == null)
+                return new HttpReturnResult(false, "Parent folder not found");
+
+            parentPath = parentFolder.Path;
+        }
+
+        request.Path = $"{parentPath}/{request.Name}".Replace("//", "/"); // construct full path
+        request.Size = 0;
+        request.MimeType = "";
+
+        try
+        {
+            await db.AddFolder(request);
+            return new HttpReturnResult(true, null, request.Name);
+        }
+        catch (Exception ex)
+        {
+            return new HttpReturnResult(false, $"Error: {ex.Message}");
+        }
+    }
+
+
 
     // Downloads a file by filename for the specified user
     public async Task<HttpReturnResult> DownloadFile(string fileName, DatabaseServices db, string userId)

@@ -50,6 +50,34 @@ namespace Backend.Routes
 
 
 
+            // Create folder metadata in the database
+            app.MapPost("/folder", async (
+                ClaimsPrincipal user,
+                [FromBody] FolderModel request,
+                FileServices fs,
+                DatabaseServices db) =>
+            {
+                try
+                {
+                    var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                    if (userId == null) return Results.Unauthorized();
+
+                    if (string.IsNullOrWhiteSpace(request.Name))
+                        return Results.BadRequest(new { error = "Folder name is required" });
+
+                    var result = await fs.CreateFolder(request, db, userId);
+
+                    return result.Success
+                    ? Results.Ok(result.Folder)
+                    : Results.BadRequest(new { error = $"Folder not saved: {result.Message}" });
+
+                }
+                catch (Exception ex)
+                {
+                    return Results.BadRequest(new { error = $"{ex.Message}" });
+                }
+            }).RequireAuthorization();
+
 
 
             // Returns a list of all files stored for the authenticated user

@@ -98,6 +98,9 @@ const PreviewFileAction = ({ filePreviewPath, filePreviewComponent }) => {
         </div>
       )}
 
+
+
+
       {/* IMAGE */}
       {extension && imageExtensions.includes(extension) && previewUrl && (
         <>
