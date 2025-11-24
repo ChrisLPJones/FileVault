@@ -35,15 +35,16 @@ public class DatabaseServices
         string filePath,
         string guid,
         string userId,
-        long size
+        long size,
+        string parentId
         )
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         string query = @"
-            INSERT INTO Files (FileName, isDirectory, FilePath, guid, UserId, Size)
-            VALUES (@FileName, @isDirectory, @filePath, @guid, @UserId, @size);";
+            INSERT INTO Files (FileName, isDirectory, FilePath, guid, UserId, Size, parentId)
+            VALUES (@FileName, @isDirectory, @filePath, @guid, @UserId, @size, @parentId);";
 
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@FileName", fileName);
@@ -52,6 +53,7 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@guid", guid);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@Size", size);
+        command.Parameters.AddWithValue("@parentId", parentId);
 
         try
         {
@@ -119,16 +121,16 @@ public class DatabaseServices
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, FileName, FilePath, GUID, UserId, isDirectory FROM Files WHERE Id = @Id";
+        string query = "SELECT Id, FileName, FilePath, GUID, UserId, isDirectory FROM Files  WHERE GUID = @GUID";
         using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@Id", folderId);
+        command.Parameters.AddWithValue("@GUID", folderId);
 
         using var reader = await command.ExecuteReaderAsync();
         if (await reader.ReadAsync())
         {
             return new FolderModel
             {
-                _id = reader["Id"].ToString(),
+                _id = reader["GUID"].ToString(),
                 Name = reader["FileName"].ToString(),
                 Path = reader["FilePath"].ToString(),
                 IsDirectory = Convert.ToBoolean(reader["isDirectory"]),
@@ -158,7 +160,7 @@ public class DatabaseServices
         {
             filesList.Add(new FileModel
             {
-                _id = reader["Id"].ToString(),
+                _id = reader["GUID"].ToString(),
                 Name = reader["FileName"].ToString(),
                 Path = reader["FilePath"].ToString(),
                 UpdatedAt = Convert.ToDateTime(reader["UpdatedAt"]),

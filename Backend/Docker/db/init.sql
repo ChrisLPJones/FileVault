@@ -1,5 +1,7 @@
 -- Create database if it doesn't exist
-IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'SecureVaultDb')
+IF NOT EXISTS (SELECT *
+FROM sys.databases
+WHERE name = 'SecureVaultDb')
 BEGIN
     CREATE DATABASE SecureVaultDb;
     PRINT 'Database "SecureVaultDb" created.';
@@ -16,7 +18,9 @@ GO
 ------------------------------------------------------------
 -- USERS TABLE
 ------------------------------------------------------------
-IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Users')
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'Users')
 BEGIN
     CREATE TABLE Users
     (
@@ -39,20 +43,25 @@ GO
 ------------------------------------------------------------
 -- FILES TABLE
 ------------------------------------------------------------
-IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Files')
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'Files')
 BEGIN
     CREATE TABLE Files
     (
         Id INT IDENTITY(1,1) NOT NULL,
         FileName NVARCHAR(255) NOT NULL,
         IsDirectory BIT NOT NULL,
-        FilePath NVARCHAR(MAX) NULL,        -- changed to NULL
+        FilePath NVARCHAR(MAX) NULL,
         UpdatedAt DATETIME DEFAULT GETDATE(),
         GUID NVARCHAR(100) NOT NULL,
         UserId UNIQUEIDENTIFIER NOT NULL,
         Size BIGINT NOT NULL,
+        ParentId NVARCHAR(100) NULL,
+        MimeType NVARCHAR(255) NULL
 
-        CONSTRAINT PK_Files PRIMARY KEY CLUSTERED (Id ASC),
+
+            CONSTRAINT PK_Files PRIMARY KEY CLUSTERED (Id ASC),
         CONSTRAINT UQ_Files_GUID UNIQUE NONCLUSTERED (GUID ASC),
         CONSTRAINT FK_Files_Users FOREIGN KEY (UserId) REFERENCES Users(Id)
     );
@@ -67,7 +76,9 @@ GO
 ------------------------------------------------------------
 -- FOLDERS TABLE
 ------------------------------------------------------------
-IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Folders')
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'Folders')
 BEGIN
     CREATE TABLE Folders
     (
@@ -83,7 +94,8 @@ BEGIN
         GUID NVARCHAR(100) NOT NULL,
         UserId UNIQUEIDENTIFIER NOT NULL,
 
-        CONSTRAINT PK_Folders PRIMARY KEY CLUSTERED (_Id ASC), -- FIXED
+        CONSTRAINT PK_Folders PRIMARY KEY CLUSTERED (_Id ASC),
+        -- FIXED
         CONSTRAINT UQ_Folders_GUID UNIQUE NONCLUSTERED (GUID ASC),
         CONSTRAINT FK_Folders_Users FOREIGN KEY (UserId) REFERENCES Users(Id)
     );

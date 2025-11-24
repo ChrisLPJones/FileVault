@@ -8,13 +8,20 @@ public class FileServices(IConfiguration config)
     private readonly string _storageRoot = config.GetValue<string>("StorageRoot");
 
     // Uploads a file, saves it to disk, and stores metadata in the database
-    public async Task<HttpReturnResult> UploadFile(IFormFile file, DatabaseServices db, string userId)
+    public async Task<HttpReturnResult> UploadFile(IFormFile file, DatabaseServices db, string userId, string parentId)
     {
         var fileName = Path.GetFileName(file.FileName); // Get original filename
         var guid = Guid.NewGuid().ToString(); // Generate unique ID for storage
         int isDirectory = 0;
         var filePath = $"/{fileName}";
+        if (!string.IsNullOrEmpty(parentId))
+        {
+            var folder = await db.GetFolderById(parentId);
+            filePath = $"{folder.Path}/{fileName}"; 
+        }
+
         var fullFilePath = Path.Combine(_storageRoot, guid); // Path to save file
+        System.Console.WriteLine(file);
 
         try
         {
@@ -27,7 +34,7 @@ public class FileServices(IConfiguration config)
             long size = fileInfo.Length;
 
             // Add file metadata to database
-            await db.AddFile(fileName, isDirectory, filePath, guid, userId, size);
+            await db.AddFile(fileName, isDirectory, filePath, guid, userId, size, parentId);
 
             return new HttpReturnResult(true, null, fileName); // Success
         }

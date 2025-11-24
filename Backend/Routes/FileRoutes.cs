@@ -31,12 +31,14 @@ namespace Backend.Routes
                         return Results.BadRequest(new { error = "Expected form-data content type" });
 
                     var form = await request.ReadFormAsync();
+                    var parentId = form["parentId"].FirstOrDefault() ?? "";
                     var file = form.Files.Count > 0 ? form.Files[0] : null;
 
                     if (file == null || file.Length == 0)
                         return Results.BadRequest(new { error = "No file uploaded" });
+                        
 
-                    var result = await fs.UploadFile(file, db, userId);
+                    var result = await fs.UploadFile(file, db, userId, parentId);
 
                     return result.Success
                         ? Results.Ok(new { success = $"File Uploaded: {result.FileName}" })
