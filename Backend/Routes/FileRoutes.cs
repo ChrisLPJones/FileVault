@@ -165,9 +165,14 @@ namespace Backend.Routes
                 }
                 foreach (var fileId in ids)
                 {
-                    var result = await fs.DeleteFile(fileId, db, userId);
-                    if (!result.Success)
-                        return Results.BadRequest(new { error = result.Message });
+                    if(await db.IsFileAsync(fileId, userId))
+                    {
+                        var result = await fs.DeleteFile(fileId, db, userId);
+                    }
+                    else
+                    {
+                        await db.DeleteFileMetadata(fileId, userId);
+                    }
                 }
 
                 return Results.Ok(new { success = "Deleted Successfully" });
