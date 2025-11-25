@@ -1,4 +1,6 @@
--- Create database if it doesn't exist
+------------------------------------------------------------
+-- CREATE DATABASE IF IT DOESN'T EXIST
+------------------------------------------------------------
 IF NOT EXISTS (SELECT *
 FROM sys.databases
 WHERE name = 'SecureVaultDb')
@@ -41,6 +43,30 @@ END
 GO
 
 ------------------------------------------------------------
+-- Initialize default admin user
+------------------------------------------------------------
+IF NOT EXISTS (SELECT 1
+FROM Users
+WHERE Username = 'admin')
+BEGIN
+    INSERT INTO Users
+        (Username, Email, PasswordHash, Role)
+    VALUES
+        (
+            'admin',
+            'admin@example.com',
+            '$2a$11$13snxdxtbMLMq.ih1sK9oOuV245raTKVflvA0/npenUsmXkGWVqvi',
+            'admin'
+    );
+    PRINT 'Default user "admin" created.';
+END
+ELSE
+BEGIN
+    PRINT 'Default user "admin" already exists.';
+END
+GO
+
+------------------------------------------------------------
 -- FILES TABLE
 ------------------------------------------------------------
 IF NOT EXISTS (SELECT *
@@ -58,10 +84,8 @@ BEGIN
         UserId UNIQUEIDENTIFIER NOT NULL,
         Size BIGINT NOT NULL,
         ParentId NVARCHAR(100) NULL,
-        MimeType NVARCHAR(255) NULL
-
-
-            CONSTRAINT PK_Files PRIMARY KEY CLUSTERED (Id ASC),
+        MimeType NVARCHAR(255) NULL,
+        CONSTRAINT PK_Files PRIMARY KEY CLUSTERED (Id ASC),
         CONSTRAINT UQ_Files_GUID UNIQUE NONCLUSTERED (GUID ASC),
         CONSTRAINT FK_Files_Users FOREIGN KEY (UserId) REFERENCES Users(Id)
     );
@@ -70,40 +94,5 @@ END
 ELSE
 BEGIN
     PRINT 'Table "Files" already exists.';
-END
-GO
-
-------------------------------------------------------------
--- FOLDERS TABLE
-------------------------------------------------------------
-IF NOT EXISTS (SELECT *
-FROM INFORMATION_SCHEMA.TABLES
-WHERE TABLE_NAME = 'Folders')
-BEGIN
-    CREATE TABLE Folders
-    (
-        _Id INT IDENTITY(1,1) NOT NULL,
-        name NVARCHAR(50) NOT NULL,
-        isDirectory BIT NOT NULL,
-        path NVARCHAR(MAX) NULL,
-        parentId INT NULL,
-        size BIGINT NULL,
-        mimeType NVARCHAR(50) NULL,
-        createdAt DATETIME DEFAULT GETDATE(),
-        updatedAt DATETIME DEFAULT GETDATE(),
-        GUID NVARCHAR(100) NOT NULL,
-        UserId UNIQUEIDENTIFIER NOT NULL,
-
-        CONSTRAINT PK_Folders PRIMARY KEY CLUSTERED (_Id ASC),
-        -- FIXED
-        CONSTRAINT UQ_Folders_GUID UNIQUE NONCLUSTERED (GUID ASC),
-        CONSTRAINT FK_Folders_Users FOREIGN KEY (UserId) REFERENCES Users(Id)
-    );
-
-    PRINT 'Table "Folders" created.';
-END
-ELSE
-BEGIN
-    PRINT 'Table "Folders" already exists.';
 END
 GO
