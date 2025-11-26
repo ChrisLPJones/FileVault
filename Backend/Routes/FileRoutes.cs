@@ -33,12 +33,13 @@ namespace Backend.Routes
                     var form = await request.ReadFormAsync();
                     var parentId = form["parentId"].FirstOrDefault() ?? "";
                     var file = form.Files.Count > 0 ? form.Files[0] : null;
+                    var mimeType = file.ContentType;
 
                     if (file == null || file.Length == 0)
                         return Results.BadRequest(new { error = "No file uploaded" });
                         
 
-                    var result = await fs.UploadFile(file, db, userId, parentId);
+                    var result = await fs.UploadFile(file, db, userId, parentId, mimeType);
 
                     return result.Success
                         ? Results.Ok(new { success = $"File Uploaded: {result.FileName}" })
@@ -112,9 +113,10 @@ namespace Backend.Routes
                 if (!result.Success || result.FileContent == null || result.FileName == null)
                     return Results.BadRequest(new { error = result.Message });
 
+                var contentType = await db.GetMimeType(fileName, userId);
                 return Results.File(
                     fileContents: result.FileContent,
-                    contentType: "application/octet-stream",
+                    contentType: contentType,
                     fileDownloadName: result.FileName
                 );
             }).RequireAuthorization();

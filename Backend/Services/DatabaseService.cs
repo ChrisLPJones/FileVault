@@ -48,15 +48,16 @@ public class DatabaseServices
         string guid,
         string userId,
         long size,
-        string parentId
+        string parentId,
+        string mimeType
         )
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         string query = @"
-            INSERT INTO Files (FileName, isDirectory, FilePath, guid, UserId, Size, parentId)
-            VALUES (@FileName, @isDirectory, @filePath, @guid, @UserId, @size, @parentId);";
+            INSERT INTO Files (FileName, isDirectory, FilePath, guid, UserId, Size, parentId, MimeType)
+            VALUES (@FileName, @isDirectory, @filePath, @guid, @UserId, @size, @parentId, @MimeType);";
 
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@FileName", fileName);
@@ -66,6 +67,7 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@Size", size);
         command.Parameters.AddWithValue("@parentId", parentId);
+        command.Parameters.AddWithValue("@MimeType", mimeType);
 
         try
         {
@@ -76,6 +78,31 @@ public class DatabaseServices
         {
             Console.WriteLine($"Error: {ex}");
         }
+    }
+
+
+    public async Task<string> GetMimeType(string fileName, string userId)
+    {
+        var mimeType = "";
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        var guid = await GetFileGUIDAsync(fileName, userId);
+        
+
+        const string query = "SELECT MimeType FROM Files WHERE GUID = @GUID AND UserId = @UserId";
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@GUID", guid);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+
+        
+        var result = await command.ExecuteScalarAsync();
+
+        if(result != null && result != DBNull.Value)
+            mimeType = result.ToString();
+
+        return mimeType;
+
     }
     
 

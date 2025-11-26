@@ -13,120 +13,152 @@ import "./PreviewFile.action.scss";
 const imageExtensions = ["jpg", "jpeg", "png"];
 const videoExtensions = ["mp4", "mov", "avi"];
 const audioExtensions = ["mp3", "wav", "m4a"];
-const iFrameExtensions = ["pdf"];
-const textExtensions = ["txt"];
+const iFrameExtensions = ["txt", "pdf"];
 
 const PreviewFileAction = ({ filePreviewPath, filePreviewComponent }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [textContent, setTextContent] = useState(null);
-
+  const [fileURL, setFileURL] = useState(null);
   const { selectedFiles } = useSelection();
   const fileIcons = useFileIcons(73);
   const extension = getFileExtension(selectedFiles[0].name)?.toLowerCase();
-  const filePath = `${filePreviewPath}/download/${selectedFiles[0]._id}`;
   const t = useTranslation();
 
-  const customPreview = useMemo(() => filePreviewComponent?.(selectedFiles[0]), [filePreviewComponent]);
+  const token = localStorage.getItem("token"); // get your auth token
 
-  const handleDownload = () => {
-    window.location.href = filePath;
+  // Custom file preview component
+  const customPreview = useMemo(
+    () => filePreviewComponent?.(selectedFiles[0]),
+    [filePreviewComponent]
+  );
+
+  const handleImageLoad = () => {
+    setIsLoading(false);
+    setHasError(false);
   };
 
-  useEffect(() => {
-    let url = null;
+  const handleImageError = () => {
+    setIsLoading(false);
+    setHasError(true);
+  };
 
+  // Fetch file with token as header
+  useEffect(() => {
     const fetchFile = async () => {
       try {
         setIsLoading(true);
-        const token = localStorage.getItem("token");
-        if (!token) throw new Error("No auth token found");
+        const response = await fetch(
+          `http://127.0.0.1:3000/download/${encodeURIComponent(selectedFiles[0]._id)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
-        const res = await fetch(filePath, {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        if (!response.ok) throw new Error("File fetch failed");
 
-        if (!res.ok) throw new Error("Failed to fetch file");
-
-        if (extension && textExtensions.includes(extension)) {
-          const text = await res.text();
-          setTextContent(text);
-        } else {
-          const blob = await res.blob();
-          url = URL.createObjectURL(blob);
-          setPreviewUrl(url);
-        }
-
-        setHasError(false);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        setFileURL(url);
+        setIsLoading(false);
       } catch (err) {
         console.error(err);
         setHasError(true);
-      } finally {
         setIsLoading(false);
       }
     };
 
     fetchFile();
 
-    // Cleanup Blob URL on unmount
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [filePath, extension]);
+    // Cleanup URL object on unmount
+    return () => fileURL && URL.revokeObjectURL(fileURL);
+  }, [selectedFiles, token]);
 
-  if (React.isValidElement(customPreview)) return customPreview;
+  const handleDownload = async () => {
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:3000/download/${encodeURIComponent(selectedFiles[0].name)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) throw new Error("Download failed");
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = selectedFiles[0].name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (React.isValidElement(customPreview)) {
+    return customPreview;
+  }
 
   return (
     <section className={`file-previewer ${extension === "pdf" ? "pdf-previewer" : ""}`}>
-      {hasError && (
-        <div className="preview-error">
-          <span className="error-icon">{fileIcons[extension] ?? <FaRegFileAlt size={73} />}</span>
-          <span className="error-msg">{t("previewUnavailable")}</span>
-          <div className="file-info">
-            <span className="file-name">{selectedFiles[0].name}</span>
-            {selectedFiles[0].size && <span>-</span>}
-            <span className="file-size">{getDataSize(selectedFiles[0].size)}</span>
-          </div>
-          <Button onClick={handleDownload} padding="0.45rem .9rem">
-            <div className="download-btn">
-              <MdOutlineFileDownload size={18} />
-              <span>{t("download")}</span>
+      {hasError ||
+        (![...imageExtensions, ...videoExtensions, ...audioExtensions, ...iFrameExtensions].includes(extension) && (
+          <div className="preview-error">
+            <span className="error-icon">{fileIcons[extension] ?? <FaRegFileAlt size={73} />}</span>
+            <span className="error-msg">{t("previewUnavailable")}</span>
+            <div className="file-info">
+              <span className="file-name">{selectedFiles[0].name}</span>
+              {selectedFiles[0].size && <span>-</span>}
+              <span className="file-size">{getDataSize(selectedFiles[0].size)}</span>
             </div>
-          </Button>
-        </div>
-      )}
+            <Button onClick={handleDownload} padding="0.45rem .9rem">
+              <div className="download-btn">
+                <MdOutlineFileDownload size={18} />
+                <span>{t("download")}</span>
+              </div>
+            </Button>
+          </div>
+        ))}
 
-
-
-
-      {/* IMAGE */}
-      {extension && imageExtensions.includes(extension) && previewUrl && (
+      {imageExtensions.includes(extension) && (
         <>
           <Loader isLoading={isLoading} />
-          <img src={previewUrl} alt="Preview" className={`photo-popup-image ${isLoading ? "img-loading" : ""}`} />
+          {fileURL && (
+            <img
+              src={fileURL}
+              alt="Preview Unavailable"
+              className={`photo-popup-image ${isLoading ? "img-loading" : ""}`}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+              loading="lazy"
+            />
+          )}
         </>
       )}
 
-      {/* VIDEO */}
-      {extension && videoExtensions.includes(extension) && previewUrl && (
-        <video src={previewUrl} controls autoPlay className="video-preview" />
+      {videoExtensions.includes(extension) && fileURL && (
+        <video src={fileURL} className="video-preview" controls autoPlay />
       )}
 
-      {/* AUDIO */}
-      {extension && audioExtensions.includes(extension) && previewUrl && (
-        <audio src={previewUrl} controls autoPlay className="audio-preview" />
+      {audioExtensions.includes(extension) && fileURL && (
+        <audio src={fileURL} controls autoPlay className="audio-preview" />
       )}
 
-      {/* PDF */}
-      {extension && iFrameExtensions.includes(extension) && previewUrl && (
-        <iframe src={previewUrl} frameBorder="0" className={`photo-popup-iframe ${isLoading ? "img-loading" : ""}`} />
-      )}
-
-      {/* TXT */}
-      {extension && textExtensions.includes(extension) && textContent && (
-        <pre className="txt-preview">{textContent}</pre>
+      {iFrameExtensions.includes(extension) && fileURL && (
+        <iframe
+          src={fileURL}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+          frameBorder="0"
+          className={`photo-popup-iframe ${isLoading ? "img-loading" : ""}`}
+        />
       )}
     </section>
   );
