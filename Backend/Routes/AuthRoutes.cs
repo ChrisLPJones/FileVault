@@ -43,14 +43,13 @@ namespace Backend.Routes
 
                     // Check if User exists by email
                     if (await db.UserExistsByEmail(user.Email))
-                        return Results.BadRequest(new { error = "User already exists" });
+                        return Results.BadRequest(new { error = "Email already exists" });
 
                     // Check if user exists by username
                     if (await db.UserExistsByUsername(user.Username))
-                        return Results.BadRequest(new { error = "User already exists" });
+                        return Results.BadRequest(new { error = "Username already exists" });
 
                     // Hash and register user
-
                     await auth.HashAndRegisterUser(user, db);
 
                     // Return 200 OK 
@@ -92,7 +91,7 @@ namespace Backend.Routes
 
 
                     if (user == null ||
-                    string.IsNullOrWhiteSpace(user.Username) ||
+                    string.IsNullOrWhiteSpace(user.Email) ||
                     string.IsNullOrWhiteSpace(user.Password))
                     {
                         return Results.BadRequest(new { Error = "Invalid JSON" });
@@ -100,7 +99,8 @@ namespace Backend.Routes
 
                     var result = await auth.ValidateUser(user, db, auth);
                     if (!result.Success)
-                        return Results.BadRequest(new { Error = result.Message });
+                        //return Results.BadRequest(new { Error = result.Message });
+                        return Results.Unauthorized();
 
                     return Results.Ok(new { Success = result.Message });
                 }

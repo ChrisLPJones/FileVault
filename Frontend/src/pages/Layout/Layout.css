@@ -1,0 +1,38 @@
+/* Ensure the html and body take full viewport height */
+html, body {
+    margin: 0;           /* Remove default margin */
+    padding: 0;          /* Remove default padding */
+    overflow: hidden;    /* Prevent scrolling */
+    height: 100vh;       /* 100% of the viewport height */
+    width: 100vw;        /* 100% of the viewport width */
+}
+
+.page{
+    height: 100%;        /* Fills the height of the body */
+    width: 100%;         /* Fills the width of the body */
+    box-sizing: border-box; /* Include padding/border in size */
+}
+
+.header-style {
+    background-color: #333;
+    padding: 1rem;
+}
+
+/* Make nav flex */
+.nav-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* pushes left items left, logout right */
+}
+
+/* Left group of links */
+.nav-left {
+    display: flex;
+    gap: 1rem; /* spacing between links */
+}
+
+/* All links */
+.link-style {
+    color: white;
+    text-decoration: none;
+}

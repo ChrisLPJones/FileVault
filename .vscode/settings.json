@@ -26,6 +26,7 @@
         "sqlcmd",
         "sqlinit",
         "sqlservr",
+        "VITE",
         "xunit"
     ]
 }

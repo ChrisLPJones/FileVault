@@ -16,7 +16,14 @@ namespace Backend
             var jwtConfig = builder.Configuration.GetSection("Jwt");
 
             // Inject Services
-
+            builder.Services.AddCors(options => {
+                options.AddPolicy("AllowFrontend", policy =>
+                {
+                    policy.WithOrigins("http://localhost:5173")
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+                    });
+                    });
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();
@@ -52,11 +59,12 @@ namespace Backend
                 });
 
             var app = builder.Build();
+            
+            app.UseCors("AllowFrontend");
 
             // Map Routes
             app.UseAuthentication();
             app.UseAuthorization();
-
             app.MapFileRoutes();
             app.MapHealthCheckRoutes();
             app.MapAuthRoutes();

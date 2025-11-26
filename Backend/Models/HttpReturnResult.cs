@@ -8,6 +8,9 @@
         public string? FileName { get; init; }
         public byte[]? FileContent { get; init; }
 
+        // <-- Add this property
+        public FolderModel? Folder { get; init; }
+
         public HttpReturnResult(bool success)
         {
             this.Success = success;
@@ -31,5 +34,11 @@
             this.FileContent = fileContent;
         }
 
+        // <-- Add constructor for folder
+        public HttpReturnResult(bool success, string? message, FolderModel folder)
+            : this(success, message)
+        {
+            this.Folder = folder;
+        }
     }
 }

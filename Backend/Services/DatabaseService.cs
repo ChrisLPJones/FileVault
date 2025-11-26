@@ -8,8 +8,14 @@ namespace Backend.Services;
 
 public class DatabaseServices
 {
+
+
+
     // Store database connection string from configuration
     private readonly string _connectionString;
+
+
+
 
     // Store root directory path for file storage from configuration
     private readonly string _storageRoot;
@@ -18,6 +24,9 @@ public class DatabaseServices
         _connectionString = config.GetConnectionString("DefaultConnection");
         _storageRoot = config.GetValue<string>("StorageRoot");
     }
+
+
+
 
     // Check if the database connection can be opened successfully
     public async Task CheckConnection()
@@ -28,20 +37,37 @@ public class DatabaseServices
         }
     }
 
+
+
+
     // Add a new file record to the database with filename, guid, and user ID
-    public async Task AddFile(string fileName, string guid, string userId)
+    public async Task AddFile(
+        string fileName,
+        int isDirectory,
+        string filePath,
+        string guid,
+        string userId,
+        long size,
+        string parentId,
+        string mimeType
+        )
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         string query = @"
-            INSERT INTO Files (FileName, guid, UserId)
-            VALUES (@FileName, @guid, @UserId);";
+            INSERT INTO Files (FileName, isDirectory, FilePath, guid, UserId, Size, parentId, MimeType)
+            VALUES (@FileName, @isDirectory, @filePath, @guid, @UserId, @size, @parentId, @MimeType);";
 
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@FileName", fileName);
+        command.Parameters.AddWithValue("@isDirectory", isDirectory);
+        command.Parameters.AddWithValue("@FilePath", filePath);
         command.Parameters.AddWithValue("@guid", guid);
         command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@Size", size);
+        command.Parameters.AddWithValue("@parentId", parentId);
+        command.Parameters.AddWithValue("@MimeType", mimeType);
 
         try
         {
@@ -54,16 +80,89 @@ public class DatabaseServices
         }
     }
 
+
+    public async Task<string> GetMimeType(string fileName, string userId)
+    {
+        var mimeType = "";
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        var guid = await GetFileGUIDAsync(fileName, userId);
+        
+
+        const string query = "SELECT MimeType FROM Files WHERE GUID = @GUID AND UserId = @UserId";
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@GUID", guid);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+
+        
+        var result = await command.ExecuteScalarAsync();
+
+        if(result != null && result != DBNull.Value)
+            mimeType = result.ToString();
+
+        return mimeType;
+
+    }
+    
+
+
+    public async Task AddFolder(FolderModel response)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string query = @"
+        INSERT INTO Files (FileName, isDirectory, FilePath, GUID, UserId, size, parentId, mimeType)
+        VALUES (@FileName, @isDirectory, @FilePath, @GUID, @UserId, @size, @parentId, @mimeType);";
+
+        using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@UserId", response.UserId);
+        command.Parameters.AddWithValue("@GUID", response._id);
+        command.Parameters.AddWithValue("@FileName", response.Name);
+        command.Parameters.AddWithValue("@isDirectory", response.IsDirectory);
+        command.Parameters.AddWithValue("@FilePath", response.Path);
+        command.Parameters.AddWithValue("@parentId",
+            string.IsNullOrEmpty(response.ParentId) ? DBNull.Value : response.ParentId);
+        command.Parameters.AddWithValue("@size", response.Size);
+        command.Parameters.AddWithValue("@mimeType", response.MimeType);
+
+        await command.ExecuteNonQueryAsync();
+    }
+    
+
+
+    public async Task<bool> IsFileAsync(string guid, string userId)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = "SELECT isDirectory FROM Files WHERE GUID = @GUID AND UserId = @UserId";
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@GUID", guid);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        var result = await command.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            throw new InvalidOperationException("Item not found for provided GUID and UserId.");
+
+        bool isDirectory = Convert.ToBoolean(result);
+        // return true for file, false for folder
+        return !isDirectory;
+    }
+    
+
+
     // Remove file metadata from the database for the given user and filename
-    public async Task DeleteFileMetadata(string fileName, string userId)
+    public async Task DeleteFileMetadata(string fileId, string userId)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = @"DELETE FROM Files WHERE UserId = @UserId AND FileName = @FileName;";
+        string query = @"DELETE FROM Files WHERE UserId = @UserId AND GUID = @GUID;";
 
         using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@FileName", fileName);
+        command.Parameters.AddWithValue("@GUID", fileId);
         command.Parameters.AddWithValue("@UserId", userId);
 
         try
@@ -76,16 +175,45 @@ public class DatabaseServices
             Console.WriteLine("Error: metadata not found ");
         }
     }
+    
+    
+        public async Task<FolderModel> GetFolderById(string folderId)
+    {
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string query = "SELECT Id, FileName, FilePath, GUID, UserId, isDirectory FROM Files  WHERE GUID = @GUID";
+        using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@GUID", folderId);
+
+        using var reader = await command.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            return new FolderModel
+            {
+                _id = reader["GUID"].ToString(),
+                Name = reader["FileName"].ToString(),
+                Path = reader["FilePath"].ToString(),
+                IsDirectory = Convert.ToBoolean(reader["isDirectory"]),
+                UserId = reader["UserId"].ToString()
+            };
+        }
+
+        return null;
+    }
+
+
+
 
     // Retrieve all filenames that belong to a specific user
-    public List<string> GetFilesFromDb(string userId)
+    public List<FileModel> GetFilesFromDb(string userId)
     {
-        var filesList = new List<string>();
+        var filesList = new List<FileModel>();
 
         using var connection = new SqlConnection(_connectionString);
         connection.Open();
 
-        string query = "SELECT FileName FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
+        string query = "SELECT Id, FileName, FilePath, UpdatedAt, GUID, isDirectory, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
 
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -94,22 +222,33 @@ public class DatabaseServices
 
         while (reader.Read())
         {
-            filesList.Add(reader["FileName"].ToString());
+            filesList.Add(new FileModel
+            {
+                _id = reader["GUID"].ToString(),
+                Name = reader["FileName"].ToString(),
+                Path = reader["FilePath"].ToString(),
+                UpdatedAt = Convert.ToDateTime(reader["UpdatedAt"]),
+                Size = Convert.ToInt64(reader["Size"]),
+                IsDirectory = Convert.ToBoolean(reader["isDirectory"])
+            });
         }
 
         return filesList;
     }
 
+
+
+
     // Get the unique identifier (GUID) for a specific file owned by the user
-    public async Task<string> GetFileGUIDAsync(string fileName, string userId)
+    public async Task<string> GetFileGUIDAsync(string fileGuid, string userId)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT GUID FROM Files WHERE UserId = @UserId AND FileName = @FileName";
+        string query = "SELECT GUID FROM Files WHERE UserId = @UserId AND GUID = @GUID";
 
         using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@FileName", fileName);
+        command.Parameters.AddWithValue("@GUID", fileGuid); // match NVARCHAR column type
         command.Parameters.AddWithValue("@UserId", userId);
 
         using var reader = await command.ExecuteReaderAsync();
@@ -125,6 +264,9 @@ public class DatabaseServices
         }
     }
 
+
+
+
     // Register a new user in the database, handling duplicate username or email errors
     public async Task RegisterUser(UserModel user)
     {
@@ -139,19 +281,22 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@PasswordHash", user.Password);
 
         await command.ExecuteNonQueryAsync();
-        
+
     }
 
+
+
+
     // Retrieve a user's information from the database by username
-    public async Task<UserModel> GetUserByUsername(string username)
+    public async Task<UserModel> GetUserByEmail(string email)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Username = @Username";
+        string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Email = @Email";
         using var command = new SqlCommand(query, connection);
 
-        command.Parameters.AddWithValue("@Username", username);
+        command.Parameters.AddWithValue("@Email", email);
 
         using var reader = await command.ExecuteReaderAsync();
 
@@ -167,6 +312,9 @@ public class DatabaseServices
         }
         return null;
     }
+
+
+
 
     // Update user data only for fields that have been changed
     public async Task<HttpReturnResult> UpdateUser(UserModel oldUser, UserModel updateUser, string userId)
@@ -214,6 +362,8 @@ public class DatabaseServices
             return new HttpReturnResult(false, $"Error: {ex.Message}");
         }
     }
+
+
 
     // Remove user and all file metadata from database and delete files from storage
     public async Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs)
@@ -263,6 +413,9 @@ public class DatabaseServices
         return new HttpReturnResult(true, "User's files and account deleted");
     }
 
+
+
+
     // Retrieve user details by their user ID
     public async Task<UserModel> GetUserByUserId(string userId)
     {
@@ -290,20 +443,26 @@ public class DatabaseServices
         return null;
     }
 
+
+
+
     // 
     public async Task UpdateUserLastLogin(LoginModel user)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "Update Users SET LastLogin = @LastLogin WHERE Username = @Username";
+        string query = "Update Users SET LastLogin = @LastLogin WHERE Email = @Email";
         using var command = new SqlCommand(query, connection);
 
         command.Parameters.AddWithValue("@LastLogin", DateTime.UtcNow);
-        command.Parameters.AddWithValue("@Username", user.Username);
+        command.Parameters.AddWithValue("@Email", user.Email);
 
         await command.ExecuteNonQueryAsync();
     }
+
+
+
 
     public async Task<bool> UserExistsByUsername(string username)
     {
@@ -319,6 +478,9 @@ public class DatabaseServices
 
         return count > 0;
     }
+
+
+
 
     public async Task<bool> UserExistsByEmail(string email)
     {
