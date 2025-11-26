@@ -16,7 +16,7 @@
 
 - **Backend**: C# (.NET 8 Minimal APIs)
 - **Database**: SQL Server
-- **Frontend**: 
+- **Frontend**: ReactJS
 - **Storage**: Filesystem-based storage
 - **Containerization**: Docker + Docker Compose
 
@@ -26,6 +26,10 @@
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/)
 - [Docker](https://www.docker.com/)
+- Node.js & npm
+ (for React frontend)
+- React 18+
+ (installed via create-react-app or Vite)
 
 ### Clone the Repository
 
@@ -54,6 +58,15 @@ dotnet restore
 dotnet run
 ```
 This will start the backend api server. 
+
+
+### Run React in third terminal
+
+```bash 
+cd Frontend
+npm install
+npm run dev
+```
 
 ## API Documentation
 

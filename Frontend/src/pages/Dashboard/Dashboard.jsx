@@ -9,9 +9,12 @@ import "./Dashboard.scss";
 import FileManager from "../../FileManager/FileManager";
 import { jwtDecode } from "jwt-decode";
 import { useNavigate } from "react-router-dom";
+import useAuthCheck from "../../hooks/useAuthCheck";
 
 function App() {
     const navigate = useNavigate();
+
+    useAuthCheck()
 
     const fileUploadConfig = {
         url: import.meta.env.VITE_API_BASE_URL + "/upload",
@@ -35,33 +38,13 @@ function App() {
         setIsLoading(false);
     };
 
-    // Check if token or expired token
-    useEffect(() => {
-        const token = localStorage.getItem("token");
-        if (!token) {
-            navigate("/login");
-        }
-        try {
-            const decoded = jwtDecode(token);
-            const expiry = decoded.exp * 1000;
-
-            if (Date.now() > expiry) {
-                localStorage.removeItem("token");
-                navigate("/login");
-                return;
-            }
-        } catch (error) {
-            localStorage.removeItem("token");
-            navigate("/login");
-        }
-    }, []);
+    
 
     useEffect(() => {
         if (isMountRef.current) return;
         isMountRef.current = true;
         getFiles();
     }, []);
-    //
 
     // Create Folder
     const handleCreateFolder = async (name, parentFolder) => {

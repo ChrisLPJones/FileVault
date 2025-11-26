@@ -23,6 +23,7 @@ const PreviewFileAction = ({ filePreviewPath, filePreviewComponent }) => {
   const fileIcons = useFileIcons(73);
   const extension = getFileExtension(selectedFiles[0].name)?.toLowerCase();
   const t = useTranslation();
+  const endpoint = import.meta.env.VITE_API_URL
 
   const token = localStorage.getItem("token"); // get your auth token
 
@@ -47,8 +48,9 @@ const PreviewFileAction = ({ filePreviewPath, filePreviewComponent }) => {
     const fetchFile = async () => {
       try {
         setIsLoading(true);
+        
         const response = await fetch(
-          `http://127.0.0.1:3000/download/${encodeURIComponent(selectedFiles[0]._id)}`,
+          `${endpoint}/download/${encodeURIComponent(selectedFiles[0]._id)}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -78,7 +80,7 @@ const PreviewFileAction = ({ filePreviewPath, filePreviewComponent }) => {
   const handleDownload = async () => {
     try {
       const response = await fetch(
-        `http://127.0.0.1:3000/download/${encodeURIComponent(selectedFiles[0].name)}`,
+        `${endpoint}/download/${encodeURIComponent(selectedFiles[0].name)}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
