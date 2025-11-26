@@ -8,8 +8,14 @@ namespace Backend.Services;
 
 public class DatabaseServices
 {
+
+
+
     // Store database connection string from configuration
     private readonly string _connectionString;
+
+
+
 
     // Store root directory path for file storage from configuration
     private readonly string _storageRoot;
@@ -19,6 +25,9 @@ public class DatabaseServices
         _storageRoot = config.GetValue<string>("StorageRoot");
     }
 
+
+
+
     // Check if the database connection can be opened successfully
     public async Task CheckConnection()
     {
@@ -27,6 +36,9 @@ public class DatabaseServices
             await connection.OpenAsync();
         }
     }
+
+
+
 
     // Add a new file record to the database with filename, guid, and user ID
     public async Task AddFile(
@@ -65,6 +77,7 @@ public class DatabaseServices
             Console.WriteLine($"Error: {ex}");
         }
     }
+    
 
 
     public async Task AddFolder(FolderModel response)
@@ -89,6 +102,7 @@ public class DatabaseServices
 
         await command.ExecuteNonQueryAsync();
     }
+    
 
 
     public async Task<bool> IsFileAsync(string guid, string userId)
@@ -109,7 +123,7 @@ public class DatabaseServices
         // return true for file, false for folder
         return !isDirectory;
     }
-
+    
 
 
     // Remove file metadata from the database for the given user and filename
@@ -134,9 +148,9 @@ public class DatabaseServices
             Console.WriteLine("Error: metadata not found ");
         }
     }
-
-
-    public async Task<FolderModel> GetFolderById(string folderId)
+    
+    
+        public async Task<FolderModel> GetFolderById(string folderId)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -160,6 +174,9 @@ public class DatabaseServices
 
         return null;
     }
+
+
+
 
     // Retrieve all filenames that belong to a specific user
     public List<FileModel> GetFilesFromDb(string userId)
@@ -192,6 +209,9 @@ public class DatabaseServices
         return filesList;
     }
 
+
+
+
     // Get the unique identifier (GUID) for a specific file owned by the user
     public async Task<string> GetFileGUIDAsync(string fileGuid, string userId)
     {
@@ -217,6 +237,9 @@ public class DatabaseServices
         }
     }
 
+
+
+
     // Register a new user in the database, handling duplicate username or email errors
     public async Task RegisterUser(UserModel user)
     {
@@ -233,6 +256,9 @@ public class DatabaseServices
         await command.ExecuteNonQueryAsync();
 
     }
+
+
+
 
     // Retrieve a user's information from the database by username
     public async Task<UserModel> GetUserByEmail(string email)
@@ -259,6 +285,9 @@ public class DatabaseServices
         }
         return null;
     }
+
+
+
 
     // Update user data only for fields that have been changed
     public async Task<HttpReturnResult> UpdateUser(UserModel oldUser, UserModel updateUser, string userId)
@@ -306,6 +335,8 @@ public class DatabaseServices
             return new HttpReturnResult(false, $"Error: {ex.Message}");
         }
     }
+
+
 
     // Remove user and all file metadata from database and delete files from storage
     public async Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs)
@@ -355,6 +386,9 @@ public class DatabaseServices
         return new HttpReturnResult(true, "User's files and account deleted");
     }
 
+
+
+
     // Retrieve user details by their user ID
     public async Task<UserModel> GetUserByUserId(string userId)
     {
@@ -382,6 +416,9 @@ public class DatabaseServices
         return null;
     }
 
+
+
+
     // 
     public async Task UpdateUserLastLogin(LoginModel user)
     {
@@ -397,6 +434,9 @@ public class DatabaseServices
         await command.ExecuteNonQueryAsync();
     }
 
+
+
+
     public async Task<bool> UserExistsByUsername(string username)
     {
         using SqlConnection connection = new(_connectionString);
@@ -411,6 +451,9 @@ public class DatabaseServices
 
         return count > 0;
     }
+
+
+
 
     public async Task<bool> UserExistsByEmail(string email)
     {
