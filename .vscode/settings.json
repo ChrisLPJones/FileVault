@@ -15,7 +15,7 @@
             "name": "FileVault",
             "database": "SecureVaultDb",
             "username": "sa",
-            "password": "YourStrong!Passw0rd"
+            "askForPassword": true
         }
     ],
     "cSpell.words": [

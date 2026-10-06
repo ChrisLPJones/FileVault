@@ -485,3 +485,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local backend config with secrets (template: Backend/appsettings.Development.example.json)
+Backend/appsettings.Development.json

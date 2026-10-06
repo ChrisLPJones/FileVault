@@ -15,6 +15,18 @@ namespace Backend
             var builder = WebApplication.CreateBuilder(args);
             var jwtConfig = builder.Configuration.GetSection("Jwt");
 
+            // Secrets are not stored in appsettings.json; fail fast with a clear message if they're missing
+            var jwtKey = jwtConfig["Key"];
+            if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32)
+                throw new InvalidOperationException(
+                    "Jwt:Key must be set to at least 32 bytes. Copy appsettings.Development.example.json " +
+                    "to appsettings.Development.json, or set the Jwt__Key environment variable.");
+
+            if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DefaultConnection")))
+                throw new InvalidOperationException(
+                    "ConnectionStrings:DefaultConnection is not set. Copy appsettings.Development.example.json " +
+                    "to appsettings.Development.json, or set the ConnectionStrings__DefaultConnection environment variable.");
+
             // Inject Services
             builder.Services.AddCors(options => {
                 options.AddPolicy("AllowFrontend", policy =>
@@ -33,7 +45,7 @@ namespace Backend
                 {
                     option.TokenValidationParameters = new TokenValidationParameters
                     {
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"])),
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
                         ValidIssuer = jwtConfig["Issuer"],
                         ValidAudience = jwtConfig["Audience"],
                         ValidateIssuerSigningKey = true,

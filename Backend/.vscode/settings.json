@@ -15,7 +15,7 @@
             "driver": "MSSQL",
             "name": "SecureVaultDb",
             "username": "sa",
-            "password": "YourStrong!Passw0rd"
+            "askForPassword": true
         }
     ]
 }

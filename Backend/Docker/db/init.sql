@@ -43,26 +43,6 @@ END
 GO
 
 ------------------------------------------------------------
--- DEFAULT ADMIN USER
-------------------------------------------------------------
-IF NOT EXISTS (SELECT 1 FROM Users WHERE Username = 'admin')
-BEGIN
-    INSERT INTO Users (Username, Email, PasswordHash, Role)
-    VALUES (
-        'admin',
-        'admin@example.com',
-        '$2a$11$13snxdxtbMLMq.ih1sK9oOuV245raTKVflvA0/npenUsmXkGWVqvi',
-        'admin'
-    );
-    PRINT 'Default admin user created.';
-END
-ELSE
-BEGIN
-    PRINT 'Default admin user already exists.';
-END
-GO
-
-------------------------------------------------------------
 -- FILES TABLE
 ------------------------------------------------------------
 IF NOT EXISTS (SELECT *

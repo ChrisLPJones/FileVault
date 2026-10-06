@@ -38,6 +38,26 @@ git clone https://github.com/ChrisLPJones/FileVault.git
 cd FileVault
 ```
 
+### Configure secrets
+
+Secrets are not committed. Create these two gitignored files from the templates:
+
+```bash
+# SQL Server SA password used by Docker
+cp Backend/Docker/.env.example Backend/Docker/.env
+
+# API connection string and JWT signing key
+cp Backend/appsettings.Development.example.json Backend/appsettings.Development.json
+```
+
+Then edit them:
+
+- Set `MSSQL_SA_PASSWORD` in `Backend/Docker/.env` to a strong password.
+- In `Backend/appsettings.Development.json`, use that same password in the connection string.
+- Set `Jwt:Key` to a random value of at least 32 bytes (e.g. `openssl rand -base64 48`).
+
+Outside Development, supply the same settings as environment variables (`ConnectionStrings__DefaultConnection`, `Jwt__Key`). The API refuses to start if either is missing.
+
 ### Run Docker in first terminal. 'make sure docker desktop is running'
 
 ```bash
@@ -46,7 +66,7 @@ cd Docker
 docker compose up --build
 ```
 
-This will start the backend SQL Server container with pre-configured settings.
+This will start the backend SQL Server container using the password from `Backend/Docker/.env`.
 
 
 

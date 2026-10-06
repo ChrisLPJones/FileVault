@@ -3,7 +3,7 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sqlserver
     environment:
-      SA_PASSWORD: "YourStrong!Passw0rd"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in Backend/Docker/.env (see .env.example)}"
       ACCEPT_EULA: "Y"
     ports:
       - "1433:1433"
@@ -13,6 +13,8 @@ services:
   sqlinit:
     image: mcr.microsoft.com/mssql-tools
     container_name: sqlinit
+    environment:
+      SQLCMDPASSWORD: "${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in Backend/Docker/.env (see .env.example)}"
     depends_on:
       - sqlserver
     volumes:
@@ -21,7 +23,7 @@ services:
       bash -c "
         echo 'Waiting for SQL Server to be available...' &&
         sleep 20 &&
-        /opt/mssql-tools/bin/sqlcmd -S sqlserver -U SA -P 'YourStrong!Passw0rd' -i /init.sql
+        /opt/mssql-tools/bin/sqlcmd -S sqlserver -U SA -i /init.sql
       "
 
 volumes:
