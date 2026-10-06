@@ -16,12 +16,14 @@ public class FileServices(IConfiguration config)
         var filePath = $"/{fileName}";
         if (!string.IsNullOrEmpty(parentId))
         {
-            var folder = await db.GetFolderById(parentId);
-            filePath = $"{folder.Path}/{fileName}"; 
+            var folder = await db.GetFolderById(parentId, userId);
+            if (folder == null)
+                return new HttpReturnResult(false, "Parent folder not found");
+
+            filePath = $"{folder.Path}/{fileName}";
         }
 
         var fullFilePath = Path.Combine(_storageRoot, guid); // Path to save file
-        System.Console.WriteLine(file);
 
         try
         {
@@ -40,11 +42,12 @@ public class FileServices(IConfiguration config)
         }
         catch (Exception ex)
         {
-            // If save failed, delete partial file
+            // If the save or the metadata insert failed, delete the stored file
             if (File.Exists(fullFilePath))
                 File.Delete(fullFilePath);
 
-            return new HttpReturnResult(false, $"Error: {ex.Message}"); // Failure
+            Console.WriteLine($"Upload error: {ex}");
+            return new HttpReturnResult(false, "Error saving file"); // Failure
         }
     }
 
@@ -59,7 +62,7 @@ public class FileServices(IConfiguration config)
         if (!string.IsNullOrEmpty(request.ParentId))
         {
             // Get parent folder from DB
-            var parentFolder = await db.GetFolderById(request.ParentId);
+            var parentFolder = await db.GetFolderById(request.ParentId, userId);
             if (parentFolder == null)
                 return new HttpReturnResult(false, "Parent folder not found");
 
@@ -77,7 +80,8 @@ public class FileServices(IConfiguration config)
         }
         catch (Exception ex)
         {
-            return new HttpReturnResult(false, $"Error: {ex.Message}");
+            Console.WriteLine($"Create folder error: {ex}");
+            return new HttpReturnResult(false, "Error creating folder");
         }
     }
 
@@ -101,29 +105,30 @@ public class FileServices(IConfiguration config)
         return new HttpReturnResult(true, null, sanitizedFilename, fileBytes); // Return file content
     }
 
-    // Deletes a file and its metadata for the given user
+    // Deletes a file or folder (including everything inside it) for the given user
     public async Task<HttpReturnResult> DeleteFile(string fileId, DatabaseServices db, string userId)
     {
-        var sanitizedFilename = Path.GetFileName(fileId); // Sanitize input
-
-        string fileGuid = await db.GetFileGUIDAsync(sanitizedFilename, userId);
-        if (fileGuid == null)
+        if (!Guid.TryParse(fileId, out _))
             return new HttpReturnResult(false, "Error: File not found.");
 
-        var fullFilePath = Path.Combine(_storageRoot, fileGuid);
-
-        if (!File.Exists(fullFilePath))
-            return new HttpReturnResult(false, "Error: File doesn't exist.");
+        if (await db.IsFileAsync(fileId, userId) == null)
+            return new HttpReturnResult(false, "Error: File not found.");
 
         try
         {
-            // Remove metadata and delete file from storage
+            // Collect stored files first; the delete trigger removes child rows
+            var storedFiles = await db.GetFileGuidsInTreeAsync(fileId, userId);
+
             await db.DeleteFileMetadata(fileId, userId);
-            File.Delete(fullFilePath);
+
+            // Metadata is gone, so remove the stored files (missing ones are ignored)
+            await DeleteAllFilesFromUser(storedFiles);
+
             return new HttpReturnResult(true, $"File deleted: {fileId}");
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Console.WriteLine($"Delete error: {ex}");
             return new HttpReturnResult(false, "Error: File delete failed.");
         }
     }

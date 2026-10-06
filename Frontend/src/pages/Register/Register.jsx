@@ -1,5 +1,5 @@
 import { useState } from "react";
-import "./register.css";
+import "./Register.css";
 import { register } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
 import { useNavigate } from "react-router-dom";

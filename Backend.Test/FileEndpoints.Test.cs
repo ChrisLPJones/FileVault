@@ -1,8 +1,11 @@
-﻿using Backend.Models;
+using Backend.Models;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Xunit;
@@ -14,39 +17,87 @@ namespace Backend.Test
     [TestCaseOrderer("Backend.Test.PriorityOrderer", "Backend.Test")]
     public class FileEndpointsTest : IClassFixture<WebApplicationFactory<Program>>
     {
+        // Unique per test run so a failed earlier run doesn't block registration
+        private static readonly string RunId = Guid.NewGuid().ToString("N")[..8];
+        private static readonly string TestUsername = $"testuser_{RunId}";
+        private static readonly string TestEmail = $"test_{RunId}@address.com";
+        private const string TestPassword = "testpassword";
+
+        private readonly WebApplicationFactory<Program> _factory;
         private readonly HttpClient _client;
         private static string? _jwt;
+        private static string? _fileId;
 
         public FileEndpointsTest(WebApplicationFactory<Program> factory)
         {
+            _factory = factory;
             _client = factory.CreateClient();
         }
 
         private async Task AuthenticateAsync()
         {
-            if (!string.IsNullOrEmpty(_jwt))
-            {
-                // Apply JWT header to current client
-                _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _jwt);
-                return;
-            }
+            if (string.IsNullOrEmpty(_jwt))
+                _jwt = await LoginAsync(_client, TestEmail, TestPassword);
 
-            // Login to get JWT
-            LoginModel loginUser = new()
-            {
-                Email = "testemail@address.com",
-                Password = "testpassword"
-            };
-            string jsonLogin = JsonSerializer.Serialize(loginUser);
-            StringContent loginContent = new(jsonLogin, Encoding.UTF8, "application/json");
+            _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _jwt);
+        }
 
-            var response = await _client.PostAsync("/user/login", loginContent);
+        private static async Task RegisterAsync(HttpClient client, string username, string email, string password)
+        {
+            UserModel user = new() { Username = username, Email = email, Password = password };
+            StringContent content = new(JsonSerializer.Serialize(user), Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync("/user/register", content);
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        private static async Task<string> LoginAsync(HttpClient client, string email, string password)
+        {
+            LoginModel loginUser = new() { Email = email, Password = password };
+            StringContent loginContent = new(JsonSerializer.Serialize(loginUser), Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync("/user/login", loginContent);
             var content = await response.Content.ReadAsStringAsync();
 
             using var jsonDoc = JsonDocument.Parse(content);
-            _jwt = jsonDoc.RootElement.GetProperty("success").GetString();
+            return jsonDoc.RootElement.GetProperty("success").GetString()!;
+        }
 
-            _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _jwt);
+        private static async Task<HttpResponseMessage> UploadAsync(HttpClient client, string fileName, string text, string? parentId = null)
+        {
+            var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes(text));
+            fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("text/plain");
+
+            var multipartContent = new MultipartFormDataContent();
+            if (parentId != null)
+                multipartContent.Add(new StringContent(parentId), "parentId");
+            multipartContent.Add(fileContent, "file", fileName);
+
+            return await client.PostAsync("/upload", multipartContent);
+        }
+
+        private static async Task<string> CreateFolderAsync(HttpClient client, string name, string? parentId = null)
+        {
+            var response = await client.PostAsJsonAsync("/folder", new { name, parentId });
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            using var jsonDoc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return jsonDoc.RootElement.GetProperty("_id").GetString()!;
+        }
+
+        private static async Task<JsonElement[]> ListFilesAsync(HttpClient client)
+        {
+            var response = await client.GetAsync("/files");
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            using var jsonDoc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return jsonDoc.RootElement.EnumerateArray().Select(e => e.Clone()).ToArray();
+        }
+
+        private string StoredFilePath(string guid)
+        {
+            var storageRoot = _factory.Services.GetRequiredService<IConfiguration>().GetValue<string>("StorageRoot")!;
+            return Path.Combine(storageRoot, guid);
         }
 
         [Fact, TestPriority(1)]
@@ -54,9 +105,9 @@ namespace Backend.Test
         {
             UserModel registerUser = new()
             {
-                Username = "testuser",
-                Email = "testemail@address.com",
-                Password = "testpassword"
+                Username = TestUsername,
+                Email = TestEmail,
+                Password = TestPassword
             };
             string json = JsonSerializer.Serialize(registerUser);
             StringContent registerContent = new(json, Encoding.UTF8, "application/json");
@@ -65,7 +116,7 @@ namespace Backend.Test
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be("{\"success\":\"User testuser registered\"}");
+            content.Should().Be($"{{\"success\":\"User {TestUsername} registered\"}}");
         }
 
         [Fact, TestPriority(2)]
@@ -85,7 +136,7 @@ namespace Backend.Test
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be("{\"username\":\"testuser\",\"email\":\"testemail@address.com\"}");
+            content.Should().Be($"{{\"username\":\"{TestUsername}\",\"email\":\"{TestEmail}\"}}");
         }
 
         [Fact, TestPriority(4)]
@@ -95,8 +146,8 @@ namespace Backend.Test
 
             UserModel updateUser = new()
             {
-                Username = "user",
-                Email = "test@example.com",
+                Username = $"user_{RunId}",
+                Email = $"updated_{RunId}@example.com",
                 Password = "asdasd"
             };
             string updateUserJson = JsonSerializer.Serialize(updateUser);
@@ -114,13 +165,7 @@ namespace Backend.Test
         {
             await AuthenticateAsync();
 
-            var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes("Dummy file content"));
-            fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("text/plain");
-
-            var multipartContent = new MultipartFormDataContent();
-            multipartContent.Add(fileContent, "file", "test.txt");
-
-            var response = await _client.PostAsync("/upload", multipartContent);
+            var response = await UploadAsync(_client, "test.txt", "Dummy file content");
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -132,11 +177,12 @@ namespace Backend.Test
         {
             await AuthenticateAsync();
 
-            var response = await _client.GetAsync("/files");
-            var content = await response.Content.ReadAsStringAsync();
+            var files = await ListFilesAsync(_client);
+            var uploaded = files.Single(f => f.GetProperty("path").GetString() == "/test.txt");
 
-            response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Contain("test.txt");
+            uploaded.GetProperty("name").GetString().Should().Be("test.txt");
+            _fileId = uploaded.GetProperty("_id").GetString();
+            _fileId.Should().NotBeNullOrEmpty();
         }
 
         [Fact, TestPriority(7)]
@@ -144,7 +190,7 @@ namespace Backend.Test
         {
             await AuthenticateAsync();
 
-            var response = await _client.GetAsync("/download/test.txt");
+            var response = await _client.GetAsync($"/download/{_fileId}");
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -156,14 +202,95 @@ namespace Backend.Test
         {
             await AuthenticateAsync();
 
-            var response = await _client.DeleteAsync("/delete/test.txt");
+            var response = await _client.DeleteAsync($"/delete/{_fileId}");
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be("{\"success\":\"File deleted: test.txt\"}");
+            content.Should().Be($"{{\"success\":\"File deleted: {_fileId}\"}}");
+            File.Exists(StoredFilePath(_fileId!)).Should().BeFalse();
         }
 
         [Fact, TestPriority(9)]
+        public async Task UploadFile_WithoutFile_ReturnsBadRequest()
+        {
+            await AuthenticateAsync();
+
+            var multipartContent = new MultipartFormDataContent
+            {
+                { new StringContent(""), "parentId" }
+            };
+
+            var response = await _client.PostAsync("/upload", multipartContent);
+            var content = await response.Content.ReadAsStringAsync();
+
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            content.Should().Be("{\"error\":\"No file uploaded\"}");
+        }
+
+        [Fact, TestPriority(10)]
+        public async Task DeleteFolderAndChild_RemovesEverythingIncludingStoredFiles()
+        {
+            await AuthenticateAsync();
+
+            var folderId = await CreateFolderAsync(_client, "parent");
+            var subFolderId = await CreateFolderAsync(_client, "child", folderId);
+            (await UploadAsync(_client, "inner.txt", "inner", folderId)).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await UploadAsync(_client, "nested.txt", "nested", subFolderId)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var files = await ListFilesAsync(_client);
+            var innerId = files.Single(f => f.GetProperty("path").GetString() == "/parent/inner.txt").GetProperty("_id").GetString()!;
+            var nestedId = files.Single(f => f.GetProperty("path").GetString() == "/parent/child/nested.txt").GetProperty("_id").GetString()!;
+            File.Exists(StoredFilePath(innerId)).Should().BeTrue();
+            File.Exists(StoredFilePath(nestedId)).Should().BeTrue();
+
+            // Select the folder and a file inside it, like a multi-select in the UI
+            var request = new HttpRequestMessage(HttpMethod.Delete, "/delete")
+            {
+                Content = JsonContent.Create(new { ids = new[] { folderId, innerId } })
+            };
+            var response = await _client.SendAsync(request);
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            File.Exists(StoredFilePath(innerId)).Should().BeFalse();
+            File.Exists(StoredFilePath(nestedId)).Should().BeFalse();
+
+            var remaining = await ListFilesAsync(_client);
+            remaining.Select(f => f.GetProperty("_id").GetString())
+                .Should().NotContain(new[] { folderId, subFolderId, innerId, nestedId });
+        }
+
+        [Fact, TestPriority(11)]
+        public async Task UploadAndCreateFolder_IntoAnotherUsersFolder_AreRejected()
+        {
+            await AuthenticateAsync();
+
+            // Second user owns a folder
+            var otherClient = _factory.CreateClient();
+            var otherEmail = $"other_{RunId}@address.com";
+            await RegisterAsync(otherClient, $"other_{RunId}", otherEmail, TestPassword);
+            var otherJwt = await LoginAsync(otherClient, otherEmail, TestPassword);
+            otherClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", otherJwt);
+
+            try
+            {
+                var otherFolderId = await CreateFolderAsync(otherClient, "private");
+
+                var uploadResponse = await UploadAsync(_client, "intruder.txt", "x", otherFolderId);
+                uploadResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+                var folderResponse = await _client.PostAsJsonAsync("/folder", new { name = "intruder", parentId = otherFolderId });
+                folderResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+                var otherFiles = await ListFilesAsync(otherClient);
+                otherFiles.Should().ContainSingle();
+            }
+            finally
+            {
+                await otherClient.DeleteAsync("/user");
+            }
+        }
+
+        [Fact, TestPriority(12)]
         public async Task DeleteUser_ShouldSucceed()
         {
             await AuthenticateAsync();

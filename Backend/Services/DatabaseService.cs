@@ -66,18 +66,12 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@guid", guid);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@Size", size);
-        command.Parameters.AddWithValue("@parentId", parentId);
-        command.Parameters.AddWithValue("@MimeType", mimeType);
+        command.Parameters.AddWithValue("@parentId",
+            string.IsNullOrEmpty(parentId) ? DBNull.Value : parentId);
+        command.Parameters.AddWithValue("@MimeType", (object)mimeType ?? DBNull.Value);
 
-        try
-        {
-            await command.ExecuteNonQueryAsync();
-            Console.WriteLine("File metadata added to db");
-        }
-        catch (SqlException ex)
-        {
-            Console.WriteLine($"Error: {ex}");
-        }
+        // Let failures propagate so the caller can clean up the stored file
+        await command.ExecuteNonQueryAsync();
     }
 
 
@@ -132,7 +126,8 @@ public class DatabaseServices
     
 
 
-    public async Task<bool> IsFileAsync(string guid, string userId)
+    // Returns true for a file, false for a folder, or null if the item doesn't exist for this user
+    public async Task<bool?> IsFileAsync(string guid, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -144,11 +139,41 @@ public class DatabaseServices
 
         var result = await command.ExecuteScalarAsync();
         if (result == null || result == DBNull.Value)
-            throw new InvalidOperationException("Item not found for provided GUID and UserId.");
+            return null;
 
         bool isDirectory = Convert.ToBoolean(result);
-        // return true for file, false for folder
         return !isDirectory;
+    }
+
+
+
+    // Get the storage GUIDs of every file (not folder) at or below the given item
+    public async Task<List<string>> GetFileGuidsInTreeAsync(string guid, string userId)
+    {
+        var guids = new List<string>();
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = @"
+            WITH Tree AS (
+                SELECT GUID, isDirectory FROM Files WHERE GUID = @GUID AND UserId = @UserId
+                UNION ALL
+                SELECT f.GUID, f.isDirectory FROM Files f
+                INNER JOIN Tree t ON f.ParentId = t.GUID
+                WHERE f.UserId = @UserId
+            )
+            SELECT GUID FROM Tree WHERE isDirectory = 0;";
+
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@GUID", guid);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            guids.Add(reader.GetString(0));
+
+        return guids;
     }
     
 
@@ -165,26 +190,20 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@GUID", fileId);
         command.Parameters.AddWithValue("@UserId", userId);
 
-        try
-        {
-            await command.ExecuteNonQueryAsync();
-            Console.WriteLine("File metadata deleted from db");
-        }
-        catch (SqlException)
-        {
-            Console.WriteLine("Error: metadata not found ");
-        }
+        await command.ExecuteNonQueryAsync();
     }
-    
-    
-        public async Task<FolderModel> GetFolderById(string folderId)
+
+
+    // Get a folder owned by the given user, or null if it doesn't exist or isn't a folder
+    public async Task<FolderModel> GetFolderById(string folderId, string userId)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, FileName, FilePath, GUID, UserId, isDirectory FROM Files  WHERE GUID = @GUID";
+        string query = "SELECT Id, FileName, FilePath, GUID, UserId, isDirectory FROM Files WHERE GUID = @GUID AND UserId = @UserId AND isDirectory = 1";
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@GUID", folderId);
+        command.Parameters.AddWithValue("@UserId", userId);
 
         using var reader = await command.ExecuteReaderAsync();
         if (await reader.ReadAsync())

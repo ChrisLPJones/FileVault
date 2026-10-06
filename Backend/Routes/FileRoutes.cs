@@ -33,11 +33,11 @@ namespace Backend.Routes
                     var form = await request.ReadFormAsync();
                     var parentId = form["parentId"].FirstOrDefault() ?? "";
                     var file = form.Files.Count > 0 ? form.Files[0] : null;
-                    var mimeType = file.ContentType;
 
                     if (file == null || file.Length == 0)
                         return Results.BadRequest(new { error = "No file uploaded" });
-                        
+
+                    var mimeType = file.ContentType;
 
                     var result = await fs.UploadFile(file, db, userId, parentId, mimeType);
 
@@ -47,7 +47,8 @@ namespace Backend.Routes
                 }
                 catch (Exception ex)
                 {
-                    return Results.BadRequest(new { error = $"Upload failed: {ex.Message}" });
+                    Console.WriteLine($"Upload error: {ex}");
+                    return Results.BadRequest(new { error = "Upload failed" });
                 }
             }).RequireAuthorization();
 
@@ -77,7 +78,8 @@ namespace Backend.Routes
                 }
                 catch (Exception ex)
                 {
-                    return Results.BadRequest(new { error = $"{ex.Message}" });
+                    Console.WriteLine($"Create folder error: {ex}");
+                    return Results.BadRequest(new { error = "Error creating folder" });
                 }
             }).RequireAuthorization();
 
@@ -150,32 +152,39 @@ namespace Backend.Routes
 
                 List<string> ids = new();
 
-                if (request.ids.ValueKind == JsonValueKind.String)
+                if (request?.ids.ValueKind == JsonValueKind.String)
                 {
                     ids.Add(request.ids.GetString());
                 }
-                else if (request.ids.ValueKind == JsonValueKind.Array)
+                else if (request?.ids.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var element in request.ids.EnumerateArray())
                     {
+                        if (element.ValueKind != JsonValueKind.String)
+                            return Results.BadRequest(new { error = "Invalid ids format" });
+
                         ids.Add(element.GetString());
                     }
                 }
                 else
                 {
-                    return Results.BadRequest("Invalid ids format");
+                    return Results.BadRequest(new { error = "Invalid ids format" });
                 }
-                foreach (var fileId in ids)
+
+                var failed = new List<string>();
+                foreach (var fileId in ids.Distinct())
                 {
-                    if(await db.IsFileAsync(fileId, userId))
-                    {
-                        var result = await fs.DeleteFile(fileId, db, userId);
-                    }
-                    else
-                    {
-                        await db.DeleteFileMetadata(fileId, userId);
-                    }
+                    // Skip items already removed, e.g. a child of a folder deleted earlier in this request
+                    if (await db.IsFileAsync(fileId, userId) == null)
+                        continue;
+
+                    var result = await fs.DeleteFile(fileId, db, userId);
+                    if (!result.Success)
+                        failed.Add(fileId);
                 }
+
+                if (failed.Count > 0)
+                    return Results.Json(new { error = "Some items could not be deleted", failed }, statusCode: 500);
 
                 return Results.Ok(new { success = "Deleted Successfully" });
             }).RequireAuthorization();
