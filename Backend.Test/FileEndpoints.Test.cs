@@ -290,7 +290,157 @@ namespace Backend.Test
             }
         }
 
+        private static string IdAt(JsonElement[] files, string path) =>
+            files.Single(f => f.GetProperty("path").GetString() == path).GetProperty("_id").GetString()!;
+
+        private static string[] Paths(JsonElement[] files) =>
+            files.Select(f => f.GetProperty("path").GetString()!).ToArray();
+
         [Fact, TestPriority(12)]
+        public async Task CreateFolder_DuplicateOrInvalidName_IsRejected()
+        {
+            await AuthenticateAsync();
+
+            await CreateFolderAsync(_client, "dupe");
+
+            var duplicate = await _client.PostAsJsonAsync("/folder", new { name = "DUPE" });
+            duplicate.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+            var invalid = await _client.PostAsJsonAsync("/folder", new { name = "a/b" });
+            invalid.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        [Fact, TestPriority(13)]
+        public async Task RenameFolder_UpdatesChildPaths_AndRejectsConflicts()
+        {
+            await AuthenticateAsync();
+
+            var folderId = await CreateFolderAsync(_client, "docs");
+            (await UploadAsync(_client, "a.txt", "a", folderId)).StatusCode.Should().Be(HttpStatusCode.OK);
+            await CreateFolderAsync(_client, "taken");
+
+            var rename = await _client.PatchAsJsonAsync("/rename", new { id = folderId, newName = "papers" });
+            rename.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var paths = Paths(await ListFilesAsync(_client));
+            paths.Should().Contain(new[] { "/papers", "/papers/a.txt" });
+            paths.Should().NotContain(new[] { "/docs", "/docs/a.txt" });
+
+            var conflict = await _client.PatchAsJsonAsync("/rename", new { id = folderId, newName = "taken" });
+            conflict.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+            var invalid = await _client.PatchAsJsonAsync("/rename", new { id = folderId, newName = "bad/name" });
+            invalid.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+            var missing = await _client.PatchAsJsonAsync("/rename", new { id = Guid.NewGuid().ToString(), newName = "x" });
+            missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        [Fact, TestPriority(14)]
+        public async Task MoveFolder_UpdatesTree_AndRejectsMovingIntoItself()
+        {
+            await AuthenticateAsync();
+
+            var srcId = await CreateFolderAsync(_client, "src");
+            var innerId = await CreateFolderAsync(_client, "inner", srcId);
+            (await UploadAsync(_client, "deep.txt", "deep", innerId)).StatusCode.Should().Be(HttpStatusCode.OK);
+            var destId = await CreateFolderAsync(_client, "dest");
+
+            var move = await _client.PutAsJsonAsync("/move", new { sourceIds = new[] { srcId }, destinationId = destId });
+            move.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var paths = Paths(await ListFilesAsync(_client));
+            paths.Should().Contain(new[] { "/dest/src", "/dest/src/inner", "/dest/src/inner/deep.txt" });
+            paths.Should().NotContain("/src");
+
+            var intoChild = await _client.PutAsJsonAsync("/move", new { sourceIds = new[] { srcId }, destinationId = innerId });
+            intoChild.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+            // Back to the root (no destinationId)
+            var toRoot = await _client.PutAsJsonAsync("/move", new { sourceIds = new[] { srcId } });
+            toRoot.StatusCode.Should().Be(HttpStatusCode.OK);
+            Paths(await ListFilesAsync(_client)).Should().Contain("/src/inner/deep.txt");
+
+            // A root item with the same name blocks the move
+            var otherSrc = await CreateFolderAsync(_client, "src", destId);
+            var conflict = await _client.PutAsJsonAsync("/move", new { sourceIds = new[] { otherSrc } });
+            conflict.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        }
+
+        [Fact, TestPriority(15)]
+        public async Task CopyFolder_DuplicatesTreeAndStoredFiles()
+        {
+            await AuthenticateAsync();
+
+            var folderId = await CreateFolderAsync(_client, "album");
+            (await UploadAsync(_client, "pic.txt", "picture", folderId)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            // Copy into the same place -> gets a unique name
+            var copy = await _client.PostAsJsonAsync("/copy", new { sourceIds = new[] { folderId } });
+            copy.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var files = await ListFilesAsync(_client);
+            var originalId = IdAt(files, "/album/pic.txt");
+            var copyId = IdAt(files, "/album (1)/pic.txt");
+            copyId.Should().NotBe(originalId);
+            File.ReadAllText(StoredFilePath(copyId)).Should().Be("picture");
+
+            // Deleting the copy leaves the original's stored file alone
+            (await _client.DeleteAsync($"/delete/{IdAt(files, "/album (1)")}")).StatusCode.Should().Be(HttpStatusCode.OK);
+            File.Exists(StoredFilePath(copyId)).Should().BeFalse();
+            File.Exists(StoredFilePath(originalId)).Should().BeTrue();
+
+            var intoItself = await _client.PostAsJsonAsync("/copy", new { sourceIds = new[] { folderId }, destinationId = folderId });
+            intoItself.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        [Fact, TestPriority(16)]
+        public async Task DownloadFile_UsesRealName_AndSupportsRanges()
+        {
+            await AuthenticateAsync();
+
+            (await UploadAsync(_client, "ranged.txt", "Hello range")).StatusCode.Should().Be(HttpStatusCode.OK);
+            var fileId = IdAt(await ListFilesAsync(_client), "/ranged.txt");
+
+            var full = await _client.GetAsync($"/download/{fileId}");
+            full.StatusCode.Should().Be(HttpStatusCode.OK);
+            full.Content.Headers.ContentDisposition!.FileName.Should().Be("ranged.txt");
+            full.Content.Headers.ContentType!.MediaType.Should().Be("text/plain");
+
+            var request = new HttpRequestMessage(HttpMethod.Get, $"/download/{fileId}");
+            request.Headers.Range = new RangeHeaderValue(0, 4);
+            var partial = await _client.SendAsync(request);
+            partial.StatusCode.Should().Be(HttpStatusCode.PartialContent);
+            (await partial.Content.ReadAsStringAsync()).Should().Be("Hello");
+
+            var missing = await _client.GetAsync($"/download/{Guid.NewGuid()}");
+            missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        [Fact, TestPriority(17)]
+        public async Task DownloadZip_ContainsFilesAndFolders()
+        {
+            await AuthenticateAsync();
+
+            var folderId = await CreateFolderAsync(_client, "zipme");
+            var subId = await CreateFolderAsync(_client, "empty", folderId);
+            (await UploadAsync(_client, "one.txt", "one", folderId)).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await UploadAsync(_client, "loose.txt", "loose")).StatusCode.Should().Be(HttpStatusCode.OK);
+            var looseId = IdAt(await ListFilesAsync(_client), "/loose.txt");
+
+            var response = await _client.PostAsJsonAsync("/download/zip", new { ids = new[] { folderId, looseId } });
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            response.Content.Headers.ContentType!.MediaType.Should().Be("application/zip");
+
+            using var zip = new System.IO.Compression.ZipArchive(await response.Content.ReadAsStreamAsync());
+            zip.Entries.Select(e => e.FullName).Should().BeEquivalentTo(
+                new[] { "zipme/", "zipme/empty/", "zipme/one.txt", "loose.txt" });
+
+            using var reader = new StreamReader(zip.GetEntry("zipme/one.txt")!.Open());
+            (await reader.ReadToEndAsync()).Should().Be("one");
+        }
+
+        [Fact, TestPriority(30)]
         public async Task DeleteUser_ShouldSucceed()
         {
             await AuthenticateAsync();

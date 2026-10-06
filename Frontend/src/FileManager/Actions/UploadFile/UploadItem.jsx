@@ -9,6 +9,7 @@ import { FaRegCheckCircle } from "react-icons/fa";
 import { IoMdRefresh } from "react-icons/io";
 import { useFiles } from "../../../contexts/FilesContext";
 import { useTranslation } from "../../../contexts/TranslationProvider";
+import { getToken } from "../../../utils/auth";
 
 const UploadItem = ({
     index,
@@ -103,8 +104,8 @@ const UploadItem = ({
 
             const method = fileUploadConfig?.method || "POST";
             xhr.open(method, fileUploadConfig?.url, true);
-            const headers = fileUploadConfig?.headers || {};
-            const token = localStorage.getItem("token");
+            const headers = { ...fileUploadConfig?.headers };
+            const token = getToken();
             if(token){
               headers["Authorization"] = `Bearer ${token}`;
             }

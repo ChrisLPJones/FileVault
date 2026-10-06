@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./Login.css";
 import { login } from "../../services/Auth";
+import { setToken } from "../../utils/auth";
 import ServerStatus from "../../components/ServerStatus";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -41,7 +42,7 @@ function Login() {
             const response = await login(email, password);
 
             if (response.status === 200) {
-                localStorage.setItem("token", response.data.success);
+                setToken(response.data.success);
                 navigate("/dashboard", { replace: true });
                 setLoginStatus(true);
             } else {

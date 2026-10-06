@@ -16,7 +16,14 @@ const router = createBrowserRouter([
         element: <Layout />,
         errorElement: <ErrorPage />,
         children: [
-            { index: true, element: <Login /> },
+            {
+                index: true,
+                element: (
+                    <PublicRoute>
+                        <Login />
+                    </PublicRoute>
+                ),
+            },
             {
                 path: "login",
                 element: (
@@ -44,7 +51,6 @@ const router = createBrowserRouter([
         ],
     },
 ]);
-``;
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     <React.StrictMode>

@@ -1,8 +1,7 @@
 import { Alert } from "react-bootstrap";
 import axios from "axios";
 import { useEffect, useState } from "react";
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { API_BASE_URL as API_URL } from "../api/api";
 
 export default function ServerStatus() {
     const [serverUp, setServerUp] = useState(true);

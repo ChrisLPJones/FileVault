@@ -9,9 +9,38 @@ body {
   align-items: center;
   // background-color: #32363a;
 
+  position: relative;
+
   .file-manager-container {
     height: 100%;
     width: 100%;
+  }
+
+  .dashboard-error {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: calc(100% - 32px);
+    padding: 8px 12px;
+    border-radius: 6px;
+    background-color: #f8d7da;
+    color: #842029;
+    border: 1px solid #f5c2c7;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+
+    button {
+      border: none;
+      background: none;
+      color: inherit;
+      font-size: 1.2rem;
+      line-height: 1;
+      cursor: pointer;
+    }
   }
 }
 

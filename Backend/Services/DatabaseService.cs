@@ -75,31 +75,6 @@ public class DatabaseServices
     }
 
 
-    public async Task<string> GetMimeType(string fileName, string userId)
-    {
-        var mimeType = "";
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-        var guid = await GetFileGUIDAsync(fileName, userId);
-        
-
-        const string query = "SELECT MimeType FROM Files WHERE GUID = @GUID AND UserId = @UserId";
-        await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@GUID", guid);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-
-        
-        var result = await command.ExecuteScalarAsync();
-
-        if(result != null && result != DBNull.Value)
-            mimeType = result.ToString();
-
-        return mimeType;
-
-    }
-    
-
 
     public async Task AddFolder(FolderModel response)
     {
@@ -194,6 +169,198 @@ public class DatabaseServices
     }
 
 
+    private static FileRecord ReadFileRecord(SqlDataReader reader) => new()
+    {
+        Guid = reader["GUID"].ToString(),
+        Name = reader["FileName"].ToString(),
+        IsDirectory = Convert.ToBoolean(reader["isDirectory"]),
+        Path = reader["FilePath"].ToString(),
+        ParentId = string.IsNullOrEmpty(reader["ParentId"]?.ToString()) ? null : reader["ParentId"].ToString(),
+        Size = Convert.ToInt64(reader["Size"]),
+        MimeType = reader["MimeType"] == DBNull.Value ? null : reader["MimeType"].ToString()
+    };
+
+
+
+    // Get a single file or folder owned by the user, or null if it doesn't exist
+    public async Task<FileRecord> GetItemAsync(string guid, string userId)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = @"
+            SELECT GUID, FileName, isDirectory, FilePath, ParentId, Size, MimeType
+            FROM Files WHERE GUID = @GUID AND UserId = @UserId";
+
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@GUID", guid);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? ReadFileRecord(reader) : null;
+    }
+
+
+
+    // Get an item and everything below it, parents before children
+    public async Task<List<FileRecord>> GetTreeAsync(string guid, string userId)
+    {
+        var items = new List<FileRecord>();
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = @"
+            WITH Tree AS (
+                SELECT GUID, 0 AS Depth FROM Files WHERE GUID = @GUID AND UserId = @UserId
+                UNION ALL
+                SELECT f.GUID, t.Depth + 1 FROM Files f
+                INNER JOIN Tree t ON f.ParentId = t.GUID
+                WHERE f.UserId = @UserId
+            )
+            SELECT f.GUID, f.FileName, f.isDirectory, f.FilePath, f.ParentId, f.Size, f.MimeType
+            FROM Files f INNER JOIN Tree t ON f.GUID = t.GUID
+            ORDER BY t.Depth;";
+
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@GUID", guid);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            items.Add(ReadFileRecord(reader));
+
+        return items;
+    }
+
+
+
+    // Get the names already used in a folder (null parentId = root), optionally ignoring one item
+    public async Task<HashSet<string>> GetNamesInFolderAsync(string parentId, string userId, string excludeGuid = null)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        // Older rows may store root as '' instead of NULL
+        const string query = @"
+            SELECT FileName FROM Files
+            WHERE UserId = @UserId
+              AND ((@ParentId IS NULL AND (ParentId IS NULL OR ParentId = '')) OR ParentId = @ParentId)
+              AND (@ExcludeGuid IS NULL OR GUID <> @ExcludeGuid)";
+
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@ParentId", (object)parentId ?? DBNull.Value);
+        command.Parameters.AddWithValue("@ExcludeGuid", (object)excludeGuid ?? DBNull.Value);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            names.Add(reader.GetString(0));
+
+        return names;
+    }
+
+
+
+    // Rename and/or move an item, rewriting the stored path of everything below it
+    public async Task RelocateAsync(FileRecord item, string newParentId, string newName, string newPath, string userId)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+
+        try
+        {
+            const string updateItem = @"
+                UPDATE Files
+                SET FileName = @Name, FilePath = @Path, ParentId = @ParentId, UpdatedAt = GETDATE()
+                WHERE GUID = @GUID AND UserId = @UserId";
+
+            await using (var command = new SqlCommand(updateItem, connection, transaction))
+            {
+                command.Parameters.AddWithValue("@Name", newName);
+                command.Parameters.AddWithValue("@Path", newPath);
+                command.Parameters.AddWithValue("@ParentId", (object)newParentId ?? DBNull.Value);
+                command.Parameters.AddWithValue("@GUID", item.Guid);
+                command.Parameters.AddWithValue("@UserId", userId);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            if (item.IsDirectory)
+            {
+                // Replace the old path prefix of every descendant with the new one
+                const string updateDescendants = @"
+                    WITH Tree AS (
+                        SELECT GUID FROM Files WHERE ParentId = @GUID AND UserId = @UserId
+                        UNION ALL
+                        SELECT f.GUID FROM Files f
+                        INNER JOIN Tree t ON f.ParentId = t.GUID
+                        WHERE f.UserId = @UserId
+                    )
+                    UPDATE Files
+                    SET FilePath = CAST(@NewPath AS NVARCHAR(MAX))
+                        + SUBSTRING(FilePath, DATALENGTH(@OldPath) / 2 + 1, DATALENGTH(FilePath))
+                    WHERE UserId = @UserId AND GUID IN (SELECT GUID FROM Tree)";
+
+                await using var command = new SqlCommand(updateDescendants, connection, transaction);
+                command.Parameters.AddWithValue("@NewPath", newPath);
+                command.Parameters.AddWithValue("@OldPath", item.Path);
+                command.Parameters.AddWithValue("@GUID", item.Guid);
+                command.Parameters.AddWithValue("@UserId", userId);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+
+
+    // Insert copied rows (parents before children) in one transaction
+    public async Task InsertItemsAsync(List<FileRecord> items, string userId)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+
+        try
+        {
+            const string query = @"
+                INSERT INTO Files (FileName, isDirectory, FilePath, GUID, UserId, Size, ParentId, MimeType)
+                VALUES (@FileName, @isDirectory, @FilePath, @GUID, @UserId, @Size, @ParentId, @MimeType);";
+
+            foreach (var item in items)
+            {
+                await using var command = new SqlCommand(query, connection, transaction);
+                command.Parameters.AddWithValue("@FileName", item.Name);
+                command.Parameters.AddWithValue("@isDirectory", item.IsDirectory);
+                command.Parameters.AddWithValue("@FilePath", item.Path);
+                command.Parameters.AddWithValue("@GUID", item.Guid);
+                command.Parameters.AddWithValue("@UserId", userId);
+                command.Parameters.AddWithValue("@Size", item.Size);
+                command.Parameters.AddWithValue("@ParentId", (object)item.ParentId ?? DBNull.Value);
+                command.Parameters.AddWithValue("@MimeType", (object)item.MimeType ?? DBNull.Value);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+
+
     // Get a folder owned by the given user, or null if it doesn't exist or isn't a folder
     public async Task<FolderModel> GetFolderById(string folderId, string userId)
     {
@@ -258,30 +425,6 @@ public class DatabaseServices
 
 
 
-    // Get the unique identifier (GUID) for a specific file owned by the user
-    public async Task<string> GetFileGUIDAsync(string fileGuid, string userId)
-    {
-        using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        string query = "SELECT GUID FROM Files WHERE UserId = @UserId AND GUID = @GUID";
-
-        using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@GUID", fileGuid); // match NVARCHAR column type
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        using var reader = await command.ExecuteReaderAsync();
-
-        if (await reader.ReadAsync())
-        {
-            return reader.GetString(0);
-        }
-        else
-        {
-            Console.WriteLine("Error: File does not exist in db");
-            return null;
-        }
-    }
 
 
 

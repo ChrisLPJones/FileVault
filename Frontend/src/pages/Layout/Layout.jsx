@@ -1,9 +1,11 @@
 import React from "react";
 import { Outlet, Link } from "react-router-dom";
 import "./Layout.css";
+import { clearToken } from "../../utils/auth";
+
 const Layout = () => {
     function logout() {
-        localStorage.removeItem("token");
+        clearToken();
     }
     return (
         <div className="page">

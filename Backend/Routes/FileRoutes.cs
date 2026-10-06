@@ -3,12 +3,16 @@ using System.Security.Claims;
 using Backend.Models;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
-using System.Runtime.Intrinsics.Arm;
 
 namespace Backend.Routes
 {
     public static class FileRoutes
-    {        // Maps all file-related API endpoints
+    {
+        // Error response using the result's status code (400 by default)
+        private static IResult Error(HttpReturnResult result) =>
+            Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
+
+        // Maps all file-related API endpoints
         public static void MapFileRoutes(this IEndpointRouteBuilder app)
         {
 
@@ -73,7 +77,7 @@ namespace Backend.Routes
 
                     return result.Success
                     ? Results.Ok(result.Folder)
-                    : Results.BadRequest(new { error = result.Message });
+                    : Error(result);
 
                 }
                 catch (Exception ex)
@@ -101,26 +105,88 @@ namespace Backend.Routes
 
 
 
-            // Downloads a specific file belonging to the authenticated user
-            app.MapGet("/download/{fileName}", async (
+            // Streams a file belonging to the authenticated user (supports range requests)
+            app.MapGet("/download/{fileId}", async (
                 ClaimsPrincipal user,
-                string fileName,
+                string fileId,
                 FileServices fs,
                 DatabaseServices db) =>
             {
                 var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-                var result = await fs.DownloadFile(fileName, db, userId);
+                var (error, file, fullPath) = await fs.GetDownloadAsync(fileId, db, userId);
+                if (error != null)
+                    return Error(error);
 
-                if (!result.Success || result.FileContent == null || result.FileName == null)
-                    return Results.BadRequest(new { error = result.Message });
-
-                var contentType = await db.GetMimeType(fileName, userId);
                 return Results.File(
-                    fileContents: result.FileContent,
-                    contentType: contentType,
-                    fileDownloadName: result.FileName
+                    path: fullPath,
+                    contentType: string.IsNullOrEmpty(file.MimeType) ? "application/octet-stream" : file.MimeType,
+                    fileDownloadName: file.Name,
+                    enableRangeProcessing: true
                 );
+            }).RequireAuthorization();
+
+
+
+            // Downloads several files and/or folders as a single zip
+            app.MapPost("/download/zip", async (
+                ClaimsPrincipal user,
+                [FromBody] ZipDownloadRequest request,
+                FileServices fs,
+                DatabaseServices db) =>
+            {
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                var (error, stream, fileName) = await fs.CreateZipAsync(request?.Ids, db, userId);
+                if (error != null)
+                    return Error(error);
+
+                return Results.File(stream, "application/zip", fileName);
+            }).RequireAuthorization();
+
+
+
+            // Renames a file or folder
+            app.MapPatch("/rename", async (
+                ClaimsPrincipal user,
+                [FromBody] RenameRequest request,
+                FileServices fs,
+                DatabaseServices db) =>
+            {
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                var result = await fs.Rename(request, db, userId);
+                return result.Success ? Results.Ok(new { success = result.Message }) : Error(result);
+            }).RequireAuthorization();
+
+
+
+            // Moves files/folders into another folder (destinationId null = root)
+            app.MapPut("/move", async (
+                ClaimsPrincipal user,
+                [FromBody] TransferRequest request,
+                FileServices fs,
+                DatabaseServices db) =>
+            {
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                var result = await fs.Move(request, db, userId);
+                return result.Success ? Results.Ok(new { success = result.Message }) : Error(result);
+            }).RequireAuthorization();
+
+
+
+            // Copies files/folders into another folder (destinationId null = root)
+            app.MapPost("/copy", async (
+                ClaimsPrincipal user,
+                [FromBody] TransferRequest request,
+                FileServices fs,
+                DatabaseServices db) =>
+            {
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                var result = await fs.Copy(request, db, userId);
+                return result.Success ? Results.Ok(new { success = result.Message }) : Error(result);
             }).RequireAuthorization();
 
 

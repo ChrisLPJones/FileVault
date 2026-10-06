@@ -8,6 +8,7 @@ import { MdOutlineFileDownload } from "react-icons/md";
 import { useFileIcons } from "../../../hooks/useFileIcons";
 import { FaRegFileAlt } from "react-icons/fa";
 import { useTranslation } from "../../../contexts/TranslationProvider";
+import { downloadFile, fetchFileBlob } from "../../../api/downloadFileAPI";
 import "./PreviewFile.action.scss";
 
 const imageExtensions = ["jpg", "jpeg", "png"];
@@ -23,9 +24,7 @@ const PreviewFileAction = ({ filePreviewPath, filePreviewComponent }) => {
   const fileIcons = useFileIcons(73);
   const extension = getFileExtension(selectedFiles[0].name)?.toLowerCase();
   const t = useTranslation();
-  const endpoint = import.meta.env.VITE_API_URL
-
-  const token = localStorage.getItem("token"); // get your auth token
+  const fileId = selectedFiles[0]._id;
 
   // Custom file preview component
   const customPreview = useMemo(
@@ -43,62 +42,38 @@ const PreviewFileAction = ({ filePreviewPath, filePreviewComponent }) => {
     setHasError(true);
   };
 
-  // Fetch file with token as header
+  // Fetch the file through the authenticated API client
   useEffect(() => {
+    let url = null;
+    let cancelled = false;
+
     const fetchFile = async () => {
       try {
         setIsLoading(true);
-        
-        const response = await fetch(
-          `${endpoint}/download/${encodeURIComponent(selectedFiles[0]._id)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (!response.ok) throw new Error("File fetch failed");
-
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
+        const blob = await fetchFileBlob(fileId);
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
         setFileURL(url);
-        setIsLoading(false);
       } catch (err) {
         console.error(err);
-        setHasError(true);
-        setIsLoading(false);
+        if (!cancelled) setHasError(true);
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     fetchFile();
 
-    // Cleanup URL object on unmount
-    return () => fileURL && URL.revokeObjectURL(fileURL);
-  }, [selectedFiles, token]);
+    // Release the object URL created by this effect
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [fileId]);
 
   const handleDownload = async () => {
     try {
-      const response = await fetch(
-        `${endpoint}/download/${encodeURIComponent(selectedFiles[0].name)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error("Download failed");
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = selectedFiles[0].name;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      await downloadFile([selectedFiles[0]]);
     } catch (err) {
       console.error(err);
     }

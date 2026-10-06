@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend build & tests
+    runs-on: ubuntu-latest
+
+    env:
+      # Throwaway password for the ephemeral CI database container only
+      SA_PASSWORD: CiOnly-Str0ng!Pass
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: CiOnly-Str0ng!Pass
+        ports:
+          - 1433:1433
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Wait for SQL Server and create schema
+        run: |
+          SQLCMD="docker exec ${{ job.services.sqlserver.id }} /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P $SA_PASSWORD"
+          for i in $(seq 1 40); do
+            $SQLCMD -Q "SELECT 1" > /dev/null 2>&1 && break
+            echo "Waiting for SQL Server... ($i)"
+            sleep 3
+          done
+          docker cp Backend/Docker/db/init.sql ${{ job.services.sqlserver.id }}:/tmp/init.sql
+          $SQLCMD -i /tmp/init.sql
+
+      - name: Configure test secrets
+        run: |
+          JWT_KEY=$(openssl rand -base64 48)
+          echo "::add-mask::$JWT_KEY"
+          echo "Jwt__Key=$JWT_KEY" >> "$GITHUB_ENV"
+          echo "ConnectionStrings__DefaultConnection=Server=localhost,1433;Database=SecureVaultDb;User Id=sa;Password=$SA_PASSWORD;TrustServerCertificate=True;Connection Timeout=5;" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: dotnet build FileVault.sln --configuration Release
+
+      - name: Test
+        run: dotnet test FileVault.sln --configuration Release --no-build --logger "console;verbosity=normal"
+
+  frontend:
+    name: Frontend build & lint
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: Frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: http://localhost:3000
+
+      # Existing lint errors are tracked in docs/CODEBASE_REVIEW.md (Phase 4);
+      # report them without failing the build until they are fixed
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
