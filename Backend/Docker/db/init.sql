@@ -92,6 +92,17 @@ END
 GO
 
 ------------------------------------------------------------
+-- STORAGE QUOTA COLUMN (added to existing databases too)
+------------------------------------------------------------
+-- Per-user storage limit in bytes. NULL = the API's Storage:DefaultQuotaBytes.
+IF COL_LENGTH('Users', 'StorageQuota') IS NULL
+BEGIN
+    ALTER TABLE Users ADD StorageQuota BIGINT NULL;
+    PRINT 'Column "Users.StorageQuota" added.';
+END
+GO
+
+------------------------------------------------------------
 -- REFRESH TOKENS
 ------------------------------------------------------------
 -- Only a SHA-256 hash of each token is stored. Tokens are single-use:

@@ -35,9 +35,17 @@ const UploadItem = ({
             ...prev,
             [index]: false,
         }));
+        // Prefer the server's reason (e.g. "Not enough storage space") over the generic message
+        let serverMessage = null;
+        try {
+            serverMessage = JSON.parse(xhr.response)?.error;
+        } catch {
+            // not JSON (network error, aborted, etc.)
+        }
+
         const error = {
             type: "upload",
-            message: t("uploadFail"),
+            message: serverMessage || t("uploadFail"),
             response: {
                 status: xhr.status,
                 statusText: xhr.statusText,

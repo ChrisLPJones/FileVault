@@ -1,0 +1,140 @@
+/* The page body doesn't scroll (see Layout.css), so this page scrolls itself */
+.settings-page {
+    height: calc(100vh - 52px);
+    overflow-y: auto;
+    padding: 24px 16px 48px;
+    box-sizing: border-box;
+}
+
+.settings-title {
+    max-width: 560px;
+    margin: 0 auto 16px;
+    color: #fff;
+    font-size: 1.5rem;
+}
+
+.settings-loading {
+    color: #fff;
+    text-align: center;
+}
+
+.settings-card {
+    max-width: 560px;
+    margin: 0 auto 16px;
+    padding: 20px;
+    border-radius: 5px;
+    background-color: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.settings-card h2 {
+    margin: 0 0 12px;
+    font-size: 1.15rem;
+}
+
+.settings-card .form-group {
+    margin-bottom: 15px;
+}
+
+.settings-card label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.settings-hint {
+    margin: 0 0 12px;
+    color: #555;
+    font-size: 0.9rem;
+}
+
+.settings-button {
+    padding: 10px 16px;
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 15px;
+}
+
+.settings-button:hover:not(:disabled) {
+    background-color: #0056b3;
+}
+
+.settings-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.settings-button.danger {
+    background-color: #dc3545;
+}
+
+.settings-button.danger:hover:not(:disabled) {
+    background-color: #b02a37;
+}
+
+.danger-zone {
+    border: 1px solid #f5c2c7;
+}
+
+.settings-alert {
+    margin-top: 12px;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.settings-alert.success {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.settings-alert.danger {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.usage-bar {
+    height: 12px;
+    border-radius: 6px;
+    background-color: #e9ecef;
+    overflow: hidden;
+}
+
+.usage-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.3s ease;
+}
+
+.usage-bar-fill.low {
+    background-color: #198754;
+}
+
+.usage-bar-fill.medium {
+    background-color: #fd7e14;
+}
+
+.usage-bar-fill.high {
+    background-color: #dc3545;
+}
+
+.usage-text {
+    margin: 8px 0 4px;
+    font-weight: 500;
+}
+
+.password-rules {
+    padding-left: 20px;
+    margin: 6px 0 0;
+    font-size: 0.85rem;
+}
+
+.password-rules .met {
+    color: #198754;
+}
+
+.password-rules .unmet {
+    color: #dc3545;
+}

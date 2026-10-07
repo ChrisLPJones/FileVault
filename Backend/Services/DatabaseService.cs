@@ -482,51 +482,79 @@ public class DatabaseServices
 
 
 
-    // Update user data only for fields that have been changed
-    public async Task<HttpReturnResult> UpdateUser(UserModel oldUser, UserModel updateUser, string userId)
+    // Returns which of the username/email is already used by another account, or null if both are free
+    public async Task<string> FindAccountConflictAsync(string username, string email, string excludeUserId)
     {
-        using var connection = new SqlConnection(_connectionString);
+        await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        var updates = new List<string>();
-        using var command = new SqlCommand { Connection = connection };
+        const string query = @"
+            SELECT
+                (SELECT COUNT(1) FROM Users WHERE Username = @Username AND Id <> @UserId),
+                (SELECT COUNT(1) FROM Users WHERE Email = @Email AND Id <> @UserId)";
 
-        if (!string.IsNullOrWhiteSpace(updateUser.Username) && oldUser.Username != updateUser.Username)
-        {
-            updates.Add("Username = @NewUsername");
-            command.Parameters.AddWithValue("@NewUsername", updateUser.Username);
-        }
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Username", username);
+        command.Parameters.AddWithValue("@Email", email);
+        command.Parameters.AddWithValue("@UserId", excludeUserId);
 
-        if (!string.IsNullOrWhiteSpace(updateUser.Email) && oldUser.Email != updateUser.Email)
-        {
-            updates.Add("Email = @Email");
-            command.Parameters.AddWithValue("@Email", updateUser.Email);
-        }
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        if (reader.GetInt32(0) > 0) return "Username already exists";
+        if (reader.GetInt32(1) > 0) return "Email already exists";
+        return null;
+    }
 
-        if (!string.IsNullOrEmpty(updateUser.Password))
-        {
-            updates.Add("PasswordHash = @Password");
-            command.Parameters.AddWithValue("@Password", updateUser.Password);
-        }
 
-        if (updates.Count == 0)
-            return new HttpReturnResult(false, "Nothing to update");
 
-        string setClause = string.Join(", ", updates);
-        command.CommandText = $"UPDATE Users SET {setClause} WHERE Id = @UserId";
+    // Update a user's username and email
+    public async Task UpdateProfileAsync(string userId, string username, string email)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = "UPDATE Users SET Username = @Username, Email = @Email WHERE Id = @UserId";
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Username", username);
+        command.Parameters.AddWithValue("@Email", email);
+        command.Parameters.AddWithValue("@UserId", userId);
+        await command.ExecuteNonQueryAsync();
+    }
+
+
+
+    // Replace a user's password hash
+    public async Task UpdatePasswordHashAsync(string userId, string passwordHash)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = "UPDATE Users SET PasswordHash = @PasswordHash WHERE Id = @UserId";
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@PasswordHash", passwordHash);
+        command.Parameters.AddWithValue("@UserId", userId);
+        await command.ExecuteNonQueryAsync();
+    }
+
+
+
+    // Bytes stored by the user, and their quota override (null = use the default)
+    public async Task<(long used, long? quota)> GetStorageUsageAsync(string userId)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = @"
+            SELECT
+                (SELECT COALESCE(SUM(Size), 0) FROM Files WHERE UserId = @UserId AND isDirectory = 0),
+                (SELECT StorageQuota FROM Users WHERE Id = @UserId)";
+
+        await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
 
-        try
-        {
-            int rowsAffected = await command.ExecuteNonQueryAsync();
-            if (rowsAffected == 0)
-                return new HttpReturnResult(true, "Nothing changes were made");
-            return new HttpReturnResult(true, "Updated user info");
-        }
-        catch (Exception ex)
-        {
-            return new HttpReturnResult(false, $"Error: {ex.Message}");
-        }
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        return (reader.GetInt64(0), reader.IsDBNull(1) ? null : reader.GetInt64(1));
     }
 
 
@@ -684,7 +712,8 @@ public class DatabaseServices
 
 
 
-    public record RefreshTokenUse(string UserId, bool Valid, DateTime? RevokedAt);
+    // SinceRevoked is measured by the database clock, so it isn't affected by clock differences with the API
+    public record RefreshTokenUse(string UserId, bool Valid, TimeSpan? SinceRevoked);
 
     // Atomically revoke a refresh token so it can only be used once.
     // Returns null if the token doesn't exist. Valid is true only if this call revoked an active, unexpired token.
@@ -710,13 +739,18 @@ public class DatabaseServices
         }
 
         // Not active: either unknown or already used/revoked
-        const string lookup = "SELECT UserId, RevokedAt FROM RefreshTokens WHERE TokenHash = @TokenHash";
+        const string lookup = @"
+            SELECT UserId, DATEDIFF_BIG(millisecond, RevokedAt, SYSUTCDATETIME())
+            FROM RefreshTokens WHERE TokenHash = @TokenHash";
         await using (var command = new SqlCommand(lookup, connection))
         {
             command.Parameters.AddWithValue("@TokenHash", tokenHash);
             await using var reader = await command.ExecuteReaderAsync();
             if (await reader.ReadAsync())
-                return new RefreshTokenUse(reader.GetGuid(0).ToString(), false, reader.GetDateTime(1));
+                return new RefreshTokenUse(
+                    reader.GetGuid(0).ToString(),
+                    false,
+                    reader.IsDBNull(1) ? null : TimeSpan.FromMilliseconds(reader.GetInt64(1)));
         }
 
         return null;

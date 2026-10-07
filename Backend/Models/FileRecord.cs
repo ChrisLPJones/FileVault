@@ -15,6 +15,9 @@ namespace Backend.Models
         public string WrappedKey { get; set; }
     }
 
+    // Storage used and allowed for a user, in bytes
+    public record StorageUsage(long Used, long Quota, long MaxUploadBytes);
+
     public class RenameRequest
     {
         public string Id { get; set; }

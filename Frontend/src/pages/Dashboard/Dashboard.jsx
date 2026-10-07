@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { API_BASE_URL, getErrorMessage } from "../../api/api";
+import { getUsageAPI } from "../../api/accountAPI";
 import { createFolderAPI } from "../../api/createFolderAPI";
 import { deleteAPI } from "../../api/deleteAPI";
 import { downloadFile } from "../../api/downloadFileAPI";
@@ -8,6 +9,9 @@ import { getAllFilesAPI } from "../../api/getAllFilesAPI";
 import { renameAPI } from "../../api/renameAPI";
 import "./Dashboard.scss";
 import FileManager from "../../FileManager/FileManager";
+
+// Matches the API's default Storage:MaxUploadBytes until /user/usage responds
+const DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 const fileUploadConfig = {
     url: `${API_BASE_URL}/upload`,
@@ -18,6 +22,7 @@ function Dashboard() {
     const [files, setFiles] = useState([]);
     const [currentPath, setCurrentPath] = useState("");
     const [error, setError] = useState(null);
+    const [maxFileSize, setMaxFileSize] = useState(DEFAULT_MAX_UPLOAD_BYTES);
 
     // Initial load
     useEffect(() => {
@@ -27,6 +32,11 @@ function Dashboard() {
             .then((response) => !cancelled && setFiles(response.data))
             .catch((err) => !cancelled && setError(getErrorMessage(err, "Could not load files")))
             .finally(() => !cancelled && setIsLoading(false));
+
+        // Use the server's upload limit (quota is checked by the server on upload)
+        getUsageAPI()
+            .then((usage) => !cancelled && setMaxFileSize(usage.maxUploadBytes))
+            .catch(() => {});
 
         return () => {
             cancelled = true;
@@ -110,7 +120,7 @@ function Dashboard() {
                     onError={handleError}
                     layout="grid"
                     enableFilePreview
-                    maxFileSize={10485760}
+                    maxFileSize={maxFileSize}
                     filePreviewPath={API_BASE_URL}
                     acceptedFileTypes=".txt, .png, .jpg, .jpeg, .pdf, .doc, .docx, .exe"
                     height="100%"

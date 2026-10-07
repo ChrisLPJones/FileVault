@@ -47,7 +47,7 @@ namespace Backend.Routes
 
                     return result.Success
                         ? Results.Ok(new { success = $"File Uploaded: {result.FileName}" })
-                        : Results.BadRequest(new { error = $"File not saved: {result.Message}" });
+                        : Error(result);
                 }
                 catch (Exception ex)
                 {
@@ -102,6 +102,18 @@ namespace Backend.Routes
 
 
 
+
+
+
+            // Storage used, quota and upload size limit for the authenticated user
+            app.MapGet("/user/usage", async (
+                ClaimsPrincipal user,
+                FileServices fs,
+                DatabaseServices db) =>
+            {
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                return Results.Ok(await fs.GetUsageAsync(db, userId));
+            }).RequireAuthorization();
 
 
 

@@ -185,50 +185,73 @@ namespace Backend.Routes
                 }
             }).RequireAuthorization();
 
-            // Updates authenticated user's account information
-            app.MapPut("/user", async (
-                HttpContext http,
+            // Updates the authenticated user's username and email
+            app.MapPatch("/user/profile", async (
                 ClaimsPrincipal user,
-                UserModel updateUser,
+                ProfileUpdateRequest request,
                 DatabaseServices db,
                 AuthServices auth) =>
             {
                 try
                 {
-                    // Not sure if all fields should be filled in this Put request
-                    if (updateUser == null ||
-                    string.IsNullOrWhiteSpace(updateUser.Username) ||
-                    string.IsNullOrWhiteSpace(updateUser.Email) ||
-                    string.IsNullOrWhiteSpace(updateUser.Password))
-                    {
-                        return Results.BadRequest(new { error = "invalid JSON" });
-                    }
+                    var username = request?.Username?.Trim();
+                    var email = request?.Email?.Trim().ToLowerInvariant();
 
-                    var validationError = AuthServices.ValidateAccount(updateUser.Username, updateUser.Email)
-                        ?? AuthServices.ValidatePassword(updateUser.Password);
+                    var validationError = AuthServices.ValidateAccount(username, email);
                     if (validationError != null)
                         return Results.BadRequest(new { error = validationError });
 
                     var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                    if (await db.GetUserByUserId(userId) == null)
+                        return Results.NotFound(new { error = "User not found" });
 
-                    updateUser.Password = auth.GeneratePasswordHash(updateUser.Password);
+                    var conflict = await db.FindAccountConflictAsync(username, email, userId);
+                    if (conflict != null)
+                        return Results.Conflict(new { error = conflict });
 
-                    var oldUser = await db.GetUserByUserId(userId);
+                    await db.UpdateProfileAsync(userId, username, email);
 
-                    if (oldUser == null)
-                        return Results.NotFound(new { Error = "User not found" });
+                    // New access token so the email claim is current
+                    var updated = await db.GetUserByUserId(userId);
+                    return Results.Ok(new { Success = "Profile updated", Token = auth.GetJWTToken(updated) });
+                }
+                catch (SqlException ex)
+                {
+                    Console.WriteLine($"Database error: {ex.Message}");
+                    return Results.Json(new { error = "A database error has occurred" }, statusCode: 500);
+                }
+            }).RequireAuthorization();
 
-                    var response = await db.UpdateUser(oldUser, updateUser, userId);
-                    if (!response.Success)
-                        return Results.BadRequest(new { Error = response.Message });
+            // Changes the authenticated user's password (requires the current one)
+            app.MapPost("/user/password", async (
+                HttpContext http,
+                ClaimsPrincipal user,
+                PasswordChangeRequest request,
+                DatabaseServices db,
+                AuthServices auth) =>
+            {
+                try
+                {
+                    var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                    var account = await db.GetUserByUserId(userId);
+                    if (account == null)
+                        return Results.NotFound(new { error = "User not found" });
 
-                    // The password changed: end every other session, then start a fresh one
-                    // for this client with a token that carries the updated email
+                    if (string.IsNullOrEmpty(request?.CurrentPassword) ||
+                        !BCrypt.Net.BCrypt.Verify(request.CurrentPassword, account.Password))
+                        return Results.BadRequest(new { error = "Current password is incorrect" });
+
+                    var passwordError = AuthServices.ValidatePassword(request.NewPassword);
+                    if (passwordError != null)
+                        return Results.BadRequest(new { error = passwordError });
+
+                    await db.UpdatePasswordHashAsync(userId, auth.GeneratePasswordHash(request.NewPassword));
+
+                    // End every other session, then start a fresh one for this client
                     await db.RevokeAllRefreshTokensAsync(userId);
                     await auth.IssueRefreshTokenAsync(userId, db, http);
-                    var updated = await db.GetUserByUserId(userId);
 
-                    return Results.Ok(new { Success = "Updated user info", Token = auth.GetJWTToken(updated) });
+                    return Results.Ok(new { Success = "Password changed", Token = auth.GetJWTToken(account) });
                 }
                 catch (SqlException ex)
                 {
@@ -244,6 +267,7 @@ namespace Backend.Routes
 
             // Deletes the authenticated user's account and all their files
             app.MapDelete("/user", async (
+                HttpContext http,
                 ClaimsPrincipal user,
                 DatabaseServices db,
                 FileServices fs) =>
@@ -255,9 +279,14 @@ namespace Backend.Routes
                     var userModel = await db.GetUserByUserId(userId);
 
                     if (userModel == null)
-                        return Results.BadRequest(new { error = "User not found" });
+                        return Results.NotFound(new { error = "User not found" });
 
                     var response = await db.DeleteUserAndFilesById(userId, fs);
+                    if (!response.Success)
+                        return Results.Json(new { error = response.Message }, statusCode: 500);
+
+                    // Refresh tokens are deleted with the user; clear the cookie too
+                    AuthServices.ClearRefreshCookie(http);
 
                     return Results.Ok(new { response.Message });
                 }

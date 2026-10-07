@@ -3,14 +3,7 @@ import "./Register.css";
 import { register } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
 import { useNavigate } from "react-router-dom";
-
-// Must match AuthServices.ValidatePassword on the server
-const passwordRules = [
-    { label: "At least 8 characters", test: (p) => p.length >= 8 },
-    { label: "At least one number", test: (p) => /\d/.test(p) },
-    { label: "At least one uppercase letter", test: (p) => /[A-Z]/.test(p) },
-    { label: "At least one lowercase letter", test: (p) => /[a-z]/.test(p) },
-];
+import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
 
 function Register() {
     const [username, setUsername] = useState("");
@@ -54,7 +47,7 @@ function Register() {
             newErrors.email = "Email is invalid";
 
         if (!password) newErrors.password = "Password is required";
-        else if (!passwordRules.every((rule) => rule.test(password)))
+        else if (!meetsPasswordRules(password))
             newErrors.password = "Password doesn't meet the requirements below";
 
         if (password !== passwordVerify)

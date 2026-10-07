@@ -8,6 +8,44 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
 {
     private readonly string _storageRoot = config.GetValue<string>("StorageRoot");
 
+    public const long DefaultQuotaBytes = 1L * 1024 * 1024 * 1024; // 1 GB
+    public const long DefaultMaxUploadBytes = 100L * 1024 * 1024;  // 100 MB
+
+    public static long MaxUploadBytes(IConfiguration config) =>
+        config.GetValue("Storage:MaxUploadBytes", DefaultMaxUploadBytes);
+
+    // How much the user has stored, their quota (per-user override or the default) and the upload size limit
+    public async Task<StorageUsage> GetUsageAsync(DatabaseServices db, string userId)
+    {
+        var (used, quota) = await db.GetStorageUsageAsync(userId);
+        return new StorageUsage(used, quota ?? config.GetValue("Storage:DefaultQuotaBytes", DefaultQuotaBytes), MaxUploadBytes(config));
+    }
+
+    // Returns an error if adding `bytes` would exceed the user's quota
+    private async Task<HttpReturnResult> CheckQuotaAsync(DatabaseServices db, string userId, long bytes)
+    {
+        var usage = await GetUsageAsync(db, userId);
+        if (usage.Used + bytes <= usage.Quota)
+            return null;
+
+        return new HttpReturnResult(false,
+            $"Not enough storage space: {FormatBytes(usage.Quota - usage.Used)} free of {FormatBytes(usage.Quota)}")
+        { StatusCode = 413 };
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        double value = Math.Max(0, bytes);
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+        return unit == 0 ? $"{value:0} {units[unit]}" : $"{value:0.#} {units[unit]}";
+    }
+
     // Open a stored file as plaintext. Rows without a key predate encryption and are read as-is.
     private Stream OpenStoredFile(FileRecord file)
     {
@@ -46,6 +84,14 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
     // Uploads a file, saves it to disk, and stores metadata in the database
     public async Task<HttpReturnResult> UploadFile(IFormFile file, DatabaseServices db, string userId, string parentId, string mimeType)
     {
+        var maxUpload = MaxUploadBytes(config);
+        if (file.Length > maxUpload)
+            return new HttpReturnResult(false, $"File is larger than the {FormatBytes(maxUpload)} upload limit") { StatusCode = 413 };
+
+        var quotaError = await CheckQuotaAsync(db, userId, file.Length);
+        if (quotaError != null)
+            return quotaError;
+
         var fileName = Path.GetFileName(file.FileName); // Get original filename
         var guid = Guid.NewGuid().ToString(); // Generate unique ID for storage
         int isDirectory = 0;
@@ -384,6 +430,10 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
 
             trees.Add(tree);
         }
+
+        var quotaError = await CheckQuotaAsync(db, userId, trees.SelectMany(t => t).Where(t => !t.IsDirectory).Sum(t => t.Size));
+        if (quotaError != null)
+            return quotaError;
 
         var takenNames = await db.GetNamesInFolderAsync(destId, userId);
         var copiedFiles = new List<string>();

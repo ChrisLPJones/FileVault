@@ -217,9 +217,9 @@ namespace Backend.Test
             var (tokenA, cookieA, _) = await LoginAsync(client, email);
             var (_, cookieB, _) = await LoginAsync(client, email);
 
-            var update = new HttpRequestMessage(HttpMethod.Put, "/user")
+            var update = new HttpRequestMessage(HttpMethod.Post, "/user/password")
             {
-                Content = JsonContent.Create(new UserModel { Username = $"u_{Guid.NewGuid():N}"[..20], Email = email, Password = "Changed1Pass" })
+                Content = JsonContent.Create(new { currentPassword = Password, newPassword = "Changed1Pass" })
             };
             update.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokenA);
             update.Headers.Add("Cookie", cookieA);
@@ -236,6 +236,114 @@ namespace Backend.Test
             (await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password }))
                 .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
             await LoginAsync(client, email, "Changed1Pass");
+        }
+
+        private static HttpRequestMessage Authed(HttpMethod method, string url, string token, object? body = null)
+        {
+            var request = new HttpRequestMessage(method, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            if (body != null)
+                request.Content = JsonContent.Create(body);
+            return request;
+        }
+
+        [Fact]
+        public async Task PasswordChange_WithWrongCurrentPassword_OrWeakNewPassword_IsRejected()
+        {
+            var (client, token, _) = await NewUserSessionAsync();
+
+            var wrongCurrent = await client.SendAsync(Authed(HttpMethod.Post, "/user/password", token,
+                new { currentPassword = "Wr0ngCurrent", newPassword = "Another1Pass" }));
+            wrongCurrent.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            (await wrongCurrent.Content.ReadAsStringAsync()).Should().Contain("Current password is incorrect");
+
+            var weakNew = await client.SendAsync(Authed(HttpMethod.Post, "/user/password", token,
+                new { currentPassword = Password, newPassword = "weak" }));
+            weakNew.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        [Fact]
+        public async Task ProfileUpdate_RejectsEmailOrUsernameUsedByAnotherAccount()
+        {
+            var otherClient = NewClient(_factory);
+            var otherEmail = NewEmail();
+            await RegisterAsync(otherClient, otherEmail);
+            var (otherToken, _, _) = await LoginAsync(otherClient, otherEmail);
+            _usersToDelete.Add((otherClient, otherToken));
+
+            var (client, token, _) = await NewUserSessionAsync();
+
+            var emailTaken = await client.SendAsync(Authed(HttpMethod.Patch, "/user/profile", token,
+                new { username = "freshname_" + Guid.NewGuid().ToString("N")[..8], email = otherEmail.ToUpperInvariant() }));
+            emailTaken.StatusCode.Should().Be(HttpStatusCode.Conflict);
+            (await emailTaken.Content.ReadAsStringAsync()).Should().Contain("Email already exists");
+        }
+
+        [Fact]
+        public async Task Usage_ReportsStoredBytesQuotaAndUploadLimit()
+        {
+            var (client, token, _) = await NewUserSessionAsync();
+
+            var upload = Authed(HttpMethod.Post, "/upload", token);
+            upload.Content = new MultipartFormDataContent { { new ByteArrayContent(new byte[1234]), "file", "a.bin" } };
+            (await client.SendAsync(upload)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var usage = await client.SendAsync(Authed(HttpMethod.Get, "/user/usage", token));
+            using var json = JsonDocument.Parse(await usage.Content.ReadAsStringAsync());
+            json.RootElement.GetProperty("used").GetInt64().Should().Be(1234);
+            json.RootElement.GetProperty("quota").GetInt64().Should().Be(1L * 1024 * 1024 * 1024);
+            json.RootElement.GetProperty("maxUploadBytes").GetInt64().Should().Be(100L * 1024 * 1024);
+        }
+
+        [Fact]
+        public async Task UploadAndCopy_BeyondQuotaOrUploadLimit_AreRejected()
+        {
+            var factory = WithSettings(
+                ("RateLimiting:auth:PermitLimit", "1000"),
+                ("Storage:DefaultQuotaBytes", "1000"),
+                ("Storage:MaxUploadBytes", "800"));
+            var (client, token, _) = await NewUserSessionAsync(factory);
+
+            HttpRequestMessage Upload(int bytes, string name)
+            {
+                var request = Authed(HttpMethod.Post, "/upload", token);
+                request.Content = new MultipartFormDataContent { { new ByteArrayContent(new byte[bytes]), "file", name } };
+                return request;
+            }
+
+            var tooBig = await client.SendAsync(Upload(900, "big.bin"));
+            tooBig.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+            (await tooBig.Content.ReadAsStringAsync()).Should().Contain("upload limit");
+
+            (await client.SendAsync(Upload(600, "first.bin"))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var overQuota = await client.SendAsync(Upload(600, "second.bin"));
+            overQuota.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+            (await overQuota.Content.ReadAsStringAsync()).Should().Contain("Not enough storage space");
+
+            // Copying the 600-byte file would also go over the 1000-byte quota
+            var files = await client.SendAsync(Authed(HttpMethod.Get, "/files", token));
+            using var json = JsonDocument.Parse(await files.Content.ReadAsStringAsync());
+            var fileId = json.RootElement[0].GetProperty("_id").GetString();
+            var copy = await client.SendAsync(Authed(HttpMethod.Post, "/copy", token, new { sourceIds = new[] { fileId } }));
+            copy.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+        }
+
+        [Fact]
+        public async Task DeleteAccount_ClearsRefreshCookie_AndEndsSession()
+        {
+            var client = NewClient(_factory);
+            var email = NewEmail();
+            await RegisterAsync(client, email);
+            var (token, cookie, _) = await LoginAsync(client, email);
+
+            var delete = await client.SendAsync(Authed(HttpMethod.Delete, "/user", token));
+            delete.StatusCode.Should().Be(HttpStatusCode.OK);
+            delete.Headers.GetValues("Set-Cookie").Should().Contain(c => c.StartsWith("fv_refresh=;"));
+
+            (await RefreshAsync(client, cookie)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            (await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password }))
+                .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
 
         [Fact]

@@ -34,6 +34,12 @@ namespace Backend
                     "Set it in appsettings.Development.json or the Encryption__MasterKey environment variable. " +
                     "Keep it safe: stored files can't be decrypted without it.");
 
+            // Allow request bodies up to the configured upload limit (plus room for the multipart wrapper)
+            var maxRequestBytes = FileServices.MaxUploadBytes(builder.Configuration) + 1024 * 1024;
+            builder.WebHost.ConfigureKestrel(kestrel => kestrel.Limits.MaxRequestBodySize = maxRequestBytes);
+            builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(form =>
+                form.MultipartBodyLengthLimit = maxRequestBytes);
+
             // Inject Services
             builder.Services.AddCors(options => {
                 options.AddPolicy("AllowFrontend", policy =>

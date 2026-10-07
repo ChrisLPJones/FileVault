@@ -147,20 +147,15 @@ namespace Backend.Test
         {
             await AuthenticateAsync();
 
-            UserModel updateUser = new()
-            {
-                Username = $"user_{RunId}",
-                Email = $"updated_{RunId}@example.com",
-                Password = "NewPassw0rd1"
-            };
-            string updateUserJson = JsonSerializer.Serialize(updateUser);
-            StringContent updateUserContent = new(updateUserJson, Encoding.UTF8, "application/json");
-
-            var response = await _client.PutAsync("/user", updateUserContent);
+            var response = await _client.PatchAsJsonAsync("/user/profile",
+                new { username = $"user_{RunId}", email = $"updated_{RunId}@example.com" });
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Contain("\"success\":\"Updated user info\"").And.Contain("\"token\":");
+            content.Should().Contain("\"success\":\"Profile updated\"").And.Contain("\"token\":");
+
+            var info = await _client.GetStringAsync("/user/info");
+            info.Should().Be($"{{\"username\":\"user_{RunId}\",\"email\":\"updated_{RunId}@example.com\"}}");
         }
 
         [Fact, TestPriority(5)]

@@ -1,0 +1,270 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { getErrorMessage } from "../../api/api";
+import {
+    changePasswordAPI,
+    deleteAccountAPI,
+    getUsageAPI,
+    getUserInfoAPI,
+    updateProfileAPI,
+} from "../../api/accountAPI";
+import { getDataSize } from "../../utils/getDataSize";
+import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
+import "./Settings.css";
+
+const DELETE_CONFIRMATION = "DELETE";
+
+// Success/error message under a form
+const Status = ({ status }) =>
+    status ? (
+        <div className={`settings-alert ${status.type}`} role={status.type === "danger" ? "alert" : "status"}>
+            {status.message}
+        </div>
+    ) : null;
+
+function Settings() {
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(null);
+    const [usage, setUsage] = useState(null);
+
+    const [profile, setProfile] = useState({ username: "", email: "" });
+    const [profileStatus, setProfileStatus] = useState(null);
+    const [savingProfile, setSavingProfile] = useState(false);
+
+    const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
+    const [passwordStatus, setPasswordStatus] = useState(null);
+    const [savingPassword, setSavingPassword] = useState(false);
+
+    const [deleteConfirm, setDeleteConfirm] = useState("");
+    const [deleteStatus, setDeleteStatus] = useState(null);
+    const [deleting, setDeleting] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        Promise.all([getUserInfoAPI(), getUsageAPI()])
+            .then(([info, usageData]) => {
+                if (cancelled) return;
+                setProfile({ username: info.username, email: info.email });
+                setUsage(usageData);
+            })
+            .catch((err) => !cancelled && setLoadError(getErrorMessage(err, "Could not load your account")))
+            .finally(() => !cancelled && setLoading(false));
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const handleProfileSubmit = async (event) => {
+        event.preventDefault();
+        setProfileStatus(null);
+        setSavingProfile(true);
+        try {
+            await updateProfileAPI(profile.username.trim(), profile.email.trim());
+            setProfileStatus({ type: "success", message: "Profile updated" });
+        } catch (err) {
+            setProfileStatus({ type: "danger", message: getErrorMessage(err, "Could not update profile") });
+        } finally {
+            setSavingProfile(false);
+        }
+    };
+
+    const handlePasswordSubmit = async (event) => {
+        event.preventDefault();
+        setPasswordStatus(null);
+
+        if (!meetsPasswordRules(passwords.next)) {
+            setPasswordStatus({ type: "danger", message: "New password doesn't meet the requirements" });
+            return;
+        }
+        if (passwords.next !== passwords.confirm) {
+            setPasswordStatus({ type: "danger", message: "New passwords do not match" });
+            return;
+        }
+
+        setSavingPassword(true);
+        try {
+            await changePasswordAPI(passwords.current, passwords.next);
+            setPasswords({ current: "", next: "", confirm: "" });
+            setPasswordStatus({ type: "success", message: "Password changed. You've been signed out on other devices." });
+        } catch (err) {
+            setPasswordStatus({ type: "danger", message: getErrorMessage(err, "Could not change password") });
+        } finally {
+            setSavingPassword(false);
+        }
+    };
+
+    const handleDelete = async (event) => {
+        event.preventDefault();
+        if (deleteConfirm !== DELETE_CONFIRMATION) return;
+
+        setDeleteStatus(null);
+        setDeleting(true);
+        try {
+            await deleteAccountAPI();
+            navigate("/login", { replace: true });
+        } catch (err) {
+            setDeleteStatus({ type: "danger", message: getErrorMessage(err, "Could not delete account") });
+            setDeleting(false);
+        }
+    };
+
+    if (loading) {
+        return <div className="settings-page"><p className="settings-loading">Loading…</p></div>;
+    }
+
+    if (loadError) {
+        return (
+            <div className="settings-page">
+                <div className="settings-card">
+                    <Status status={{ type: "danger", message: loadError }} />
+                </div>
+            </div>
+        );
+    }
+
+    const usedPercent = usage.quota > 0 ? Math.min(100, (usage.used / usage.quota) * 100) : 100;
+    const usageLevel = usedPercent >= 90 ? "high" : usedPercent >= 75 ? "medium" : "low";
+
+    return (
+        <div className="settings-page">
+            <h1 className="settings-title">Account settings</h1>
+
+            <section className="settings-card" aria-labelledby="storage-heading">
+                <h2 id="storage-heading">Storage</h2>
+                <div
+                    className="usage-bar"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(usedPercent)}
+                    aria-label="Storage used"
+                >
+                    <div className={`usage-bar-fill ${usageLevel}`} style={{ width: `${usedPercent}%` }} />
+                </div>
+                <p className="usage-text">
+                    {getDataSize(usage.used, 1)} of {getDataSize(usage.quota, 1)} used
+                    {" · "}
+                    {getDataSize(Math.max(0, usage.quota - usage.used), 1)} free
+                </p>
+                <p className="settings-hint">Files can be up to {getDataSize(usage.maxUploadBytes, 0)} each.</p>
+            </section>
+
+            <section className="settings-card" aria-labelledby="profile-heading">
+                <h2 id="profile-heading">Profile</h2>
+                <form onSubmit={handleProfileSubmit}>
+                    <div className="form-group">
+                        <label htmlFor="settings-username">Username</label>
+                        <input
+                            id="settings-username"
+                            type="text"
+                            value={profile.username}
+                            minLength={3}
+                            maxLength={50}
+                            required
+                            onChange={(e) => setProfile({ ...profile, username: e.target.value })}
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label htmlFor="settings-email">Email address</label>
+                        <input
+                            id="settings-email"
+                            type="email"
+                            value={profile.email}
+                            maxLength={100}
+                            required
+                            onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                        />
+                    </div>
+                    <button type="submit" className="settings-button" disabled={savingProfile}>
+                        {savingProfile ? "Saving…" : "Save profile"}
+                    </button>
+                    <Status status={profileStatus} />
+                </form>
+            </section>
+
+            <section className="settings-card" aria-labelledby="password-heading">
+                <h2 id="password-heading">Change password</h2>
+                <form onSubmit={handlePasswordSubmit}>
+                    <div className="form-group">
+                        <label htmlFor="current-password">Current password</label>
+                        <input
+                            id="current-password"
+                            type="password"
+                            autoComplete="current-password"
+                            value={passwords.current}
+                            required
+                            onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label htmlFor="new-password">New password</label>
+                        <input
+                            id="new-password"
+                            type="password"
+                            autoComplete="new-password"
+                            value={passwords.next}
+                            required
+                            onChange={(e) => setPasswords({ ...passwords, next: e.target.value })}
+                        />
+                        <ul className="password-rules">
+                            {passwordRules.map((rule) => (
+                                <li key={rule.label} className={rule.test(passwords.next) ? "met" : "unmet"}>
+                                    {rule.label}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                    <div className="form-group">
+                        <label htmlFor="confirm-password">Confirm new password</label>
+                        <input
+                            id="confirm-password"
+                            type="password"
+                            autoComplete="new-password"
+                            value={passwords.confirm}
+                            required
+                            onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
+                        />
+                    </div>
+                    <button type="submit" className="settings-button" disabled={savingPassword}>
+                        {savingPassword ? "Changing…" : "Change password"}
+                    </button>
+                    <Status status={passwordStatus} />
+                </form>
+            </section>
+
+            <section className="settings-card danger-zone" aria-labelledby="delete-heading">
+                <h2 id="delete-heading">Delete account</h2>
+                <p className="settings-hint">
+                    This permanently deletes your account and every file you've stored. It can't be undone.
+                </p>
+                <form onSubmit={handleDelete}>
+                    <div className="form-group">
+                        <label htmlFor="delete-confirm">
+                            Type <strong>{DELETE_CONFIRMATION}</strong> to confirm
+                        </label>
+                        <input
+                            id="delete-confirm"
+                            type="text"
+                            autoComplete="off"
+                            value={deleteConfirm}
+                            onChange={(e) => setDeleteConfirm(e.target.value)}
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        className="settings-button danger"
+                        disabled={deleting || deleteConfirm !== DELETE_CONFIRMATION}
+                    >
+                        {deleting ? "Deleting…" : "Delete my account"}
+                    </button>
+                    <Status status={deleteStatus} />
+                </form>
+            </section>
+        </div>
+    );
+}
+
+export default Settings;

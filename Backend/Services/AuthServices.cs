@@ -159,7 +159,7 @@ namespace Backend.Services
                 // A used token being presented again outside the short grace window (two tabs
                 // refreshing at once) suggests it was stolen: end every session for this user.
                 var grace = TimeSpan.FromSeconds(_config.GetValue("Jwt:RefreshReuseGraceSeconds", 30));
-                if (use.RevokedAt != null && DateTime.UtcNow - use.RevokedAt.Value > grace)
+                if (use.SinceRevoked >= grace)
                     await db.RevokeAllRefreshTokensAsync(use.UserId);
                 return null;
             }
