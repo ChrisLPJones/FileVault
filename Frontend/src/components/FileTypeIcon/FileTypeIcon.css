@@ -1,0 +1,13 @@
+.file-type-icon {
+    flex-shrink: 0;
+    overflow: visible;
+}
+
+/* Soft shadow like desktop icons */
+.file-type-icon.document {
+    filter: drop-shadow(0 1px 1.2px rgba(0, 0, 0, 0.18));
+}
+
+.file-type-icon.folder {
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.16));
+}

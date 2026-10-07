@@ -53,14 +53,14 @@
 
   .file-item {
     position: relative;
-    height: 81px;
+    height: 98px; // 60px icon + name
     width: 138px;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     align-items: center;
     justify-content: space-between;
-    padding-top: 13px;
+    padding-top: 10px;
     padding-bottom: 1px;
     border-radius: 5px;
 
@@ -84,7 +84,7 @@
 
     .rename-file-container {
       position: absolute;
-      top: 65px;
+      top: 76px;
       width: 100%;
       text-align: center;
     }

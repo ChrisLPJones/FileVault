@@ -43,6 +43,24 @@
     --fm-border: #cfcfcf;
     --fm-surface-alt: #f3f3f3;
     --fm-shade: 0, 0, 0; /* used as rgba(var(--fm-shade), alpha) for hover/selection tints */
+
+    /* File and folder icons (components/FileTypeIcon). Folders are amber like Windows... */
+    --fv-folder-back: #e3a21a;
+    --fv-folder-front-top: #ffd667;
+    --fv-folder-front-bottom: #f6bb34;
+    --fv-folder-paper: #fffdf6;
+    --fv-folder-highlight: rgba(255, 255, 255, 0.55);
+    --fv-file-page: #ffffff;
+    --fv-file-page-edge: #c9cfd6;
+    --fv-file-fold: #e7eaee;
+}
+
+/* ...and light blue like Finder when opened on a Mac (set in index.html) */
+:root[data-platform="mac"] {
+    --fv-folder-back: #3f8fe0;
+    --fv-folder-front-top: #8cc8fb;
+    --fv-folder-front-bottom: #5aa9f2;
+    --fv-folder-paper: #f4f9ff;
 }
 
 :root[data-theme="dark"] {
@@ -85,6 +103,10 @@
     --fm-border: #3a3d42;
     --fm-surface-alt: #2a2c30;
     --fm-shade: 255, 255, 255;
+
+    --fv-file-page: #f4f5f7;
+    --fv-file-page-edge: #8a9099;
+    --fv-file-fold: #d5d9de;
 }
 
 html,

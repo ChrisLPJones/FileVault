@@ -5,8 +5,7 @@ import { useSelection } from "../../../contexts/SelectionContext";
 import Button from "../../../components/Button/Button";
 import { getDataSize } from "../../../utils/getDataSize";
 import { MdOutlineFileDownload } from "react-icons/md";
-import { useFileIcons } from "../../../hooks/useFileIcons";
-import { FaRegFileAlt } from "react-icons/fa";
+import FileTypeIcon from "../../../components/FileTypeIcon/FileTypeIcon";
 import { useTranslation } from "../../../contexts/TranslationProvider";
 import { downloadFile, fetchFileBlob } from "../../../api/downloadFileAPI";
 import "./PreviewFile.action.scss";
@@ -21,7 +20,6 @@ const PreviewFileAction = ({ filePreviewComponent }) => {
   const [hasError, setHasError] = useState(false);
   const [fileURL, setFileURL] = useState(null);
   const { selectedFiles } = useSelection();
-  const fileIcons = useFileIcons(73);
   const extension = getFileExtension(selectedFiles[0].name)?.toLowerCase();
   const t = useTranslation();
   const fileId = selectedFiles[0]._id;
@@ -88,7 +86,7 @@ const PreviewFileAction = ({ filePreviewComponent }) => {
       {hasError ||
         (![...imageExtensions, ...videoExtensions, ...audioExtensions, ...iFrameExtensions].includes(extension) && (
           <div className="preview-error">
-            <span className="error-icon">{fileIcons[extension] ?? <FaRegFileAlt size={73} />}</span>
+            <span className="error-icon"><FileTypeIcon name={selectedFiles[0].name} size={80} /></span>
             <span className="error-msg">{t("previewUnavailable")}</span>
             <div className="file-info">
               <span className="file-name">{selectedFiles[0].name}</span>

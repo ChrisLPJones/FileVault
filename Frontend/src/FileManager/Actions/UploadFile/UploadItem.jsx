@@ -1,8 +1,6 @@
 import { AiOutlineClose } from "react-icons/ai";
 import Progress from "../../../components/Progress/Progress";
-import { getFileExtension } from "../../../utils/getFileExtension";
-import { useFileIcons } from "../../../hooks/useFileIcons";
-import { FaRegFile } from "react-icons/fa6";
+import FileTypeIcon from "../../../components/FileTypeIcon/FileTypeIcon";
 import { useEffect, useRef, useState } from "react";
 import { getDataSize } from "../../../utils/getDataSize";
 import { FaRegCheckCircle } from "react-icons/fa";
@@ -24,7 +22,6 @@ const UploadItem = ({
     const [isUploaded, setIsUploaded] = useState(false);
     const [isCanceled, setIsCanceled] = useState(false);
     const [uploadFailed, setUploadFailed] = useState(false);
-    const fileIcons = useFileIcons(33);
     const xhrRef = useRef();
     const { onError } = useFiles();
     const t = useTranslation();
@@ -184,9 +181,7 @@ const UploadItem = ({
     return (
         <li>
             <div className="file-icon">
-                {fileIcons[getFileExtension(fileData.file?.name)] ?? (
-                    <FaRegFile size={33} />
-                )}
+                <FileTypeIcon name={fileData.file?.name} size={36} />
             </div>
             <div className="file">
                 <div className="file-details">

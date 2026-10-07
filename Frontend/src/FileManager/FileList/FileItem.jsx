@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FaRegFile, FaRegFolderOpen } from "react-icons/fa6";
-import { useFileIcons } from "../../hooks/useFileIcons";
+import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
 import CreateFolderAction from "../Actions/CreateFolder/CreateFolder.action";
 import RenameAction from "../Actions/Rename/Rename.action";
 import { getDataSize } from "../../utils/getDataSize";
@@ -10,7 +9,7 @@ import { useClipBoard } from "../../contexts/ClipboardContext";
 import { useLayout } from "../../contexts/LayoutContext";
 import Checkbox from "../../components/Checkbox/Checkbox";
 
-const dragIconSize = 50;
+const dragIconSize = 44;
 
 const FileItem = ({
   index,
@@ -34,13 +33,11 @@ const FileItem = ({
   const [tooltipPosition, setTooltipPosition] = useState(null);
 
   const { activeLayout } = useLayout();
-  const iconSize = activeLayout === "grid" ? 48 : 20;
-  const fileIcons = useFileIcons(iconSize);
+  const iconSize = activeLayout === "grid" ? 60 : 22;
   const { setCurrentPath, currentPathFiles, onFolderChange } = useFileNavigation();
   const { setSelectedFiles } = useSelection();
   const { clipBoard, handleCutCopy, setClipBoard, handlePasting } = useClipBoard();
   const dragIconRef = useRef(null);
-  const dragIcons = useFileIcons(dragIconSize);
 
   const isFileMoving =
     clipBoard?.isMoving &&
@@ -215,13 +212,7 @@ const FileItem = ({
             onClick={(e) => e.stopPropagation()}
           />
         )}
-        {file.isDirectory ? (
-          <FaRegFolderOpen size={iconSize} />
-        ) : (
-          <>
-            {fileIcons[file.name?.split(".").pop()?.toLowerCase()] ?? <FaRegFile size={iconSize} />}
-          </>
-        )}
+        <FileTypeIcon name={file.name} isDirectory={file.isDirectory} size={iconSize} />
 
         {file.isEditing ? (
           <div className={`rename-file-container ${activeLayout}`}>
@@ -267,15 +258,7 @@ const FileItem = ({
       )}
 
       <div ref={dragIconRef} className="drag-icon">
-        {file.isDirectory ? (
-          <FaRegFolderOpen size={dragIconSize} />
-        ) : (
-          <>
-            {dragIcons[file.name?.split(".").pop()?.toLowerCase()] ?? (
-              <FaRegFile size={dragIconSize} />
-            )}
-          </>
-        )}
+        <FileTypeIcon name={file.name} isDirectory={file.isDirectory} size={dragIconSize} />
       </div>
       {/* Drag Icon & Tooltip Setup */}
     </div>
