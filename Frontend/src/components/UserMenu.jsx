@@ -1,17 +1,37 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { createPortal } from "react-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FiLogOut, FiSettings } from "react-icons/fi";
 import { PROFILE_CHANGED_EVENT, getUserInfoAPI } from "../api/accountAPI";
+import { logout } from "../api/api";
 import Avatar from "./Avatar";
 import "./UserMenu.css";
 
-// Avatar button in the header that opens a menu with the account's name, Settings and Log out
-export default function UserMenu({ onLogout }) {
+// Button that opens a menu with the account's name, Settings and Log out.
+// `children` is the button's content (default: the avatar). The menu is drawn in a portal
+// opening upwards from the button, so it isn't clipped by the folder tree it sits in.
+export default function UserMenu({ children, className = "", title }) {
     const [open, setOpen] = useState(false);
     const [user, setUser] = useState({ name: "", email: "" });
     const containerRef = useRef(null);
     const buttonRef = useRef(null);
+    const menuRef = useRef(null);
+    const [position, setPosition] = useState(null);
     const { pathname } = useLocation();
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        logout();
+        navigate("/login", { replace: true });
+    };
+
+    const toggle = () => {
+        if (!open && buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            setPosition({ left: rect.left, bottom: window.innerHeight - rect.top + 8 });
+        }
+        setOpen((value) => !value);
+    };
 
     // Name and email for the menu header; refreshed when the profile changes
     useEffect(() => {
@@ -34,7 +54,10 @@ export default function UserMenu({ onLogout }) {
         if (!open) return;
 
         const onPointerDown = (event) => {
-            if (!containerRef.current?.contains(event.target)) setOpen(false);
+            if (
+                !containerRef.current?.contains(event.target) &&
+                !menuRef.current?.contains(event.target)
+            ) setOpen(false);
         };
         const onKeyDown = (event) => {
             if (event.key === "Escape") {
@@ -53,14 +76,14 @@ export default function UserMenu({ onLogout }) {
 
     // Move focus into the menu when it opens, so keyboard users can act on it straight away
     useEffect(() => {
-        if (open) containerRef.current?.querySelector('[role="menuitem"]')?.focus();
+        if (open) menuRef.current?.querySelector('[role="menuitem"]')?.focus();
     }, [open]);
 
     // Arrow keys move between the menu items
     const onMenuKeyDown = (event) => {
         if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
         event.preventDefault();
-        const items = [...containerRef.current.querySelectorAll('[role="menuitem"]')];
+        const items = [...menuRef.current.querySelectorAll('[role="menuitem"]')];
         const index = items.indexOf(document.activeElement);
         const next = event.key === "ArrowDown" ? index + 1 : index - 1;
         items[(next + items.length) % items.length]?.focus();
@@ -73,17 +96,25 @@ export default function UserMenu({ onLogout }) {
             <button
                 ref={buttonRef}
                 type="button"
-                className="user-menu-button"
+                className={`user-menu-button ${className}`}
+                title={title}
                 aria-haspopup="menu"
                 aria-expanded={open}
                 aria-label={`Account menu${user.name ? ` for ${user.name}` : ""}`}
-                onClick={() => setOpen((value) => !value)}
+                onClick={toggle}
             >
-                <Avatar size={32} />
+                {children ?? <Avatar size={32} />}
             </button>
 
-            {open && (
-                <div className="user-menu-dropdown" role="menu" aria-label="Account" onKeyDown={onMenuKeyDown}>
+            {open && position && createPortal(
+                <div
+                    ref={menuRef}
+                    className="user-menu-dropdown"
+                    style={{ left: position.left, bottom: position.bottom }}
+                    role="menu"
+                    aria-label="Account"
+                    onKeyDown={onMenuKeyDown}
+                >
                     <div className="user-menu-identity">
                         <Avatar size={40} />
                         <div className="user-menu-names">
@@ -109,13 +140,14 @@ export default function UserMenu({ onLogout }) {
                         className="user-menu-item"
                         onClick={() => {
                             close();
-                            onLogout();
+                            handleLogout();
                         }}
                     >
                         <FiLogOut aria-hidden="true" />
                         Log out
                     </button>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

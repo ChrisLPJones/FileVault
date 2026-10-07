@@ -1,10 +1,8 @@
 import React, { useState } from "react";
 import { FiArrowLeft } from "react-icons/fi";
-import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useLocation } from "react-router-dom";
 import "./Layout.css";
-import { logout } from "../../api/api";
 import { isAuthenticated } from "../../utils/auth";
-import UserMenu from "../../components/UserMenu";
 import { HeaderSlotContext } from "../../contexts/HeaderSlotContext";
 
 const navClass = ({ isActive }) => `link-style${isActive ? " active" : ""}`;
@@ -12,15 +10,9 @@ const navClass = ({ isActive }) => `link-style${isActive ? " active" : ""}`;
 const Layout = () => {
     // Re-render on navigation so the links follow the login state
     const { pathname } = useLocation();
-    const navigate = useNavigate();
     const loggedIn = isAuthenticated();
     // Middle of the top bar; the dashboard renders the file toolbar into it
     const [headerSlot, setHeaderSlot] = useState(null);
-
-    const handleLogout = () => {
-        logout();
-        navigate("/login", { replace: true });
-    };
 
     return (
         <div className="page">
@@ -48,9 +40,7 @@ const Layout = () => {
 
                     <div className="nav-center" ref={setHeaderSlot} />
 
-                    <div className="nav-right">
-                        {loggedIn && <UserMenu onLogout={handleLogout} />}
-                    </div>
+                    <div className="nav-right" />
                 </nav>
             </header>
             <main className="main-style">

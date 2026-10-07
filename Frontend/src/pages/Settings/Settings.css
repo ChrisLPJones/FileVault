@@ -344,3 +344,8 @@ label.settings-button.disabled {
     /* Native radio look: accent outer circle, ring, accent dot. The ring is always black. */
     background: radial-gradient(circle, var(--fv-primary) 0 26%, #000 30% 52%, var(--fv-primary) 56%);
 }
+
+/* Light mode: white ring (dark mode keeps the black one) */
+:root[data-theme="light"] .settings-card .theme-option input:checked {
+    background: radial-gradient(circle, var(--fv-primary) 0 26%, #fff 30% 52%, var(--fv-primary) 56%);
+}
