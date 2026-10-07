@@ -191,7 +191,15 @@
     border: none;
     background: none;
     box-shadow: none;
-    accent-color: var(--fv-primary);
+    /* Drawn by hand: the native radio picks a white or black dot depending on the accent's brightness */
+    appearance: none;
+    -webkit-appearance: none;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--fv-border);
+    background: transparent;
 }
 
 .avatar-editor {
@@ -329,4 +337,9 @@ label.settings-button.disabled {
 .settings-card .theme-option input:focus-visible {
     outline: 2px solid var(--fv-primary);
     outline-offset: 2px;
+}
+
+.settings-card .theme-option input:checked {
+    border-color: var(--fv-primary);
+    background: radial-gradient(circle, #000 0 28%, var(--fv-primary) 32%);
 }
