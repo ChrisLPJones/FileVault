@@ -211,7 +211,7 @@ function Settings() {
                         />
                         <ul className="password-rules">
                             {passwordRules.map((rule) => (
-                                <li key={rule.label} className={rule.test(passwords.next) ? "met" : "unmet"}>
+                                <li key={rule.label} className={!passwords.next ? undefined : rule.test(passwords.next) ? "met" : "unmet"}>
                                     {rule.label}
                                 </li>
                             ))}

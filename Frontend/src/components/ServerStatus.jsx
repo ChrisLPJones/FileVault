@@ -41,7 +41,7 @@ export default function ServerStatus() {
     if (!errorMessage) return null;
 
     return (
-        <div className="alert danger server-alert" role="alert">
+        <div className="auth-alert danger" role="alert">
             {errorMessage}
         </div>
     );

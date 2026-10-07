@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "./styles/theme.css";
 import Layout from "./pages/Layout/Layout";
 import Login from "./pages/Login/Login";
 import Register from "./pages/Register/Register";

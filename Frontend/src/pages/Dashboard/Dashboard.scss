@@ -3,7 +3,7 @@ body {
 }
 
 .app {
-  height: 100dvh;
+  height: calc(100dvh - var(--fv-header-height));
   display: flex;
   justify-content: center;
   align-items: center;

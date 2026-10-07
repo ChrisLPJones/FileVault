@@ -1,37 +1,29 @@
 import { useState } from "react";
-import "./Register.css";
+import { Link, useNavigate } from "react-router-dom";
+import "../Auth/Auth.css";
 import { register } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
-import { useNavigate } from "react-router-dom";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
+
+// Rule list item: neutral until the user starts typing, then green/red
+const ruleClass = (typed, passed) => (!typed ? undefined : passed ? "met" : "unmet");
 
 function Register() {
     const [username, setUsername] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [passwordVerify, setPasswordVerify] = useState("");
-    const [passwordMatchMessage, setPasswordMatchMessage] = useState("");
-    const [passwordMatchValid, setPasswordMatchValid] = useState(null);
     const [errors, setErrors] = useState({});
-    const [registerStatus, setRegisterStatus] = useState(null);
-    const [returnMessage, setReturnMessage] = useState("");
-
+    const [registerError, setRegisterError] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
     const navigate = useNavigate();
 
-    const validatePasswordMatch = (pass, passVerify) => {
-        if (!passVerify) {
-            setPasswordMatchMessage("");
-            setPasswordMatchValid(null);
-            return;
-        }
+    const passwordsMatch = passwordVerify.length > 0 && password === passwordVerify;
 
-        if (pass === passVerify) {
-            setPasswordMatchMessage("Passwords match!");
-            setPasswordMatchValid(true);
-        } else {
-            setPasswordMatchMessage("Passwords do not match!");
-            setPasswordMatchValid(false);
-        }
+    // Update a field and clear its error, so stale messages don't linger while typing
+    const edit = (setter, name) => (event) => {
+        setter(event.target.value);
+        if (errors[name]) setErrors(({ ...rest }) => { delete rest[name]; return rest; });
     };
 
     const validateForm = () => {
@@ -43,171 +35,134 @@ function Register() {
             newErrors.username = "Username must be 3-50 characters";
 
         if (!email) newErrors.email = "Email is required";
-        else if (!/\S+@\S+\.\S+/.test(email))
-            newErrors.email = "Email is invalid";
+        else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = "Email is invalid";
 
         if (!password) newErrors.password = "Password is required";
-        else if (!meetsPasswordRules(password))
-            newErrors.password = "Password doesn't meet the requirements below";
+        else if (!meetsPasswordRules(password)) newErrors.password = "Password doesn't meet the requirements below";
 
-        if (password !== passwordVerify)
-            newErrors.passwordVerify = "Passwords do not match!";
+        if (!passwordVerify) newErrors.passwordVerify = "Please confirm your password";
+        else if (password !== passwordVerify) newErrors.passwordVerify = "Passwords do not match";
 
         return newErrors;
     };
 
     const handleSubmit = async (event) => {
         event.preventDefault();
+        setRegisterError(null);
+
         const formErrors = validateForm();
+        setErrors(formErrors);
+        if (Object.keys(formErrors).length > 0) return;
 
-        if (Object.keys(formErrors).length > 0) {
-            setErrors(formErrors);
-            return;
-        }
-
-        setErrors({});
-
+        setSubmitting(true);
         try {
-            const response = await register(username, email, password);
-            setReturnMessage("");
-
+            const response = await register(username.trim(), email.trim(), password);
             if (response?.status === 200) {
-                setReturnMessage(response.data.success);
-                setRegisterStatus(true);
                 navigate("/login", { state: { registrationSuccess: true } });
-            } else {
-                setReturnMessage(response.data.error);
-                setRegisterStatus(false);
+                return;
             }
-        } catch (err) {
-            setRegisterStatus(false);
-            console.log(err);
+            setRegisterError(response.data?.error || "Registration failed");
+        } catch {
+            setRegisterError("Can't reach the server. Please try again.");
         }
+        setSubmitting(false);
     };
 
+    // Shared props for an input with an optional error message below it
+    const fieldProps = (name) => ({
+        "aria-invalid": !!errors[name],
+        "aria-describedby": errors[name] ? `register-${name}-error` : undefined,
+    });
+    const fieldError = (name) =>
+        errors[name] && <div id={`register-${name}-error`} className="auth-field-error">{errors[name]}</div>;
+
     return (
-        <div className="register-wrapper">
-            <div className="register-form-container">
+        <div className="auth-page">
+            <div className="auth-card">
                 <ServerStatus />
-                <h2 className="register-title">Register</h2>
+                <h1 className="auth-title">Create account</h1>
+                <p className="auth-subtitle">Your files, encrypted and private</p>
 
-                <form onSubmit={handleSubmit} className="register-form">
-
-                    {/* USERNAME */}
-                    <div className="form-group">
-                        <label>Username</label>
+                <form onSubmit={handleSubmit} noValidate>
+                    <div className="auth-field">
+                        <label htmlFor="register-username">Username</label>
                         <input
+                            id="register-username"
+                            name="username"
                             type="text"
-                            placeholder="Enter username"
+                            autoComplete="username"
                             value={username}
-                            onChange={(e) => {
-                                setUsername(e.target.value)
-                                setRegisterStatus(null)}
-                            }
-                            className={errors.username ? "input-error" : ""}
+                            onChange={edit(setUsername, "username")}
+                            {...fieldProps("username")}
                         />
-                        {errors.username && (
-                            <div className="error-message">{errors.username}</div>
-                        )}
+                        {fieldError("username")}
                     </div>
 
-                    {/* EMAIL */}
-                    <div className="form-group">
-                        <label>Email address</label>
+                    <div className="auth-field">
+                        <label htmlFor="register-email">Email address</label>
                         <input
+                            id="register-email"
+                            name="email"
                             type="email"
-                            placeholder="Enter email"
+                            autoComplete="email"
+                            placeholder="you@example.com"
                             value={email}
-                            onChange={(e) =>{ 
-                                setEmail(e.target.value)
-                                setRegisterStatus(null)
-                            }
-                                
-                            }
-                            className={errors.email ? "input-error" : ""}
+                            onChange={edit(setEmail, "email")}
+                            {...fieldProps("email")}
                         />
-                        {errors.email && (
-                            <div className="error-message">{errors.email}</div>
-                        )}
+                        {fieldError("email")}
                     </div>
 
-                    {/* PASSWORD */}
-                    <div className="form-group">
-                        <label>Password</label>
+                    <div className="auth-field">
+                        <label htmlFor="register-password">Password</label>
                         <input
+                            id="register-password"
+                            name="password"
                             type="password"
-                            placeholder="Enter password"
+                            autoComplete="new-password"
                             value={password}
-                            onChange={(e) => {
-                                const value = e.target.value;
-                                setPassword(value);
-                                validatePasswordMatch(value, passwordVerify);
-                            }}
-                            className={errors.password ? "input-error" : ""}
+                            onChange={edit(setPassword, "password")}
+                            {...fieldProps("password")}
                         />
-                        {errors.password && (
-                            <div className="error-message">{errors.password}</div>
-                        )}
-                    </div>
-
-                    {/* PASSWORD VERIFY */}
-                    <div className="form-group">
-                        <input
-                            type="password"
-                            placeholder="Repeat your password"
-                            value={passwordVerify}
-                            onChange={(e) => {
-                                setPasswordVerify(e.target.value);
-                                validatePasswordMatch(password, e.target.value);
-                            }}
-                            className={errors.passwordVerify ? "input-error" : ""}
-                        />
-
-                        {/* PASSWORD RULES + MATCH */}
-                        <ul className="password-rules">
+                        {fieldError("password")}
+                        <ul className="auth-rules" aria-label="Password requirements">
                             {passwordRules.map((rule) => (
-                                <li
-                                    key={rule.label}
-                                    style={{ color: rule.test(password) ? "green" : "red" }}
-                                >
+                                <li key={rule.label} className={ruleClass(password.length > 0, rule.test(password))}>
                                     {rule.label}
                                 </li>
                             ))}
-
-                            {passwordMatchValid !== null && (
-                                <li
-                                    style={{
-                                        color: passwordMatchValid ? "green" : "red",
-                                    }}
-                                >
-                                    {passwordMatchMessage}
-                                </li>
-                            )}
                         </ul>
-
-                        {/* {errors.passwordVerify && (
-                            <div className="error-message">{errors.passwordVerify}</div>
-                        )} */}
                     </div>
 
-                    {/* SUBMIT BUTTON */}
-                    <button type="submit" className="register-button">
-                        Register
+                    <div className="auth-field">
+                        <label htmlFor="register-password-confirm">Confirm password</label>
+                        <input
+                            id="register-password-confirm"
+                            name="passwordConfirm"
+                            type="password"
+                            autoComplete="new-password"
+                            value={passwordVerify}
+                            onChange={edit(setPasswordVerify, "passwordVerify")}
+                            {...fieldProps("passwordVerify")}
+                        />
+                        {fieldError("passwordVerify") ||
+                            (passwordVerify && (
+                                <div className={`auth-field-error ${passwordsMatch ? "auth-match" : ""}`}>
+                                    {passwordsMatch ? "Passwords match" : "Passwords do not match"}
+                                </div>
+                            ))}
+                    </div>
+
+                    <button type="submit" className="auth-button" disabled={submitting}>
+                        {submitting ? "Creating account…" : "Create account"}
                     </button>
 
-                    {/* RESULT MESSAGE */}
-                    {registerStatus !== null && (
-                        <div
-                            className={
-                                registerStatus
-                                    ? "register-alert success"
-                                    : "register-alert danger"
-                            }
-                        >
-                            {returnMessage}
-                        </div>
-                    )}
+                    {registerError && <div className="auth-alert danger" role="alert">{registerError}</div>}
                 </form>
+
+                <p className="auth-switch">
+                    Already have an account? <Link to="/login">Log in</Link>
+                </p>
             </div>
         </div>
     );

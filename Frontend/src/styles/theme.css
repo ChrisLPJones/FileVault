@@ -1,0 +1,40 @@
+/* App-wide colours and sizes. Pages use these variables instead of hard-coded colours. */
+:root {
+    --fv-header-height: 52px;
+
+    --fv-page-bg: #1f1f1f;
+    --fv-header-bg: #333;
+    --fv-header-text: #fff;
+
+    --fv-surface: #fff;
+    --fv-text: #212529;
+    --fv-text-muted: #5f6368;
+    --fv-heading-on-page: #fff;
+    --fv-border: #ccc;
+    --fv-input-bg: #fff;
+    --fv-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+
+    --fv-primary: #007bff;
+    --fv-primary-hover: #0056b3;
+    --fv-primary-text: #fff;
+    --fv-focus-ring: rgba(0, 123, 255, 0.35);
+    --fv-link: #0b63ce;
+
+    --fv-danger: #dc3545;
+    --fv-danger-hover: #b02a37;
+    --fv-error-text: #c62828;
+    --fv-ok-text: #1b7a43;
+
+    --fv-alert-success-bg: #d4edda;
+    --fv-alert-success-text: #155724;
+    --fv-alert-danger-bg: #f8d7da;
+    --fv-alert-danger-text: #721c24;
+    --fv-alert-danger-border: #f5c2c7;
+}
+
+html,
+body {
+    background-color: var(--fv-page-bg);
+    color: var(--fv-text);
+    font-family: Arial, sans-serif;
+}

@@ -32,6 +32,7 @@ svg {
 .file-explorer {
   min-height: 400px;
   height: 100%;
+  box-sizing: border-box; // keep the border inside the 100% height
   width: 100%;
   font-family: var(--file-manager-font-family);
   border: 1px solid $border-color;
