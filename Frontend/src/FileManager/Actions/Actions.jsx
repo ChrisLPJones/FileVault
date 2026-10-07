@@ -32,6 +32,7 @@ const Actions = ({
           acceptedFileTypes={acceptedFileTypes}
           onFileUploading={onFileUploading}
           onFileUploaded={onFileUploaded}
+          onClose={triggerAction.close}
         />
       ),
       width: "35%",

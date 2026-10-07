@@ -16,6 +16,7 @@ const UploadFileAction = ({
   acceptedFileTypes,
   onFileUploading,
   onFileUploaded,
+  onClose,
 }) => {
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -100,8 +101,11 @@ const UploadFileAction = ({
     });
   };
 
+  const uploadInProgress = Object.values(isUploading).some((fileUploading) => fileUploading);
+
   return (
     <div className={`fm-upload-file ${files.length > 0 ? "file-selcted" : ""}`}>
+      {files.length === 0 && (
       <div className="select-files">
         <div
           className={`draggable-file-input ${isDragging ? "dragging" : ""}`}
@@ -130,17 +134,17 @@ const UploadFileAction = ({
           </Button>
         </div>
       </div>
+      )}
       {files.length > 0 && (
         <div className="files-progress">
           <div className="heading">
-            {Object.values(isUploading).some((fileUploading) => fileUploading) ? (
+            {uploadInProgress ? (
               <>
                 <h2>{t("uploading")}</h2>
                 <Loader loading={true} className="upload-loading" />
               </>
             ) : (
               <h2>{t("completed")}</h2>
-              
             )}
           </div>
           <ul>
@@ -157,6 +161,11 @@ const UploadFileAction = ({
               />
             ))}
           </ul>
+          {!uploadInProgress && (
+            <div className="upload-close">
+              <Button onClick={onClose}>{t("close")}</Button>
+            </div>
+          )}
         </div>
       )}
     </div>
