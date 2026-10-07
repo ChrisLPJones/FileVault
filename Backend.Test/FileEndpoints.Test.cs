@@ -280,7 +280,8 @@ namespace Backend.Test
                 folderResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
                 var otherFiles = await ListFilesAsync(otherClient);
-                otherFiles.Should().ContainSingle();
+                // Only the other user's own folders: nothing from the intruder got in
+                Paths(otherFiles).Should().BeEquivalentTo("/private", "/Documents", "/Pictures", "/Music", "/Videos");
             }
             finally
             {

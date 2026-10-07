@@ -31,7 +31,8 @@ namespace Backend.Routes
             app.MapPost("/user/register", async (
                 HttpRequest request,
                 DatabaseServices db,
-                AuthServices auth) =>
+                AuthServices auth,
+                FileServices fs) =>
             {
                 var user = await ReadJsonAsync<UserModel>(request);
 
@@ -55,6 +56,11 @@ namespace Backend.Routes
 
                 await auth.HashAndRegisterUser(user, db);
 
+                // Starter folders (Documents, Pictures, Music, Videos) for the new account
+                var created = await db.GetUserByEmail(user.Email.Trim());
+                if (created != null)
+                    await fs.CreateDefaultFoldersAsync(db, created.Id.ToString());
+
                 return Results.Ok(new { success = $"User {user.Username} registered" });
             })
                 .WithTags("Account")
@@ -72,20 +78,20 @@ namespace Backend.Routes
                 var login = await ReadJsonAsync<LoginModel>(http.Request);
 
                 if (login == null ||
-                    string.IsNullOrWhiteSpace(login.Email) ||
+                    string.IsNullOrWhiteSpace(login.Identifier) ||
                     string.IsNullOrWhiteSpace(login.Password))
                     return Results.BadRequest(new { error = "Invalid JSON" });
 
                 var userRecord = await auth.ValidateUser(login, db);
                 if (userRecord == null)
-                    return Results.Json(new { error = "Invalid email or password" }, statusCode: 401);
+                    return Results.Json(new { error = "Invalid email/username or password" }, statusCode: 401);
 
                 await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
 
                 return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
             })
                 .WithTags("Account")
-                .WithSummary("Log in: returns an access token and sets the refresh-token cookie")
+                .WithSummary("Log in with email or username (field \"login\"): returns an access token and sets the refresh-token cookie")
                 .Produces<TokenResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(401)

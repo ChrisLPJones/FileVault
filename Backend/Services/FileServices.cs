@@ -23,6 +23,32 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
         return new StorageUsage(used, quota ?? config.GetValue("Storage:DefaultQuotaBytes", DefaultQuotaBytes), MaxUploadBytes(config));
     }
 
+    public static readonly string[] DefaultFolderNames = ["Documents", "Pictures", "Music", "Videos"];
+
+    // Give a new account the usual starter folders (Storage:DefaultFolders / Storage:CreateDefaultFolders).
+    // Failures are logged, not thrown, so they never block registration.
+    public async Task CreateDefaultFoldersAsync(DatabaseServices db, string userId)
+    {
+        if (!config.GetValue("Storage:CreateDefaultFolders", true))
+            return;
+
+        var names = config.GetSection("Storage:DefaultFolders").Get<string[]>() ?? DefaultFolderNames;
+        try
+        {
+            var existing = await db.GetNamesInFolderAsync(null, userId);
+            foreach (var name in names.Where(n => !existing.Contains(n)))
+            {
+                var result = await CreateFolder(new FolderModel { Name = name }, db, userId);
+                if (!result.Success)
+                    logger.LogWarning("Could not create default folder {Folder} for user {UserId}: {Error}", name, userId, result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Creating default folders failed for user {UserId}", userId);
+        }
+    }
+
     // Returns an error if adding `bytes` would exceed the user's quota
     private async Task<HttpReturnResult?> CheckQuotaAsync(DatabaseServices db, string userId, long bytes)
     {

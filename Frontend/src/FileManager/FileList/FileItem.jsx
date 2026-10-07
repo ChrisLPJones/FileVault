@@ -212,7 +212,7 @@ const FileItem = ({
             onClick={(e) => e.stopPropagation()}
           />
         )}
-        <FileTypeIcon name={file.name} isDirectory={file.isDirectory} size={iconSize} />
+        <FileTypeIcon name={file.name} path={file.path} isDirectory={file.isDirectory} size={iconSize} />
 
         {file.isEditing ? (
           <div className={`rename-file-container ${activeLayout}`}>
@@ -258,7 +258,7 @@ const FileItem = ({
       )}
 
       <div ref={dragIconRef} className="drag-icon">
-        <FileTypeIcon name={file.name} isDirectory={file.isDirectory} size={dragIconSize} />
+        <FileTypeIcon name={file.name} path={file.path} isDirectory={file.isDirectory} size={dragIconSize} />
       </div>
       {/* Drag Icon & Tooltip Setup */}
     </div>

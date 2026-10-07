@@ -38,6 +38,9 @@ namespace Backend.Services
 
             if (string.IsNullOrEmpty(username) || username.Length < 3 || username.Length > 50)
                 return "Username must be 3-50 characters";
+            // Logins with an @ are treated as emails, so usernames can't contain one
+            if (username.Contains('@'))
+                return "Username can't contain @";
             if (string.IsNullOrEmpty(email) || email.Length > 100)
                 return "Email must be 100 characters or fewer";
 
@@ -92,12 +95,18 @@ namespace Backend.Services
         }
 
         // Validates user credentials; returns the user, or null if the email/password is wrong
+        // Validates credentials; the identifier is an email (contains @) or a username.
+        // Returns the user, or null if the identifier/password is wrong.
         public async Task<UserModel?> ValidateUser(LoginModel user, DatabaseServices db)
         {
-            var userRecord = await db.GetUserByEmail(user.Email.Trim());
+            var identifier = user.Identifier;
+            var userRecord = identifier.Contains('@')
+                ? await db.GetUserByEmail(identifier)
+                : await db.GetUserByUsername(identifier);
+
             if (userRecord == null)
             {
-                // Spend the same time as a real check so response timing doesn't reveal which emails exist
+                // Spend the same time as a real check so response timing doesn't reveal which accounts exist
                 BCrypt.Net.BCrypt.Verify(user.Password, DummyHash);
                 return null;
             }
@@ -105,7 +114,7 @@ namespace Backend.Services
             if (!BCrypt.Net.BCrypt.Verify(user.Password, userRecord.Password))
                 return null;
 
-            await db.UpdateUserLastLogin(user);
+            await db.UpdateUserLastLogin(userRecord.Id.ToString());
             return userRecord;
         }
 

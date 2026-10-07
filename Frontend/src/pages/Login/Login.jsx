@@ -6,7 +6,7 @@ import { setToken } from "../../utils/auth";
 import ServerStatus from "../../components/ServerStatus";
 
 function Login() {
-    const [email, setEmail] = useState("");
+    const [identifier, setIdentifier] = useState("");
     const [password, setPassword] = useState("");
     const [errors, setErrors] = useState({});
     const [loginError, setLoginError] = useState(null);
@@ -25,8 +25,7 @@ function Login() {
 
     const validateForm = () => {
         const newErrors = {};
-        if (!email) newErrors.email = "Email is required";
-        else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = "Email is invalid";
+        if (!identifier.trim()) newErrors.identifier = "Enter your email or username";
         // Only check it's present: older accounts may predate the current password rules
         if (!password) newErrors.password = "Password is required";
         return newErrors;
@@ -43,13 +42,13 @@ function Login() {
 
         setSubmitting(true);
         try {
-            const response = await login(email, password);
+            const response = await login(identifier.trim(), password);
             if (response.status === 200) {
                 setToken(response.data.success);
                 navigate("/dashboard", { replace: true });
                 return;
             }
-            // e.g. "Invalid email or password" or the rate-limit message
+            // e.g. "Invalid email/username or password" or the rate-limit message
             setLoginError(response.data?.error || "Login failed");
         } catch {
             setLoginError("Can't reach the server. Please try again.");
@@ -72,19 +71,20 @@ function Login() {
 
                 <form onSubmit={handleSubmit} noValidate>
                     <div className="auth-field">
-                        <label htmlFor="login-email">Email address</label>
+                        <label htmlFor="login-identifier">Email or username</label>
                         <input
-                            id="login-email"
-                            name="email"
-                            type="email"
-                            autoComplete="email"
-                            placeholder="you@example.com"
-                            value={email}
-                            onChange={edit(setEmail, "email")}
-                            aria-invalid={!!errors.email}
-                            aria-describedby={errors.email ? "login-email-error" : undefined}
+                            id="login-identifier"
+                            name="username"
+                            type="text"
+                            autoComplete="username"
+                            autoCapitalize="none"
+                            spellCheck={false}
+                            value={identifier}
+                            onChange={edit(setIdentifier, "identifier")}
+                            aria-invalid={!!errors.identifier}
+                            aria-describedby={errors.identifier ? "login-identifier-error" : undefined}
                         />
-                        {errors.email && <div id="login-email-error" className="auth-field-error">{errors.email}</div>}
+                        {errors.identifier && <div id="login-identifier-error" className="auth-field-error">{errors.identifier}</div>}
                     </div>
 
                     <div className="auth-field">

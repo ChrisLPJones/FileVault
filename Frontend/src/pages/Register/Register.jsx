@@ -33,6 +33,8 @@ function Register() {
         if (!trimmedUsername) newErrors.username = "Username is required";
         else if (trimmedUsername.length < 3 || trimmedUsername.length > 50)
             newErrors.username = "Username must be 3-50 characters";
+        else if (trimmedUsername.includes("@"))
+            newErrors.username = "Username can't contain @";
 
         if (!email) newErrors.email = "Email is required";
         else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = "Email is invalid";

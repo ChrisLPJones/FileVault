@@ -50,7 +50,7 @@ const FolderTree = ({ folder, onFileOpen }) => {
             />
           </span>
           <div className="sb-folder-details">
-            <FileTypeIcon isDirectory open={isOpen || isActive} size={22} />
+            <FileTypeIcon name={folder.name} path={folder.path} isDirectory open={isOpen || isActive} size={22} />
             <span className="sb-folder-name" title={folder.name}>
               {folder.name}
             </span>
@@ -73,7 +73,7 @@ const FolderTree = ({ folder, onFileOpen }) => {
       >
         <span className="non-expanable"></span>
         <div className="sb-folder-details">
-          <FileTypeIcon isDirectory open={isActive} size={22} />
+          <FileTypeIcon name={folder.name} path={folder.path} isDirectory open={isActive} size={22} />
           <span className="sb-folder-name" title={folder.name}>
             {folder.name}
           </span>

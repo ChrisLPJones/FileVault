@@ -4,8 +4,9 @@ import { api } from "../api/api";
 // and don't attach or refresh an access token for these calls
 const authRequest = { validateStatus: () => true, skipAuth: true };
 
-export const login = async (Email, Password) => {
-    return api.post("/user/login", { Email, Password }, authRequest);
+// identifier: email address or username
+export const login = async (identifier, Password) => {
+    return api.post("/user/login", { Login: identifier, Password }, authRequest);
 };
 
 export const register = async (Username, Email, Password) => {

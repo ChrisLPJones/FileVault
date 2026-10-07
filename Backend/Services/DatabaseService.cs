@@ -632,18 +632,42 @@ public class DatabaseServices
 
 
     // 
-    public async Task UpdateUserLastLogin(LoginModel user)
+    // Record a successful login
+    public async Task UpdateUserLastLogin(string userId)
     {
-        using var connection = new SqlConnection(_connectionString);
+        await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "Update Users SET LastLogin = @LastLogin WHERE Email = @Email";
-        using var command = new SqlCommand(query, connection);
-
+        const string query = "UPDATE Users SET LastLogin = @LastLogin WHERE Id = @UserId";
+        await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@LastLogin", DateTime.UtcNow);
-        command.Parameters.AddWithValue("@Email", user.Email);
-
+        command.Parameters.AddWithValue("@UserId", userId);
         await command.ExecuteNonQueryAsync();
+    }
+
+
+
+    // Retrieve a user by username (case-insensitive, like the database collation), or null
+    public async Task<UserModel?> GetUserByUsername(string username)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Username = @Username";
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@Username", username);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+            return null;
+
+        return new UserModel
+        {
+            Id = reader.GetGuid(0),
+            Username = reader.GetString(1),
+            Email = reader.GetString(2),
+            Password = reader.GetString(3),
+        };
     }
 
 

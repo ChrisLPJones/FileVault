@@ -120,7 +120,7 @@ namespace Backend.Test
 
             var wrongPassword = await client.PostAsJsonAsync("/user/login", new LoginModel { Email = NewEmail(), Password = "Wr0ngPassword" });
             wrongPassword.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-            (await wrongPassword.Content.ReadAsStringAsync()).Should().Contain("Invalid email or password");
+            (await wrongPassword.Content.ReadAsStringAsync()).Should().Contain("Invalid email/username or password");
         }
 
         [Fact]
@@ -324,7 +324,7 @@ namespace Backend.Test
             // Copying the 600-byte file would also go over the 1000-byte quota
             var files = await client.SendAsync(Authed(HttpMethod.Get, "/files", token));
             using var json = JsonDocument.Parse(await files.Content.ReadAsStringAsync());
-            var fileId = json.RootElement[0].GetProperty("_id").GetString();
+            var fileId = json.RootElement.EnumerateArray().First(e => !e.GetProperty("isDirectory").GetBoolean()).GetProperty("_id").GetString();
             var copy = await client.SendAsync(Authed(HttpMethod.Post, "/copy", token, new { sourceIds = new[] { fileId } }));
             copy.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
         }
@@ -363,6 +363,56 @@ namespace Backend.Test
             response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
             (await response.Content.ReadAsStringAsync()).Should().Be("{\"error\":\"An internal error has occurred\"}");
             response.Headers.GetValues("Access-Control-Allow-Origin").Should().ContainSingle("http://localhost:5173");
+        }
+
+        [Fact]
+        public async Task NewAccount_StartsWithDefaultFolders()
+        {
+            var (client, token, _) = await NewUserSessionAsync();
+
+            var files = await client.SendAsync(Authed(HttpMethod.Get, "/files", token));
+            using var json = JsonDocument.Parse(await files.Content.ReadAsStringAsync());
+            var items = json.RootElement.EnumerateArray()
+                .Select(e => (path: e.GetProperty("path").GetString(), isDirectory: e.GetProperty("isDirectory").GetBoolean()))
+                .ToList();
+
+            items.Should().BeEquivalentTo(new[]
+            {
+                ("/Documents", true), ("/Pictures", true), ("/Music", true), ("/Videos", true)
+            });
+        }
+
+        [Fact]
+        public async Task Login_WorksWithEmailOrUsername_IgnoringCase()
+        {
+            var client = NewClient(_factory);
+            var email = NewEmail();
+            var username = $"Name_{Guid.NewGuid():N}"[..20];
+            (await client.PostAsJsonAsync("/user/register", new UserModel { Username = username, Email = email, Password = Password }))
+                .EnsureSuccessStatusCode();
+
+            async Task<HttpStatusCode> LoginAs(object body) => (await client.PostAsJsonAsync("/user/login", body)).StatusCode;
+
+            (await LoginAs(new { login = username, password = Password })).Should().Be(HttpStatusCode.OK);
+            (await LoginAs(new { login = username.ToUpperInvariant(), password = Password })).Should().Be(HttpStatusCode.OK);
+            (await LoginAs(new { login = email, password = Password })).Should().Be(HttpStatusCode.OK);
+            (await LoginAs(new { email, password = Password })).Should().Be(HttpStatusCode.OK); // older clients
+            (await LoginAs(new { login = username, password = "Wr0ngPassword" })).Should().Be(HttpStatusCode.Unauthorized);
+
+            var (token, _, _) = await LoginAsync(client, email);
+            _usersToDelete.Add((client, token));
+        }
+
+        [Fact]
+        public async Task Register_RejectsUsernamesContainingAt()
+        {
+            var client = NewClient(_factory);
+
+            var response = await client.PostAsJsonAsync("/user/register",
+                new UserModel { Username = "someone@home", Email = NewEmail(), Password = Password });
+
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            (await response.Content.ReadAsStringAsync()).Should().Contain("can't contain @");
         }
 
         [Fact]

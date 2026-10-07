@@ -101,6 +101,13 @@ function Glyph({ kind, color }) {
           <circle cx="5" cy="3.3" r="0.6" fill={color} />
         </g>
       );
+    case "page":
+      return (
+        <g {...stroke}>
+          <path d="M3.2 1.2h5l2.6 2.6v8a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1v-9.6a1 1 0 0 1 1-1Z" />
+          <path d="M4.6 6.5h4.2M4.6 9h4.2" />
+        </g>
+      );
     default: // text-like documents
       return (
         <g {...stroke}>
@@ -110,8 +117,12 @@ function Glyph({ kind, color }) {
   }
 }
 
-function FolderIcon({ size, open }) {
+// Top-level folders that get a symbol on the front, like Windows' Documents/Pictures/Music/Videos
+const SPECIAL_FOLDERS = { documents: "page", pictures: "image", music: "note", videos: "play" };
+
+function FolderIcon({ size, open, name, path }) {
   const id = useId();
+  const special = path === `/${name}` ? SPECIAL_FOLDERS[name?.toLowerCase()] : undefined;
   return (
     <svg className="file-type-icon folder" width={size} height={size} viewBox="0 0 48 48" aria-hidden="true" focusable="false">
       <defs>
@@ -135,6 +146,12 @@ function FolderIcon({ size, open }) {
       )}
       {/* Light edge along the top of the flap */}
       <path d={open ? "M7.6 20.4h36.6" : "M7 18.4h34"} stroke="var(--fv-folder-highlight)" strokeWidth="0.9" strokeLinecap="round" />
+      {/* Symbol for Documents / Pictures / Music / Videos */}
+      {special && (
+        <g transform={open ? "translate(17.5 23.5)" : "translate(17 22.5)"} opacity="0.9">
+          <Glyph kind={special} color="var(--fv-folder-glyph)" />
+        </g>
+      )}
     </svg>
   );
 }
@@ -184,6 +201,9 @@ function DocumentIcon({ name, size }) {
   );
 }
 
-export default function FileTypeIcon({ name, isDirectory = false, size = 48, open = false }) {
-  return isDirectory ? <FolderIcon size={size} open={open} /> : <DocumentIcon name={name} size={size} />;
+// path is the item's full path (e.g. "/Music"); it marks top-level special folders
+export default function FileTypeIcon({ name, path, isDirectory = false, size = 48, open = false }) {
+  return isDirectory
+    ? <FolderIcon size={size} open={open} name={name} path={path} />
+    : <DocumentIcon name={name} size={size} />;
 }
