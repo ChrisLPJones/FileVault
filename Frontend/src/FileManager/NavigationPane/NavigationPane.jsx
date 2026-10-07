@@ -3,9 +3,10 @@ import FolderTree from "./FolderTree";
 import { getParentPath } from "../../utils/getParentPath";
 import { useFiles } from "../../contexts/FilesContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
+import { MdMenu } from "react-icons/md";
 import "./NavigationPane.scss";
 
-const NavigationPane = ({ onFileOpen }) => {
+const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
   const [foldersTree, setFoldersTree] = useState([]);
   const { files } = useFiles();
   const t = useTranslation();
@@ -34,7 +35,15 @@ const NavigationPane = ({ onFileOpen }) => {
   }, [files]);
 
   return (
-    <div className="sb-folders-list">
+    <div className={`sb-folders-list ${compact ? "compact" : ""}`}>
+      <button
+        type="button"
+        className="nav-toggle"
+        title={compact ? "Expand folders" : "Collapse folders"}
+        onClick={onToggleCompact}
+      >
+        <MdMenu size={20} />
+      </button>
       {foldersTree?.length > 0 ? (
         <>
           {foldersTree?.map((folder, index) => {
