@@ -490,3 +490,7 @@ Backend/appsettings.Development.json
 
 # Local docker compose additions (template: docker-compose.override.example.yml)
 docker-compose.override.yml
+
+# Local-only VS Code files (Backend/Docker/.vscode holds personal DB connections with credentials)
+Backend/Docker/.vscode/
+Backend/.vscode/launch.json
