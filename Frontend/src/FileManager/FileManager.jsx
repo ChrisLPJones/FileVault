@@ -15,6 +15,7 @@ import PropTypes from "prop-types";
 import { dateStringValidator, urlValidator } from "../validators/propValidators";
 import { TranslationProvider } from "../contexts/TranslationProvider";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { defaultPermissions } from "../constants";
 import { formatDate as defaultFormatDate } from "../utils/formatDate";
 import "./FileManager.scss";
@@ -56,6 +57,7 @@ const FileManager = ({
   className = "",
   style = {},
   formatDate = defaultFormatDate,
+  toolbarContainer = null, // optional element to render the toolbar into (e.g. the app header)
 }) => {
   const [isNavigationPaneOpen, setNavigationPaneOpen] = useState(defaultNavExpanded);
   const triggerAction = useTriggerAction();
@@ -75,7 +77,7 @@ const FileManager = ({
 
   return (
     <main
-      className={`file-explorer ${className}`}
+      className={`file-explorer ${toolbarContainer ? "toolbar-external" : ""} ${className}`}
       onContextMenu={(e) => e.preventDefault()}
       style={{ ...customStyles, ...style }}
     >
@@ -90,12 +92,23 @@ const FileManager = ({
             >
               <ClipBoardProvider onPaste={onPaste} onCut={onCut} onCopy={onCopy}>
                 <LayoutProvider layout={layout}>
-                  <Toolbar
-                    onLayoutChange={onLayoutChange}
-                    onRefresh={onRefresh}
-                    triggerAction={triggerAction}
-                    permissions={permissions}
-                  />
+                  {/* The toolbar can live elsewhere (the app header) but stays inside these providers */}
+                  {toolbarContainer
+                    ? createPortal(
+                        <Toolbar
+                          onLayoutChange={onLayoutChange}
+                          onRefresh={onRefresh}
+                          triggerAction={triggerAction}
+                          permissions={permissions}
+                        />,
+                        toolbarContainer
+                      )
+                    : <Toolbar
+                      onLayoutChange={onLayoutChange}
+                      onRefresh={onRefresh}
+                      triggerAction={triggerAction}
+                      permissions={permissions}
+                    />}
                   <section
                     ref={containerRef}
                     onMouseMove={handleMouseMove}
@@ -218,6 +231,7 @@ FileManager.propTypes = {
   className: PropTypes.string,
   style: PropTypes.object,
   formatDate: PropTypes.func,
+  toolbarContainer: PropTypes.instanceOf(typeof Element === "undefined" ? Object : Element),
 };
 
 export default FileManager;

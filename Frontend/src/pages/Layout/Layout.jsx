@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import "./Layout.css";
 import { logout } from "../../api/api";
 import { isAuthenticated } from "../../utils/auth";
 import UserMenu from "../../components/UserMenu";
+import { HeaderSlotContext } from "../../contexts/HeaderSlotContext";
 
 const navClass = ({ isActive }) => `link-style${isActive ? " active" : ""}`;
 
@@ -12,6 +13,8 @@ const Layout = () => {
     useLocation();
     const navigate = useNavigate();
     const loggedIn = isAuthenticated();
+    // Middle of the top bar; the dashboard renders the file toolbar into it
+    const [headerSlot, setHeaderSlot] = useState(null);
 
     const handleLogout = () => {
         logout();
@@ -39,15 +42,17 @@ const Layout = () => {
                         )}
                     </div>
 
-                    {loggedIn && (
-                        <div className="nav-right">
-                            <UserMenu onLogout={handleLogout} />
-                        </div>
-                    )}
+                    <div className="nav-center" ref={setHeaderSlot} />
+
+                    <div className="nav-right">
+                        {loggedIn && <UserMenu onLogout={handleLogout} />}
+                    </div>
                 </nav>
             </header>
             <main className="main-style">
-                <Outlet />
+                <HeaderSlotContext.Provider value={headerSlot}>
+                    <Outlet />
+                </HeaderSlotContext.Provider>
             </main>
         </div>
     );

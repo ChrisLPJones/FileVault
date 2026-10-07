@@ -57,3 +57,91 @@ html, body {
     outline: 2px solid var(--fv-focus-ring);
     outline-offset: 2px;
 }
+
+/* Keep the header above the page so dropdowns that open from it (view switcher, account
+   menu) aren't covered by the file area */
+.header-style {
+    position: relative;
+    z-index: 20;
+}
+
+.nav-left,
+.nav-right {
+    flex: 0 0 auto;
+}
+
+/* Middle of the top bar: the dashboard puts the file toolbar here */
+.nav-center {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    justify-content: center;
+    padding: 0 1rem;
+}
+
+.nav-center .toolbar,
+.nav-center .toolbar.file-selected {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--fv-header-text);
+}
+
+.nav-center .fm-toolbar,
+.nav-center .file-action-container {
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.nav-center .toolbar .item-action {
+    background-color: transparent;
+    color: var(--fv-header-text);
+    padding: 7px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.nav-center .toolbar .item-action:hover:not(:disabled),
+.nav-center .toolbar .icon-only:focus-visible {
+    background-color: rgba(255, 255, 255, 0.14) !important;
+    color: var(--fv-header-text);
+    text-shadow: none;
+    border-radius: 4px;
+}
+
+.nav-center .toolbar .item-action:focus-visible {
+    outline: 2px solid var(--fv-focus-ring);
+    outline-offset: 1px;
+}
+
+.nav-center .toolbar .item-separator {
+    height: 20px;
+    align-self: center;
+    background: rgba(255, 255, 255, 0.25);
+}
+
+/* The view switcher opens below the header on the page's colours */
+.nav-center .toolbar .toggle-view {
+    color: var(--fm-text);
+    top: calc(100% + 10px);
+    right: 0;
+    box-shadow: var(--fv-shadow);
+}
+
+/* Narrow windows: icons only (each button keeps its name as a tooltip) */
+@media (max-width: 900px) {
+    .nav-center .fm-toolbar .item-action span,
+    .nav-center .file-action-container > div .item-action span {
+        display: none;
+    }
+}
+
+@media (max-width: 560px) {
+    .nav-center .file-action-container > .item-action span {
+        display: none;
+    }
+}

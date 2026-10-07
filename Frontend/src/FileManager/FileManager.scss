@@ -138,3 +138,7 @@ svg {
     width: 40%;
   }
 }
+// No toolbar above the files when it is rendered in the app header
+.file-explorer.toolbar-external .files-container {
+  height: 100%;
+}

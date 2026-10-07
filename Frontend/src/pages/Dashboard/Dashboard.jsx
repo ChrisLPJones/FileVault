@@ -9,6 +9,7 @@ import { getAllFilesAPI } from "../../api/getAllFilesAPI";
 import { renameAPI } from "../../api/renameAPI";
 import "./Dashboard.scss";
 import FileManager from "../../FileManager/FileManager";
+import { useHeaderSlot } from "../../contexts/HeaderSlotContext";
 
 // Matches the API's default Storage:MaxUploadBytes until /user/usage responds
 const DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -18,6 +19,8 @@ const fileUploadConfig = {
 };
 
 function Dashboard() {
+    // The file toolbar goes in the middle of the top bar
+    const headerSlot = useHeaderSlot();
     const [isLoading, setIsLoading] = useState(true);
     const [files, setFiles] = useState([]);
     const [currentPath, setCurrentPath] = useState("");
@@ -126,6 +129,7 @@ function Dashboard() {
                     width="100%"
                     initialPath={currentPath}
                     onFolderChange={setCurrentPath}
+                    toolbarContainer={headerSlot}
                 />
             </div>
         </div>
