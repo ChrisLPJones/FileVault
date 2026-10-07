@@ -283,22 +283,24 @@ label.settings-button.disabled {
     outline-offset: 2px;
 }
 
-.accent-custom {
+/* Same size and shape as the preset swatches; margin reset because ".settings-card label" adds a bottom margin */
+.settings-card .accent-custom {
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 28px;
     height: 28px;
+    margin: 0;
     box-sizing: border-box;
-    border: 1px solid var(--fv-border, #ccc);
-    border-radius: 6px;
-    background-color: var(--fv-surface, transparent);
+    border: 2px solid var(--fv-border, #ccc);
+    border-radius: 50%;
+    background-color: var(--fv-input-bg, transparent);
     color: var(--fv-text, currentColor);
     cursor: pointer;
 }
 
-.accent-custom.selected {
+.settings-card .accent-custom.selected {
     color: #fff;
     border-color: transparent;
     outline: 2px solid var(--fv-text, currentColor);
@@ -309,11 +311,13 @@ label.settings-button.disabled {
     filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
 }
 
-.accent-custom input {
+.settings-card .accent-custom input {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
+    padding: 0;
+    border: none;
     opacity: 0;
     cursor: pointer;
 }
