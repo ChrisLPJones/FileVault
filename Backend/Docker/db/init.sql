@@ -92,6 +92,24 @@ END
 GO
 
 ------------------------------------------------------------
+-- FILES INDEXES (added to existing databases too)
+------------------------------------------------------------
+-- Listing a user's files, summing their storage and checking names in a folder
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Files_UserId_ParentId' AND object_id = OBJECT_ID('Files'))
+BEGIN
+    CREATE INDEX IX_Files_UserId_ParentId ON Files (UserId, ParentId) INCLUDE (FileName, IsDirectory, Size);
+    PRINT 'Index "IX_Files_UserId_ParentId" created.';
+END
+
+-- Walking folder trees (recursive queries and the delete trigger)
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Files_ParentId' AND object_id = OBJECT_ID('Files'))
+BEGIN
+    CREATE INDEX IX_Files_ParentId ON Files (ParentId);
+    PRINT 'Index "IX_Files_ParentId" created.';
+END
+GO
+
+------------------------------------------------------------
 -- STORAGE QUOTA COLUMN (added to existing databases too)
 ------------------------------------------------------------
 -- Per-user storage limit in bytes. NULL = the API's Storage:DefaultQuotaBytes.
