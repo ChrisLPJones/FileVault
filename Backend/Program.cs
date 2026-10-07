@@ -143,7 +143,7 @@ namespace Backend
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");
-            Directory.CreateDirectory(_storageRoot);
+            Directory.CreateDirectory(_storageRoot ?? throw new InvalidOperationException("StorageRoot is not set."));
 
             // Start the web application
             app.Run();

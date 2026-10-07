@@ -1,6 +1,5 @@
-﻿namespace Backend.Models
+namespace Backend.Models
 {
-#nullable enable
     public record HttpReturnResult
     {
         public bool Success { get; init; }

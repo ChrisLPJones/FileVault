@@ -1,12 +1,14 @@
 using Backend.Models;
 using System.IO.Compression;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 
 namespace Backend.Services;
 
 public class FileServices(IConfiguration config, FileEncryption encryption, ILogger<FileServices> logger)
 {
-    private readonly string _storageRoot = config.GetValue<string>("StorageRoot");
+    private readonly string _storageRoot = config.GetValue<string>("StorageRoot")
+        ?? throw new InvalidOperationException("StorageRoot is not set.");
 
     public const long DefaultQuotaBytes = 1L * 1024 * 1024 * 1024; // 1 GB
     public const long DefaultMaxUploadBytes = 100L * 1024 * 1024;  // 100 MB
@@ -22,7 +24,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     }
 
     // Returns an error if adding `bytes` would exceed the user's quota
-    private async Task<HttpReturnResult> CheckQuotaAsync(DatabaseServices db, string userId, long bytes)
+    private async Task<HttpReturnResult?> CheckQuotaAsync(DatabaseServices db, string userId, long bytes)
     {
         var usage = await GetUsageAsync(db, userId);
         if (usage.Used + bytes <= usage.Quota)
@@ -65,7 +67,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     }
 
     // A copied file reuses the same ciphertext, so re-wrap its data key for the new GUID
-    private string RewrapKey(string wrappedKey, string oldGuid, string newGuid)
+    private string? RewrapKey(string? wrappedKey, string oldGuid, string newGuid)
     {
         if (wrappedKey == null)
             return null;
@@ -139,10 +141,10 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
 
     public async Task<HttpReturnResult> CreateFolder(FolderModel request, DatabaseServices db, string userId)
     {
-        request.Name = request.Name?.Trim();
-        var nameError = ValidateName(request.Name);
-        if (nameError != null)
+        var name = request.Name?.Trim();
+        if (!TryValidateName(name, out var nameError))
             return new HttpReturnResult(false, nameError);
+        request.Name = name;
 
         request._id = Guid.NewGuid().ToString(); // Unique ID
         request.IsDirectory = true;
@@ -161,10 +163,10 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
             parentPath = parentFolder.Path;
         }
 
-        if ((await db.GetNamesInFolderAsync(request.ParentId, userId)).Contains(request.Name))
-            return HttpReturnResult.Conflict($"An item named \"{request.Name}\" already exists here");
+        if ((await db.GetNamesInFolderAsync(request.ParentId, userId)).Contains(name))
+            return HttpReturnResult.Conflict($"An item named \"{name}\" already exists here");
 
-        request.Path = $"{parentPath}/{request.Name}".Replace("//", "/"); // construct full path
+        request.Path = $"{parentPath}/{name}".Replace("//", "/"); // construct full path
         request.Size = 0;
         request.MimeType = "";
 
@@ -184,18 +186,15 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
 
     private static readonly char[] InvalidNameChars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
-    // Returns an error message if the name can't be used for a file or folder
-    public static string ValidateName(string name)
+    // True if the name can be used for a file or folder; otherwise `error` says why
+    public static bool TryValidateName([NotNullWhen(true)] string? name, [NotNullWhen(false)] out string? error)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            return "Name is required";
-        if (name.Length > 255)
-            return "Name must be 255 characters or fewer";
-        if (name == "." || name == "..")
-            return "Name is not allowed";
-        if (name.IndexOfAny(InvalidNameChars) >= 0 || name.Any(char.IsControl))
-            return "Name can't contain \\ / : * ? \" < > |";
-        return null;
+        error = string.IsNullOrWhiteSpace(name) ? "Name is required"
+            : name.Length > 255 ? "Name must be 255 characters or fewer"
+            : name == "." || name == ".." ? "Name is not allowed"
+            : name.IndexOfAny(InvalidNameChars) >= 0 || name.Any(char.IsControl) ? "Name can't contain \\ / : * ? \" < > |"
+            : null;
+        return error == null;
     }
 
     // Absolute path of a stored file on disk
@@ -204,17 +203,20 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     // Path of the parent folder for a stored item path ("/a/b.txt" -> "/a", "/b.txt" -> "")
     private static string ParentPath(string path) => path[..Math.Max(0, path.LastIndexOf('/'))];
 
+    // A folder to move/copy into: Id null means the root (Path "")
+    private sealed record Destination(string? Id, string Path);
+
     // Resolve a destination folder; null/empty id means the root
-    private static async Task<(HttpReturnResult error, string id, string path)> ResolveDestinationAsync(
-        string destinationId, DatabaseServices db, string userId)
+    private static async Task<ServiceResult<Destination>> ResolveDestinationAsync(
+        string? destinationId, DatabaseServices db, string userId)
     {
         if (string.IsNullOrEmpty(destinationId))
-            return (null, null, "");
+            return ServiceResult<Destination>.Success(new Destination(null, ""));
 
         var folder = await db.GetFolderById(destinationId, userId);
         return folder == null
-            ? (HttpReturnResult.NotFound("Destination folder not found"), null, null)
-            : (null, folder._id, folder.Path);
+            ? HttpReturnResult.NotFound("Destination folder not found")
+            : ServiceResult<Destination>.Success(new Destination(folder._id, folder.Path));
     }
 
     // "report.pdf" -> "report (1).pdf" until the name is free
@@ -238,42 +240,42 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
 
 
     // Open a file for download as a seekable plaintext stream
-    public async Task<(HttpReturnResult error, FileRecord file, Stream stream)> GetDownloadAsync(
+    public async Task<ServiceResult<DownloadFile>> GetDownloadAsync(
         string fileId, DatabaseServices db, string userId)
     {
         if (!Guid.TryParse(fileId, out _))
-            return (HttpReturnResult.NotFound("File not found."), null, null);
+            return HttpReturnResult.NotFound("File not found.");
 
         var file = await db.GetItemAsync(fileId, userId);
         if (file == null || file.IsDirectory || !File.Exists(StoredPath(file.Guid)))
-            return (HttpReturnResult.NotFound("File not found."), null, null);
+            return HttpReturnResult.NotFound("File not found.");
 
         try
         {
-            return (null, file, OpenStoredFile(file));
+            return ServiceResult<DownloadFile>.Success(new DownloadFile(file, OpenStoredFile(file)));
         }
         catch (CryptographicException ex)
         {
             logger.LogError(ex, "Could not decrypt stored file {FileGuid}", file.Guid);
-            return (new HttpReturnResult(false, "File could not be decrypted") { StatusCode = 500 }, null, null);
+            return new HttpReturnResult(false, "File could not be decrypted") { StatusCode = 500 };
         }
     }
 
 
 
     // Build a zip of the given files/folders in a temp file that is deleted when the stream closes
-    public async Task<(HttpReturnResult error, Stream stream, string fileName)> CreateZipAsync(
-        List<string> ids, DatabaseServices db, string userId)
+    public async Task<ServiceResult<ZipDownload>> CreateZipAsync(
+        List<string>? ids, DatabaseServices db, string userId)
     {
         if (ids == null || ids.Count == 0)
-            return (new HttpReturnResult(false, "No items selected"), null, null);
+            return new HttpReturnResult(false, "No items selected");
 
         var trees = new List<List<FileRecord>>();
         foreach (var id in ids.Distinct())
         {
             var tree = Guid.TryParse(id, out _) ? await db.GetTreeAsync(id, userId) : [];
             if (tree.Count == 0)
-                return (HttpReturnResult.NotFound("File not found."), null, null);
+                return HttpReturnResult.NotFound("File not found.");
             trees.Add(tree);
         }
 
@@ -314,13 +316,13 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
 
             stream.Position = 0;
             var fileName = trees.Count == 1 && trees[0][0].IsDirectory ? $"{trees[0][0].Name}.zip" : "FileVault.zip";
-            return (null, stream, fileName);
+            return ServiceResult<ZipDownload>.Success(new ZipDownload(stream, fileName));
         }
         catch (Exception ex)
         {
             await stream.DisposeAsync();
             logger.LogError(ex, "Creating a zip failed for user {UserId}", userId);
-            return (new HttpReturnResult(false, "Error creating zip") { StatusCode = 500 }, null, null);
+            return new HttpReturnResult(false, "Error creating zip") { StatusCode = 500 };
         }
     }
 
@@ -330,11 +332,10 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     public async Task<HttpReturnResult> Rename(RenameRequest request, DatabaseServices db, string userId)
     {
         var newName = request?.NewName?.Trim();
-        var nameError = ValidateName(newName);
-        if (nameError != null)
+        if (!TryValidateName(newName, out var nameError))
             return new HttpReturnResult(false, nameError);
 
-        var item = Guid.TryParse(request.Id, out _) ? await db.GetItemAsync(request.Id, userId) : null;
+        var item = request?.Id is string id && Guid.TryParse(id, out _) ? await db.GetItemAsync(id, userId) : null;
         if (item == null)
             return HttpReturnResult.NotFound("File not found.");
 
@@ -364,9 +365,10 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
         if (request?.SourceIds == null || request.SourceIds.Count == 0)
             return new HttpReturnResult(false, "No items selected");
 
-        var (destError, destId, destPath) = await ResolveDestinationAsync(request.DestinationId, db, userId);
-        if (destError != null)
-            return destError;
+        var destination = await ResolveDestinationAsync(request.DestinationId, db, userId);
+        if (!destination.Ok)
+            return destination.Error;
+        var (destId, destPath) = destination.Value;
 
         // Validate everything before changing anything
         var takenNames = await db.GetNamesInFolderAsync(destId, userId);
@@ -413,9 +415,10 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
         if (request?.SourceIds == null || request.SourceIds.Count == 0)
             return new HttpReturnResult(false, "No items selected");
 
-        var (destError, destId, destPath) = await ResolveDestinationAsync(request.DestinationId, db, userId);
-        if (destError != null)
-            return destError;
+        var destination = await ResolveDestinationAsync(request.DestinationId, db, userId);
+        if (!destination.Ok)
+            return destination.Error;
+        var (destId, destPath) = destination.Value;
 
         // Validate everything before copying anything
         var trees = new List<List<FileRecord>>();
@@ -454,7 +457,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
                     Name = t == root ? rootName : t.Name,
                     IsDirectory = t.IsDirectory,
                     Path = t == root ? rootPath : rootPath + t.Path[root.Path.Length..],
-                    ParentId = t == root ? destId : newGuids[t.ParentId],
+                    ParentId = t == root || t.ParentId is null ? destId : newGuids[t.ParentId],
                     Size = t.Size,
                     MimeType = t.MimeType,
                     WrappedKey = RewrapKey(t.WrappedKey, t.Guid, newGuids[t.Guid])

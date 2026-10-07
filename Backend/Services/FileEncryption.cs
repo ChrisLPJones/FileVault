@@ -35,7 +35,7 @@ public class FileEncryption
     }
 
     // Returns the key bytes, or null if the value isn't a base64-encoded 32-byte key
-    public static byte[] ParseMasterKey(string value)
+    public static byte[]? ParseMasterKey(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;

@@ -13,7 +13,7 @@ namespace Backend.Routes
         private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
         // Read a JSON body, or null if it's missing or malformed
-        private static async Task<T> ReadJsonAsync<T>(HttpRequest request) where T : class
+        private static async Task<T?> ReadJsonAsync<T>(HttpRequest request) where T : class
         {
             try
             {
@@ -133,11 +133,12 @@ namespace Backend.Routes
                 var email = request?.Email?.Trim().ToLowerInvariant();
 
                 var validationError = AuthServices.ValidateAccount(username, email);
-                if (validationError != null)
-                    return Results.BadRequest(new { error = validationError });
+                if (validationError != null || username is null || email is null)
+                    return Results.BadRequest(new { error = validationError ?? "Invalid JSON" });
 
                 var userId = user.GetUserId();
-                if (await db.GetUserByUserId(userId) == null)
+                var account = await db.GetUserByUserId(userId);
+                if (account == null)
                     return Results.NotFound(new { error = "User not found" });
 
                 var conflict = await db.FindAccountConflictAsync(username, email, userId);
@@ -147,8 +148,9 @@ namespace Backend.Routes
                 await db.UpdateProfileAsync(userId, username, email);
 
                 // New access token so the email claim is current
-                var updated = await db.GetUserByUserId(userId);
-                return Results.Ok(new { Success = "Profile updated", Token = auth.GetJWTToken(updated) });
+                account.Username = username;
+                account.Email = email;
+                return Results.Ok(new { Success = "Profile updated", Token = auth.GetJWTToken(account) });
             }).RequireAuthorization();
 
             // Changes the authenticated user's password (requires the current one)
@@ -169,8 +171,8 @@ namespace Backend.Routes
                     return Results.BadRequest(new { error = "Current password is incorrect" });
 
                 var passwordError = AuthServices.ValidatePassword(request.NewPassword);
-                if (passwordError != null)
-                    return Results.BadRequest(new { error = passwordError });
+                if (passwordError != null || request.NewPassword is null)
+                    return Results.BadRequest(new { error = passwordError ?? "New password is required" });
 
                 await db.UpdatePasswordHashAsync(userId, auth.GeneratePasswordHash(request.NewPassword));
 

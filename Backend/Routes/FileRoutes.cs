@@ -92,10 +92,11 @@ namespace Backend.Routes
                 FileServices fs,
                 DatabaseServices db) =>
             {
-                var (error, file, stream) = await fs.GetDownloadAsync(fileId, db, user.GetUserId());
-                if (error != null)
-                    return Error(error);
+                var download = await fs.GetDownloadAsync(fileId, db, user.GetUserId());
+                if (!download.Ok)
+                    return Error(download.Error);
 
+                var (file, stream) = download.Value;
                 return Results.File(
                     fileStream: stream,
                     contentType: string.IsNullOrEmpty(file.MimeType) ? "application/octet-stream" : file.MimeType,
@@ -111,11 +112,11 @@ namespace Backend.Routes
                 FileServices fs,
                 DatabaseServices db) =>
             {
-                var (error, stream, fileName) = await fs.CreateZipAsync(request?.Ids, db, user.GetUserId());
-                if (error != null)
-                    return Error(error);
+                var zip = await fs.CreateZipAsync(request?.Ids, db, user.GetUserId());
+                if (!zip.Ok)
+                    return Error(zip.Error);
 
-                return Results.File(stream, "application/zip", fileName);
+                return Results.File(zip.Value.Stream, "application/zip", zip.Value.FileName);
             }).RequireAuthorization();
 
             // Renames a file or folder
@@ -170,7 +171,8 @@ namespace Backend.Routes
 
                 if (request?.ids.ValueKind == JsonValueKind.String)
                 {
-                    ids.Add(request.ids.GetString());
+                    if (request.ids.GetString() is string id)
+                        ids.Add(id);
                 }
                 else if (request?.ids.ValueKind == JsonValueKind.Array)
                 {
@@ -179,7 +181,7 @@ namespace Backend.Routes
                         if (element.ValueKind != JsonValueKind.String)
                             return Results.BadRequest(new { error = "Invalid ids format" });
 
-                        ids.Add(element.GetString());
+                        ids.Add(element.GetString() ?? "");
                     }
                 }
                 else

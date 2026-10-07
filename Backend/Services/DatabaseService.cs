@@ -11,7 +11,8 @@ public class DatabaseServices
 
     public DatabaseServices(IConfiguration config, ILogger<DatabaseServices> logger)
     {
-        _connectionString = config.GetConnectionString("DefaultConnection");
+        _connectionString = config.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not set.");
         _logger = logger;
     }
 
@@ -59,8 +60,8 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@Size", size);
         command.Parameters.AddWithValue("@parentId",
             string.IsNullOrEmpty(parentId) ? DBNull.Value : parentId);
-        command.Parameters.AddWithValue("@MimeType", (object)mimeType ?? DBNull.Value);
-        command.Parameters.AddWithValue("@WrappedKey", (object)wrappedKey ?? DBNull.Value);
+        command.Parameters.AddWithValue("@MimeType", (object?)mimeType ?? DBNull.Value);
+        command.Parameters.AddWithValue("@WrappedKey", (object?)wrappedKey ?? DBNull.Value);
 
         // Let failures propagate so the caller can clean up the stored file
         await command.ExecuteNonQueryAsync();
@@ -163,20 +164,20 @@ public class DatabaseServices
 
     private static FileRecord ReadFileRecord(SqlDataReader reader) => new()
     {
-        Guid = reader["GUID"].ToString(),
-        Name = reader["FileName"].ToString(),
+        Guid = (string)reader["GUID"],
+        Name = (string)reader["FileName"],
         IsDirectory = Convert.ToBoolean(reader["isDirectory"]),
-        Path = reader["FilePath"].ToString(),
-        ParentId = string.IsNullOrEmpty(reader["ParentId"]?.ToString()) ? null : reader["ParentId"].ToString(),
+        Path = reader["FilePath"] as string ?? "",
+        ParentId = reader["ParentId"] is string { Length: > 0 } parentId ? parentId : null,
         Size = Convert.ToInt64(reader["Size"]),
-        MimeType = reader["MimeType"] == DBNull.Value ? null : reader["MimeType"].ToString(),
-        WrappedKey = reader["WrappedKey"] == DBNull.Value ? null : reader["WrappedKey"].ToString()
+        MimeType = reader["MimeType"] as string,
+        WrappedKey = reader["WrappedKey"] as string
     };
 
 
 
     // Get a single file or folder owned by the user, or null if it doesn't exist
-    public async Task<FileRecord> GetItemAsync(string guid, string userId)
+    public async Task<FileRecord?> GetItemAsync(string guid, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -229,7 +230,7 @@ public class DatabaseServices
 
 
     // Get the names already used in a folder (null parentId = root), optionally ignoring one item
-    public async Task<HashSet<string>> GetNamesInFolderAsync(string parentId, string userId, string excludeGuid = null)
+    public async Task<HashSet<string>> GetNamesInFolderAsync(string? parentId, string userId, string? excludeGuid = null)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -245,8 +246,8 @@ public class DatabaseServices
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@ParentId", (object)parentId ?? DBNull.Value);
-        command.Parameters.AddWithValue("@ExcludeGuid", (object)excludeGuid ?? DBNull.Value);
+        command.Parameters.AddWithValue("@ParentId", (object?)parentId ?? DBNull.Value);
+        command.Parameters.AddWithValue("@ExcludeGuid", (object?)excludeGuid ?? DBNull.Value);
 
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -258,7 +259,7 @@ public class DatabaseServices
 
 
     // Rename and/or move an item, rewriting the stored path of everything below it
-    public async Task RelocateAsync(FileRecord item, string newParentId, string newName, string newPath, string userId)
+    public async Task RelocateAsync(FileRecord item, string? newParentId, string newName, string newPath, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -275,7 +276,7 @@ public class DatabaseServices
             {
                 command.Parameters.AddWithValue("@Name", newName);
                 command.Parameters.AddWithValue("@Path", newPath);
-                command.Parameters.AddWithValue("@ParentId", (object)newParentId ?? DBNull.Value);
+                command.Parameters.AddWithValue("@ParentId", (object?)newParentId ?? DBNull.Value);
                 command.Parameters.AddWithValue("@GUID", item.Guid);
                 command.Parameters.AddWithValue("@UserId", userId);
                 await command.ExecuteNonQueryAsync();
@@ -338,9 +339,9 @@ public class DatabaseServices
                 command.Parameters.AddWithValue("@GUID", item.Guid);
                 command.Parameters.AddWithValue("@UserId", userId);
                 command.Parameters.AddWithValue("@Size", item.Size);
-                command.Parameters.AddWithValue("@ParentId", (object)item.ParentId ?? DBNull.Value);
-                command.Parameters.AddWithValue("@MimeType", (object)item.MimeType ?? DBNull.Value);
-                command.Parameters.AddWithValue("@WrappedKey", (object)item.WrappedKey ?? DBNull.Value);
+                command.Parameters.AddWithValue("@ParentId", (object?)item.ParentId ?? DBNull.Value);
+                command.Parameters.AddWithValue("@MimeType", (object?)item.MimeType ?? DBNull.Value);
+                command.Parameters.AddWithValue("@WrappedKey", (object?)item.WrappedKey ?? DBNull.Value);
                 await command.ExecuteNonQueryAsync();
             }
 
@@ -356,7 +357,7 @@ public class DatabaseServices
 
 
     // Get a folder owned by the given user, or null if it doesn't exist or isn't a folder
-    public async Task<FolderModel> GetFolderById(string folderId, string userId)
+    public async Task<FolderModel?> GetFolderById(string folderId, string userId)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -371,11 +372,11 @@ public class DatabaseServices
         {
             return new FolderModel
             {
-                _id = reader["GUID"].ToString(),
-                Name = reader["FileName"].ToString(),
-                Path = reader["FilePath"].ToString(),
+                _id = (string)reader["GUID"],
+                Name = (string)reader["FileName"],
+                Path = reader["FilePath"] as string ?? "",
                 IsDirectory = Convert.ToBoolean(reader["isDirectory"]),
-                UserId = reader["UserId"].ToString()
+                UserId = ((Guid)reader["UserId"]).ToString()
             };
         }
 
@@ -404,9 +405,9 @@ public class DatabaseServices
         {
             filesList.Add(new FileModel
             {
-                _id = reader["GUID"].ToString(),
-                Name = reader["FileName"].ToString(),
-                Path = reader["FilePath"].ToString(),
+                _id = (string)reader["GUID"],
+                Name = (string)reader["FileName"],
+                Path = reader["FilePath"] as string ?? "",
                 UpdatedAt = Convert.ToDateTime(reader["UpdatedAt"]),
                 Size = Convert.ToInt64(reader["Size"]),
                 IsDirectory = Convert.ToBoolean(reader["isDirectory"])
@@ -444,7 +445,7 @@ public class DatabaseServices
 
 
     // Retrieve a user's information from the database by username
-    public async Task<UserModel> GetUserByEmail(string email)
+    public async Task<UserModel?> GetUserByEmail(string email)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -473,7 +474,7 @@ public class DatabaseServices
 
 
     // Returns which of the username/email is already used by another account, or null if both are free
-    public async Task<string> FindAccountConflictAsync(string username, string email, string excludeUserId)
+    public async Task<string?> FindAccountConflictAsync(string username, string email, string excludeUserId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -601,7 +602,7 @@ public class DatabaseServices
 
 
     // Retrieve user details by their user ID
-    public async Task<UserModel> GetUserByUserId(string userId)
+    public async Task<UserModel?> GetUserByUserId(string userId)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -658,7 +659,7 @@ public class DatabaseServices
         using SqlCommand command = new(query, connection);
         command.Parameters.AddWithValue("@Username", username);
 
-        int count = (int)await command.ExecuteScalarAsync();
+        int count = (int)(await command.ExecuteScalarAsync() ?? 0);
 
         return count > 0;
     }
@@ -676,7 +677,7 @@ public class DatabaseServices
         using SqlCommand command = new(query, connection);
         command.Parameters.AddWithValue("@Email", email);
 
-        int count = (int)await command.ExecuteScalarAsync();
+        int count = (int)(await command.ExecuteScalarAsync() ?? 0);
 
         return count > 0;
     }
@@ -707,7 +708,7 @@ public class DatabaseServices
 
     // Atomically revoke a refresh token so it can only be used once.
     // Returns null if the token doesn't exist. Valid is true only if this call revoked an active, unexpired token.
-    public async Task<RefreshTokenUse> ConsumeRefreshTokenAsync(string tokenHash)
+    public async Task<RefreshTokenUse?> ConsumeRefreshTokenAsync(string tokenHash)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();

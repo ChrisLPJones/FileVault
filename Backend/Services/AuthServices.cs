@@ -18,7 +18,7 @@ namespace Backend.Services
         }
 
         // Returns an error message if the password doesn't meet the policy
-        public static string ValidatePassword(string password)
+        public static string? ValidatePassword(string? password)
         {
             if (string.IsNullOrEmpty(password) || password.Length < 8)
                 return "Password must be at least 8 characters";
@@ -31,7 +31,7 @@ namespace Backend.Services
         }
 
         // Returns an error message if the username/email can't be used
-        public static string ValidateAccount(string username, string email)
+        public static string? ValidateAccount(string? username, string? email)
         {
             username = username?.Trim();
             email = email?.Trim();
@@ -67,7 +67,7 @@ namespace Backend.Services
         {
             var jwtConfig = _config.GetSection("Jwt");
 
-            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"]));
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"] ?? throw new InvalidOperationException("Jwt:Key is not set.")));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
             var claims = new[]
@@ -92,9 +92,9 @@ namespace Backend.Services
         }
 
         // Validates user credentials; returns the user, or null if the email/password is wrong
-        public async Task<UserModel> ValidateUser(LoginModel user, DatabaseServices db)
+        public async Task<UserModel?> ValidateUser(LoginModel user, DatabaseServices db)
         {
-            var userRecord = await db.GetUserByEmail(user.Email?.Trim());
+            var userRecord = await db.GetUserByEmail(user.Email.Trim());
             if (userRecord == null)
             {
                 // Spend the same time as a real check so response timing doesn't reveal which emails exist
@@ -145,7 +145,7 @@ namespace Backend.Services
 
         // Exchange the refresh cookie for a new access token and a new refresh cookie.
         // Returns null if the cookie is missing, expired, revoked or unknown.
-        public async Task<UserModel> RotateRefreshTokenAsync(DatabaseServices db, HttpContext http)
+        public async Task<UserModel?> RotateRefreshTokenAsync(DatabaseServices db, HttpContext http)
         {
             if (!http.Request.Cookies.TryGetValue(RefreshCookieName, out var token) || string.IsNullOrEmpty(token))
                 return null;
