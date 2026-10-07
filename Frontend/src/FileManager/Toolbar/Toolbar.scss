@@ -137,3 +137,8 @@
 .file-selected {
   background-color: $item-hover-color;
 }
+// A toggle that is switched on (the details pane button)
+.toolbar .icon-only.active {
+  background-color: rgba(var(--fm-shade), 0.12);
+  border-radius: 3px;
+}

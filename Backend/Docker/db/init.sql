@@ -56,6 +56,7 @@ BEGIN
         IsDirectory BIT NOT NULL,
         FilePath NVARCHAR(MAX) NULL,
         UpdatedAt DATETIME DEFAULT GETDATE(),
+        CreatedAt DATETIME NULL CONSTRAINT DF_Files_CreatedAt DEFAULT GETDATE(),
         GUID NVARCHAR(100) NOT NULL,
         UserId UNIQUEIDENTIFIER NOT NULL,
         Size BIGINT NOT NULL,
@@ -134,6 +135,20 @@ BEGIN
         AvatarUpdatedAt DATETIME2 NULL;
     PRINT 'Avatar columns added to "Users".';
 END
+GO
+
+------------------------------------------------------------
+-- FILE CREATED DATE (added to existing databases too)
+------------------------------------------------------------
+IF COL_LENGTH('Files', 'CreatedAt') IS NULL
+BEGIN
+    ALTER TABLE Files ADD CreatedAt DATETIME NULL CONSTRAINT DF_Files_CreatedAt DEFAULT GETDATE();
+    PRINT 'CreatedAt column added to "Files".';
+END
+GO
+
+-- Items from before the column existed: the closest known date is when they last changed
+UPDATE Files SET CreatedAt = UpdatedAt WHERE CreatedAt IS NULL;
 GO
 
 ------------------------------------------------------------

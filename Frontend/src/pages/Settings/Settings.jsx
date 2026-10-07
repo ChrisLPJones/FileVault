@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { FiArrowLeft } from "react-icons/fi";
 import { getErrorMessage } from "../../api/api";
 import {
     changePasswordAPI,
@@ -28,9 +29,29 @@ const Status = ({ status }) =>
         </div>
     ) : null;
 
+const BackToFiles = () => (
+    <div className="settings-back-row">
+        <Link to="/dashboard" className="settings-back">
+            <FiArrowLeft aria-hidden="true" />
+            Back to files
+        </Link>
+    </div>
+);
+
 function Settings() {
     const navigate = useNavigate();
     const { preference } = useTheme();
+
+    // Esc goes back to the files (unless typing in a field)
+    useEffect(() => {
+        const onKeyDown = (event) => {
+            if (event.key !== "Escape" || event.defaultPrevented) return;
+            if (event.target.closest?.("input, textarea, select")) return;
+            navigate("/dashboard");
+        };
+        document.addEventListener("keydown", onKeyDown);
+        return () => document.removeEventListener("keydown", onKeyDown);
+    }, [navigate]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [usage, setUsage] = useState(null);
@@ -161,6 +182,7 @@ function Settings() {
     if (loadError) {
         return (
             <div className="settings-page">
+                <BackToFiles />
                 <div className="settings-card">
                     <Status status={{ type: "danger", message: loadError }} />
                 </div>
@@ -173,6 +195,7 @@ function Settings() {
 
     return (
         <div className="settings-page">
+            <BackToFiles />
             <h1 className="settings-title">Account settings</h1>
 
             <section className="settings-card" aria-labelledby="storage-heading">

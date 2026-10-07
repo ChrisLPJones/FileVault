@@ -7,6 +7,7 @@ import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { useSelection } from "../../contexts/SelectionContext";
 import { useClipBoard } from "../../contexts/ClipboardContext";
 import { useLayout } from "../../contexts/LayoutContext";
+import { useDetailsPane } from "../../contexts/DetailsPaneContext";
 import Checkbox from "../../components/Checkbox/Checkbox";
 
 const dragIconSize = 44;
@@ -36,6 +37,7 @@ const FileItem = ({
   const iconSize = activeLayout === "grid" ? 60 : 22;
   const { setCurrentPath, currentPathFiles, onFolderChange } = useFileNavigation();
   const { setSelectedFiles } = useSelection();
+  const { setDetailsOpen } = useDetailsPane();
   const { clipBoard, handleCutCopy, setClipBoard, handlePasting } = useClipBoard();
   const dragIconRef = useRef(null);
 
@@ -50,7 +52,8 @@ const FileItem = ({
       onFolderChange?.(file.path);
       setSelectedFiles([]);
     } else {
-      enableFilePreview && triggerAction.show("previewFile");
+      // Files open in the details pane on the right, like Explorer's preview pane
+      enableFilePreview && setDetailsOpen(true);
     }
   };
 

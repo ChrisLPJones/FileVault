@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BsCopy, BsFolderPlus, BsGridFill, BsScissors } from "react-icons/bs";
+import { BsCopy, BsFolderPlus, BsGridFill, BsLayoutSidebarReverse, BsScissors } from "react-icons/bs";
 import { FiRefreshCw } from "react-icons/fi";
 import {
   MdClear,
@@ -14,6 +14,7 @@ import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { useSelection } from "../../contexts/SelectionContext";
 import { useClipBoard } from "../../contexts/ClipboardContext";
 import { useLayout } from "../../contexts/LayoutContext";
+import { useDetailsPane } from "../../contexts/DetailsPaneContext";
 import { validateApiCallback } from "../../utils/validateApiCallback";
 import { useTranslation } from "../../contexts/TranslationProvider";
 import "./Toolbar.scss";
@@ -24,6 +25,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
   const { selectedFiles, setSelectedFiles, handleDownload } = useSelection();
   const { clipBoard, setClipBoard, handleCutCopy, handlePasting } = useClipBoard();
   const { activeLayout } = useLayout();
+  const { isDetailsOpen, setDetailsOpen } = useDetailsPane();
   const t = useTranslation();
 
   // Toolbar Items
@@ -49,6 +51,12 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
   ];
 
   const toolbarRightItems = [
+    {
+      icon: <BsLayoutSidebarReverse size={16} />,
+      title: isDetailsOpen ? "Hide details" : "Show details",
+      active: isDetailsOpen,
+      onClick: () => setDetailsOpen((open) => !open),
+    },
     {
       icon: activeLayout === "grid" ? <BsGridFill size={16} /> : <FaListUl size={16} />,
       title: t("changeView"),
@@ -129,17 +137,27 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
               </button>
             )}
           </div>
-          <button
-            className="item-action file-action"
-            title={t("clearSelection")}
-            onClick={() => setSelectedFiles([])}
-          >
-            <span>
-              {selectedFiles.length}{" "}
-              {t(selectedFiles.length > 1 ? "itemsSelected" : "itemSelected")}
-            </span>
-            <MdClear size={18} />
-          </button>
+          <div className="file-action-right">
+            <button
+              className={`item-action file-action icon-only ${isDetailsOpen ? "active" : ""}`}
+              title={isDetailsOpen ? "Hide details" : "Show details"}
+              aria-pressed={isDetailsOpen}
+              onClick={() => setDetailsOpen((open) => !open)}
+            >
+              <BsLayoutSidebarReverse size={16} />
+            </button>
+            <button
+              className="item-action file-action"
+              title={t("clearSelection")}
+              onClick={() => setSelectedFiles([])}
+            >
+              <span>
+                {selectedFiles.length}{" "}
+                {t(selectedFiles.length > 1 ? "itemsSelected" : "itemSelected")}
+              </span>
+              <MdClear size={18} />
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -162,7 +180,12 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
         <div>
           {toolbarRightItems.map((item, index) => (
             <div key={index} className="toolbar-left-items">
-              <button className="item-action icon-only" title={item.title} onClick={item.onClick}>
+              <button
+                className={`item-action icon-only ${item.active ? "active" : ""}`}
+                title={item.title}
+                aria-pressed={item.active}
+                onClick={item.onClick}
+              >
                 {item.icon}
               </button>
               {index !== toolbarRightItems.length - 1 && <div className="item-separator"></div>}

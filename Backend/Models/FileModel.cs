@@ -8,6 +8,7 @@ namespace Backend.Models
         public bool IsDirectory { get; set; } = false;
         public string Path { get; set; } = "";
         public DateTime UpdatedAt { get; set; }
+        public DateTime CreatedAt { get; set; }
         public long Size { get; set; }
     }
 }

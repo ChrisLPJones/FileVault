@@ -137,13 +137,17 @@ html, body {
 /* Narrow windows: icons only (each button keeps its name as a tooltip) */
 @media (max-width: 900px) {
     .nav-center .fm-toolbar .item-action span,
-    .nav-center .file-action-container > div .item-action span {
+    .nav-center .file-action-container > div:first-child .item-action span {
         display: none;
     }
 }
 
 @media (max-width: 560px) {
-    .nav-center .file-action-container > .item-action span {
+    .nav-center .file-action-right .item-action span {
         display: none;
     }
+}
+
+.nav-center .toolbar .icon-only.active {
+    background-color: rgba(255, 255, 255, 0.14);
 }

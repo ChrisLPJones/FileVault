@@ -394,7 +394,7 @@ public class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, FileName, FilePath, UpdatedAt, GUID, isDirectory, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
+        string query = "SELECT Id, FileName, FilePath, UpdatedAt, ISNULL(CreatedAt, UpdatedAt) AS CreatedAt, GUID, isDirectory, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -409,6 +409,7 @@ public class DatabaseServices
                 Name = (string)reader["FileName"],
                 Path = reader["FilePath"] as string ?? "",
                 UpdatedAt = Convert.ToDateTime(reader["UpdatedAt"]),
+                CreatedAt = Convert.ToDateTime(reader["CreatedAt"]),
                 Size = Convert.ToInt64(reader["Size"]),
                 IsDirectory = Convert.ToBoolean(reader["isDirectory"])
             });

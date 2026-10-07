@@ -4,11 +4,13 @@ import NavigationPane from "./NavigationPane/NavigationPane";
 import BreadCrumb from "./BreadCrumb/BreadCrumb";
 import FileList from "./FileList/FileList";
 import Actions from "./Actions/Actions";
+import DetailsPane from "./DetailsPane/DetailsPane";
 import { FilesProvider } from "../contexts/FilesContext";
 import { FileNavigationProvider } from "../contexts/FileNavigationContext";
 import { SelectionProvider } from "../contexts/SelectionContext";
 import { ClipBoardProvider } from "../contexts/ClipboardContext";
 import { LayoutProvider } from "../contexts/LayoutContext";
+import { DetailsPaneProvider, useDetailsPane } from "../contexts/DetailsPaneContext";
 import { useTriggerAction } from "../hooks/useTriggerAction";
 import { useColumnResize } from "../hooks/useColumnResize";
 import PropTypes from "prop-types";
@@ -19,6 +21,12 @@ import { createPortal } from "react-dom";
 import { defaultPermissions } from "../constants";
 import { formatDate as defaultFormatDate } from "../utils/formatDate";
 import "./FileManager.scss";
+
+// The details pane, when it is switched on
+const DetailsPaneSlot = (props) => {
+  const { isDetailsOpen } = useDetailsPane();
+  return isDetailsOpen ? <DetailsPane {...props} /> : null;
+};
 
 const FileManager = ({
   files,
@@ -92,6 +100,7 @@ const FileManager = ({
             >
               <ClipBoardProvider onPaste={onPaste} onCut={onCut} onCopy={onCopy}>
                 <LayoutProvider layout={layout}>
+                <DetailsPaneProvider>
                   {/* The toolbar can live elsewhere (the app header) but stays inside these providers */}
                   {toolbarContainer
                     ? createPortal(
@@ -148,6 +157,8 @@ const FileManager = ({
                         formatDate={formatDate}
                       />
                     </div>
+
+                    <DetailsPaneSlot formatDate={formatDate} filePreviewComponent={filePreviewComponent} />
                   </section>
 
                   <Actions
@@ -157,11 +168,11 @@ const FileManager = ({
                     onDelete={onDelete}
                     onRefresh={onRefresh}
                     maxFileSize={maxFileSize}
-                    filePreviewComponent={filePreviewComponent}
                     acceptedFileTypes={acceptedFileTypes}
                     triggerAction={triggerAction}
                     permissions={permissions}
                   />
+                </DetailsPaneProvider>
                 </LayoutProvider>
               </ClipBoardProvider>
             </SelectionProvider>
@@ -181,6 +192,7 @@ FileManager.propTypes = {
       isDirectory: PropTypes.bool.isRequired,
       path: PropTypes.string.isRequired,
       updatedAt: dateStringValidator,
+      createdAt: dateStringValidator,
       size: PropTypes.number,
     })
   ).isRequired,

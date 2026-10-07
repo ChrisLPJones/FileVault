@@ -255,3 +255,30 @@ label.settings-button.disabled {
 .avatar-editor + .settings-alert {
     margin: 0 0 16px;
 }
+
+/* Way back to the file list, lined up with the cards */
+.settings-back-row {
+    max-width: 560px;
+    margin: 0 auto 12px;
+}
+
+.settings-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: -4px;
+    padding: 4px 8px 4px 4px;
+    border-radius: 4px;
+    color: var(--fv-link);
+    font-size: 0.95rem;
+    text-decoration: none;
+}
+
+.settings-back:hover {
+    background-color: rgba(127, 127, 127, 0.12);
+}
+
+.settings-back:focus-visible {
+    outline: 2px solid var(--fv-focus-ring);
+    outline-offset: 2px;
+}

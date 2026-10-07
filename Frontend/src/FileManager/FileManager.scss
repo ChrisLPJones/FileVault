@@ -142,3 +142,15 @@ svg {
 .file-explorer.toolbar-external .files-container {
   height: 100%;
 }
+
+// The details pane takes a fixed width on the right; the file list gives up the space
+.file-explorer .files-container {
+  .navigation-pane {
+    flex-shrink: 0;
+  }
+
+  .folders-preview {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
