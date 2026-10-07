@@ -36,8 +36,10 @@
     font: inherit;
     text-align: left;
 
-    &:hover {
-      background-color: $item-hover-color;
+    // Hover shading is a circle around the avatar rather than a box around the row
+    &:hover .avatar,
+    &[aria-expanded="true"] .avatar {
+      box-shadow: 0 0 0 4px $item-hover-color;
     }
 
     .nav-user-name {
