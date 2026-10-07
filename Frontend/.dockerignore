@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release/
+electron/
+.vite/
+.vscode/
+
+# Local env files: the API URL is passed as a build argument instead
+.env
+.env.*
+!.env.example
+
+*.md

@@ -38,7 +38,8 @@ namespace Backend
             builder.Services.AddCors(options => {
                 options.AddPolicy("AllowFrontend", policy =>
                 {
-                    policy.WithOrigins("http://localhost:5173")
+                    var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+                    policy.WithOrigins(origins is { Length: > 0 } ? origins : ["http://localhost:5173"])
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials(); // the refresh token cookie

@@ -38,6 +38,23 @@ git clone https://github.com/ChrisLPJones/FileVault.git
 cd FileVault
 ```
 
+## Run everything with Docker
+
+Only Docker is needed for this option.
+
+```bash
+cp .env.example .env      # fill in MSSQL_SA_PASSWORD, JWT_KEY and ENCRYPTION_MASTER_KEY
+docker compose up --build
+```
+
+Then open http://localhost:5173 (the API is on http://localhost:3000). Compose starts SQL Server, waits for it to be healthy, applies `Backend/Docker/db/init.sql`, then starts the API and the nginx-served frontend. The database isn't exposed outside the Docker network.
+
+Data lives in two named volumes, `filevault_sql_data` and `filevault_file_storage` (the encrypted files). Back both up together with `ENCRYPTION_MASTER_KEY`. `docker compose down` keeps them; `docker compose down -v` deletes them.
+
+The frontend bundle has the API URL compiled in. If the browser reaches the API somewhere other than `http://localhost:3000`, set `API_URL` (and `FRONTEND_URL` for CORS) in `.env` and rebuild.
+
+## Local development
+
 ### Configure secrets
 
 Secrets are not committed. Create these two gitignored files from the templates:

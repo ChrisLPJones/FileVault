@@ -1,0 +1,13 @@
+# Build output and IDE files
+bin/
+obj/
+.vs/
+.vscode/
+
+# Never bake local secrets or stored files into the image
+appsettings.Development.json
+SecureVaultStorage/
+Docker/
+
+Postman/
+*.md

@@ -1,30 +1,39 @@
+# Local development database only (use with `dotnet run` and `npm run dev`).
+# For the full stack in containers, use docker-compose.yml in the repo root.
+
+x-sa-password: &sa-password "${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in Backend/Docker/.env (see .env.example)}"
+
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sqlserver
     environment:
-      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in Backend/Docker/.env (see .env.example)}"
+      MSSQL_SA_PASSWORD: *sa-password
       ACCEPT_EULA: "Y"
     ports:
       - "1433:1433"
     volumes:
       - sql_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
+  # Creates/updates the schema once SQL Server is healthy, then exits
   sqlinit:
-    image: mcr.microsoft.com/mssql-tools
+    image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sqlinit
     environment:
-      SQLCMDPASSWORD: "${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in Backend/Docker/.env (see .env.example)}"
+      SQLCMDPASSWORD: *sa-password
     depends_on:
-      - sqlserver
+      sqlserver:
+        condition: service_healthy
     volumes:
-      - ./db/init.sql:/init.sql
-    entrypoint: >
-      bash -c "
-        echo 'Waiting for SQL Server to be available...' &&
-        sleep 20 &&
-        /opt/mssql-tools/bin/sqlcmd -S sqlserver -U SA -i /init.sql
-      "
+      - ./db/init.sql:/init.sql:ro
+    entrypoint: ["/opt/mssql-tools18/bin/sqlcmd", "-C", "-S", "sqlserver", "-U", "sa", "-b", "-i", "/init.sql"]
+    restart: "no"
 
 volumes:
   sql_data:

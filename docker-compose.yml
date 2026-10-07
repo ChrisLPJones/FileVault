@@ -1,0 +1,75 @@
+# Full FileVault stack: SQL Server, schema setup, API and frontend.
+#
+#   cp .env.example .env     # then fill in the secrets
+#   docker compose up --build
+#
+# Frontend: http://localhost:5173   API: http://localhost:3000
+# (For local development with `dotnet run` / `npm run dev`, use
+#  Backend/Docker/docker-compose.yml, which only starts SQL Server.)
+
+name: filevault
+
+x-required: &sa-password ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env (see .env.example)}
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: *sa-password
+    volumes:
+      - sql_data:/var/opt/mssql
+    # Not published: only the API talks to the database
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  # Creates/updates the schema once SQL Server is healthy, then exits
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      SQLCMDPASSWORD: *sa-password
+    volumes:
+      - ./Backend/Docker/db/init.sql:/init.sql:ro
+    entrypoint: ["/opt/mssql-tools18/bin/sqlcmd", "-C", "-S", "sqlserver", "-U", "sa", "-b", "-i", "/init.sql"]
+    restart: "no"
+
+  api:
+    build: ./Backend
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=SecureVaultDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;Connection Timeout=5;"
+      Jwt__Key: ${JWT_KEY:?Set JWT_KEY in .env (see .env.example)}
+      Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:?Set ENCRYPTION_MASTER_KEY in .env (see .env.example)}
+      Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:5173}
+    ports:
+      - "3000:8080"
+    volumes:
+      - file_storage:/data/storage
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./Frontend
+      args:
+        VITE_API_BASE_URL: ${API_URL:-http://localhost:3000}
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
+volumes:
+  sql_data:
+  # Encrypted files. Back this up together with the database and ENCRYPTION_MASTER_KEY.
+  file_storage:
