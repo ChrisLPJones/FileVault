@@ -100,7 +100,7 @@ export default function FilePreview({ file, customPreview }) {
       {kind === "image" && state.url && <img src={state.url} alt={file.name} />}
       {kind === "video" && state.url && <video src={state.url} controls />}
       {kind === "audio" && state.url && <audio src={state.url} controls />}
-      {kind === "pdf" && state.url && <iframe src={state.url} title={file.name} />}
+      {kind === "pdf" && state.url && <iframe src={`${state.url}#toolbar=0&navpanes=0`} title={file.name} />}
       {kind === "text" && state.text !== null && <pre>{state.text}</pre>}
     </div>
   );

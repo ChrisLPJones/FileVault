@@ -7,6 +7,40 @@
   font-size: $fm-font-size;
   @include overflow-y-scroll;
 
+  .nav-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin: 0 0 4px 2px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+
+    &:hover {
+      background-color: $item-hover-color;
+    }
+  }
+
+  // Icons only: hide names, arrows and nested folders
+  &.compact {
+    overflow-x: hidden;
+
+    .sb-folder-name,
+    .folder-icon-default,
+    .non-expanable,
+    .folder-collapsible {
+      display: none;
+    }
+
+    .sb-folders-list-item {
+      justify-content: center;
+    }
+  }
+
   .folder-collapsible {
     margin-left: 10px;
   }
