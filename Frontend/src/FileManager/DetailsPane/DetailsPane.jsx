@@ -1,4 +1,4 @@
-import { MdClear, MdOutlineFileDownload } from "react-icons/md";
+import { MdClear } from "react-icons/md";
 import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
 import { useFiles } from "../../contexts/FilesContext";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
@@ -40,7 +40,7 @@ function InfoRows({ rows }) {
 export default function DetailsPane({ formatDate, filePreviewComponent }) {
   const { files } = useFiles();
   const { currentPath, currentFolder } = useFileNavigation();
-  const { selectedFiles, handleDownload } = useSelection();
+  const { selectedFiles } = useSelection();
   const { setDetailsOpen } = useDetailsPane();
   const t = useTranslation();
 
@@ -89,15 +89,7 @@ export default function DetailsPane({ formatDate, filePreviewComponent }) {
           ]}
         />
 
-        {!item.isDirectory && (
-          <>
-            <button type="button" className="details-download" onClick={handleDownload}>
-              <MdOutlineFileDownload size={18} />
-              <span>{t("download")}</span>
-            </button>
-            <FilePreview key={item._id} file={item} customPreview={customPreview} />
-          </>
-        )}
+        {!item.isDirectory && <FilePreview key={item._id} file={item} customPreview={customPreview} />}
       </>
     );
   }

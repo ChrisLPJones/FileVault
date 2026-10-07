@@ -92,6 +92,8 @@ const FileItem = ({
     if (file.isEditing) return;
 
     handleFileRangeSelection(e.shiftKey, e.ctrlKey);
+    // Clicking a file shows it in the details pane (folders don't open it)
+    if (!file.isDirectory && enableFilePreview) setDetailsOpen(true);
 
     const currentTime = new Date().getTime();
     if (currentTime - lastClickTime < 300) {

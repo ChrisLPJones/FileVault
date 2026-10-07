@@ -86,24 +86,6 @@
     }
   }
 
-  .details-download {
-    align-self: flex-start;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border: 1px solid var(--fm-border);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--fm-text);
-    font-size: 13px;
-    cursor: pointer;
-
-    &:hover {
-      background-color: rgba(var(--fm-shade), 0.08);
-    }
-  }
-
   // Preview at the bottom of the pane
   .details-preview {
     margin-top: auto;
