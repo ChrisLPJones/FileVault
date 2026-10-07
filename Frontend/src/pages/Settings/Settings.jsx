@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { FiArrowLeft } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
 import { getErrorMessage } from "../../api/api";
 import {
     changePasswordAPI,
@@ -28,15 +27,6 @@ const Status = ({ status }) =>
             {status.message}
         </div>
     ) : null;
-
-const BackToFiles = () => (
-    <div className="settings-back-row">
-        <Link to="/dashboard" className="settings-back">
-            <FiArrowLeft aria-hidden="true" />
-            Back to files
-        </Link>
-    </div>
-);
 
 function Settings() {
     const navigate = useNavigate();
@@ -182,7 +172,6 @@ function Settings() {
     if (loadError) {
         return (
             <div className="settings-page">
-                <BackToFiles />
                 <div className="settings-card">
                     <Status status={{ type: "danger", message: loadError }} />
                 </div>
@@ -195,7 +184,6 @@ function Settings() {
 
     return (
         <div className="settings-page">
-            <BackToFiles />
             <h1 className="settings-title">Account settings</h1>
 
             <section className="settings-card" aria-labelledby="storage-heading">

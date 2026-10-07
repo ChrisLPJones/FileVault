@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { FiArrowLeft } from "react-icons/fi";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import "./Layout.css";
 import { logout } from "../../api/api";
@@ -10,7 +11,7 @@ const navClass = ({ isActive }) => `link-style${isActive ? " active" : ""}`;
 
 const Layout = () => {
     // Re-render on navigation so the links follow the login state
-    useLocation();
+    const { pathname } = useLocation();
     const navigate = useNavigate();
     const loggedIn = isAuthenticated();
     // Middle of the top bar; the dashboard renders the file toolbar into it
@@ -26,7 +27,13 @@ const Layout = () => {
             <header className="header-style">
                 <nav className="nav-container">
                     <div className="nav-left">
-                        {/* Files is in the account menu once logged in */}
+                        {/* Pages other than the file list (e.g. Settings) get a way back */}
+                        {loggedIn && pathname !== "/dashboard" && (
+                            <NavLink to="/dashboard" className="link-style nav-back">
+                                <FiArrowLeft aria-hidden="true" />
+                                Back to files
+                            </NavLink>
+                        )}
                         {!loggedIn && (
                             <>
                                 <NavLink to="/register" className={navClass}>

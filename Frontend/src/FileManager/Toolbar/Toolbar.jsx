@@ -2,7 +2,6 @@ import { useState } from "react";
 import { BsCopy, BsFolderPlus, BsGridFill, BsLayoutSidebarReverse, BsScissors } from "react-icons/bs";
 import { FiRefreshCw } from "react-icons/fi";
 import {
-  MdClear,
   MdOutlineDelete,
   MdOutlineFileDownload,
   MdOutlineFileUpload,
@@ -81,11 +80,37 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
     setSelectedFiles([]);
   };
 
+  // Details, view and refresh: on the right in both toolbars
+  const rightGroup = (
+    <div>
+      {toolbarRightItems.map((item, index) => (
+        <div key={index} className="toolbar-left-items">
+          <button
+            className={`item-action icon-only ${item.active ? "active" : ""}`}
+            title={item.title}
+            aria-pressed={item.active}
+            onClick={item.onClick}
+          >
+            {item.icon}
+          </button>
+          {index !== toolbarRightItems.length - 1 && <div className="item-separator"></div>}
+        </div>
+      ))}
+
+      {showToggleViewMenu && (
+        <LayoutToggler
+          setShowToggleViewMenu={setShowToggleViewMenu}
+          onLayoutChange={onLayoutChange}
+        />
+      )}
+    </div>
+  );
+
   // Selected File/Folder Actions
   if (selectedFiles.length > 0) {
     return (
       <div className="toolbar file-selected">
-        <div className="file-action-container">
+        <div className="fm-toolbar file-action-container">
           <div>
             {permissions.move && (
               <button className="item-action file-action" title={t("cut")} onClick={() => handleCutCopy(true)}>
@@ -137,27 +162,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
               </button>
             )}
           </div>
-          <div className="file-action-right">
-            <button
-              className={`item-action file-action icon-only ${isDetailsOpen ? "active" : ""}`}
-              title={isDetailsOpen ? "Hide details" : "Show details"}
-              aria-pressed={isDetailsOpen}
-              onClick={() => setDetailsOpen((open) => !open)}
-            >
-              <BsLayoutSidebarReverse size={16} />
-            </button>
-            <button
-              className="item-action file-action"
-              title={t("clearSelection")}
-              onClick={() => setSelectedFiles([])}
-            >
-              <span>
-                {selectedFiles.length}{" "}
-                {t(selectedFiles.length > 1 ? "itemsSelected" : "itemSelected")}
-              </span>
-              <MdClear size={18} />
-            </button>
-          </div>
+          {rightGroup}
         </div>
       </div>
     );
@@ -177,28 +182,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
               </button>
             ))}
         </div>
-        <div>
-          {toolbarRightItems.map((item, index) => (
-            <div key={index} className="toolbar-left-items">
-              <button
-                className={`item-action icon-only ${item.active ? "active" : ""}`}
-                title={item.title}
-                aria-pressed={item.active}
-                onClick={item.onClick}
-              >
-                {item.icon}
-              </button>
-              {index !== toolbarRightItems.length - 1 && <div className="item-separator"></div>}
-            </div>
-          ))}
-
-          {showToggleViewMenu && (
-            <LayoutToggler
-              setShowToggleViewMenu={setShowToggleViewMenu}
-              onLayoutChange={onLayoutChange}
-            />
-          )}
-        </div>
+        {rightGroup}
       </div>
     </div>
   );

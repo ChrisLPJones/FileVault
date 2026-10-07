@@ -142,12 +142,13 @@ html, body {
     }
 }
 
-@media (max-width: 560px) {
-    .nav-center .file-action-right .item-action span {
-        display: none;
-    }
-}
 
 .nav-center .toolbar .icon-only.active {
     background-color: rgba(255, 255, 255, 0.14);
+}
+
+.nav-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
