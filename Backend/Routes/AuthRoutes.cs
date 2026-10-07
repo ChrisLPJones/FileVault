@@ -38,7 +38,7 @@ namespace Backend.Routes
 
                 // Require all fields
                 if (user is null ||
-                                        string.IsNullOrWhiteSpace(user.Email) ||
+                    string.IsNullOrWhiteSpace(user.Email) ||
                     string.IsNullOrWhiteSpace(user.Password))
                     return Results.BadRequest(new { error = "Invalid JSON" });
 
