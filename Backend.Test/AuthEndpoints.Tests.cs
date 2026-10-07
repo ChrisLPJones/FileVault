@@ -44,7 +44,7 @@ namespace Backend.Test
         private static async Task RegisterAsync(HttpClient client, string email, string password = Password)
         {
             var response = await client.PostAsJsonAsync("/user/register",
-                new UserModel { Username = $"u_{Guid.NewGuid():N}"[..20], Email = email, Password = password });
+                new UserModel { FirstName = "Test", LastName = "User", Email = email, Password = password });
             response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         }
 
@@ -120,7 +120,7 @@ namespace Backend.Test
 
             var wrongPassword = await client.PostAsJsonAsync("/user/login", new LoginModel { Email = NewEmail(), Password = "Wr0ngPassword" });
             wrongPassword.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-            (await wrongPassword.Content.ReadAsStringAsync()).Should().Contain("Invalid email/username or password");
+            (await wrongPassword.Content.ReadAsStringAsync()).Should().Contain("Invalid email or password");
         }
 
         [Fact]
@@ -188,21 +188,22 @@ namespace Backend.Test
             var client = NewClient(_factory);
 
             var response = await client.PostAsJsonAsync("/user/register",
-                new UserModel { Username = "weakpassuser", Email = NewEmail(), Password = password });
+                new UserModel { FirstName = "Weak", LastName = "Pass", Email = NewEmail(), Password = password });
 
             response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
             (await response.Content.ReadAsStringAsync()).Should().Contain(expectedMessage);
         }
 
         [Theory]
-        [InlineData("ab", "valid@example.test", "Username")]
-        [InlineData("validname", "not-an-email", "Email is invalid")]
-        public async Task Register_RejectsInvalidUsernameOrEmail(string username, string email, string expectedMessage)
+        [InlineData("", "Smith", "valid@example.test", "First name")]
+        [InlineData("Ann", "", "valid@example.test", "Last name")]
+        [InlineData("Ann", "Smith", "not-an-email", "Email is invalid")]
+        public async Task Register_RejectsInvalidNameOrEmail(string firstName, string lastName, string email, string expectedMessage)
         {
             var client = NewClient(_factory);
 
             var response = await client.PostAsJsonAsync("/user/register",
-                new UserModel { Username = username, Email = email, Password = Password });
+                new UserModel { FirstName = firstName, LastName = lastName, Email = email, Password = Password });
 
             response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
             (await response.Content.ReadAsStringAsync()).Should().Contain(expectedMessage);
@@ -263,7 +264,7 @@ namespace Backend.Test
         }
 
         [Fact]
-        public async Task ProfileUpdate_RejectsEmailOrUsernameUsedByAnotherAccount()
+        public async Task ProfileUpdate_RejectsEmailUsedByAnotherAccount()
         {
             var otherClient = NewClient(_factory);
             var otherEmail = NewEmail();
@@ -274,7 +275,7 @@ namespace Backend.Test
             var (client, token, _) = await NewUserSessionAsync();
 
             var emailTaken = await client.SendAsync(Authed(HttpMethod.Patch, "/user/profile", token,
-                new { username = "freshname_" + Guid.NewGuid().ToString("N")[..8], email = otherEmail.ToUpperInvariant() }));
+                new { firstName = "Fresh", lastName = "Name", email = otherEmail.ToUpperInvariant() }));
             emailTaken.StatusCode.Should().Be(HttpStatusCode.Conflict);
             (await emailTaken.Content.ReadAsStringAsync()).Should().Contain("Email already exists");
         }
@@ -383,36 +384,22 @@ namespace Backend.Test
         }
 
         [Fact]
-        public async Task Login_WorksWithEmailOrUsername_IgnoringCase()
+        public async Task Login_RequiresEmail_IgnoringCase()
         {
             var client = NewClient(_factory);
             var email = NewEmail();
-            var username = $"Name_{Guid.NewGuid():N}"[..20];
-            (await client.PostAsJsonAsync("/user/register", new UserModel { Username = username, Email = email, Password = Password }))
+            (await client.PostAsJsonAsync("/user/register", new UserModel { FirstName = "Login", LastName = "Tester", Email = email, Password = Password }))
                 .EnsureSuccessStatusCode();
 
             async Task<HttpStatusCode> LoginAs(object body) => (await client.PostAsJsonAsync("/user/login", body)).StatusCode;
 
-            (await LoginAs(new { login = username, password = Password })).Should().Be(HttpStatusCode.OK);
-            (await LoginAs(new { login = username.ToUpperInvariant(), password = Password })).Should().Be(HttpStatusCode.OK);
-            (await LoginAs(new { login = email, password = Password })).Should().Be(HttpStatusCode.OK);
-            (await LoginAs(new { email, password = Password })).Should().Be(HttpStatusCode.OK); // older clients
-            (await LoginAs(new { login = username, password = "Wr0ngPassword" })).Should().Be(HttpStatusCode.Unauthorized);
+            (await LoginAs(new { email, password = Password })).Should().Be(HttpStatusCode.OK);
+            (await LoginAs(new { email = email.ToUpperInvariant(), password = Password })).Should().Be(HttpStatusCode.OK);
+            (await LoginAs(new { email, password = "Wr0ngPassword" })).Should().Be(HttpStatusCode.Unauthorized);
+            (await LoginAs(new { email = "Login Tester", password = Password })).Should().Be(HttpStatusCode.Unauthorized);
 
             var (token, _, _) = await LoginAsync(client, email);
             _usersToDelete.Add((client, token));
-        }
-
-        [Fact]
-        public async Task Register_RejectsUsernamesContainingAt()
-        {
-            var client = NewClient(_factory);
-
-            var response = await client.PostAsJsonAsync("/user/register",
-                new UserModel { Username = "someone@home", Email = NewEmail(), Password = Password });
-
-            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-            (await response.Content.ReadAsStringAsync()).Should().Contain("can't contain @");
         }
 
         [Fact]

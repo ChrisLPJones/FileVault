@@ -30,17 +30,17 @@ namespace Backend.Services
             return null;
         }
 
-        // Returns an error message if the username/email can't be used
-        public static string? ValidateAccount(string? username, string? email)
+        // Returns an error message if the name/email can't be used
+        public static string? ValidateAccount(string? firstName, string? lastName, string? email)
         {
-            username = username?.Trim();
+            firstName = firstName?.Trim();
+            lastName = lastName?.Trim();
             email = email?.Trim();
 
-            if (string.IsNullOrEmpty(username) || username.Length < 3 || username.Length > 50)
-                return "Username must be 3-50 characters";
-            // Logins with an @ are treated as emails, so usernames can't contain one
-            if (username.Contains('@'))
-                return "Username can't contain @";
+            if (string.IsNullOrEmpty(firstName) || firstName.Length > 50)
+                return "First name is required (50 characters or fewer)";
+            if (string.IsNullOrEmpty(lastName) || lastName.Length > 50)
+                return "Last name is required (50 characters or fewer)";
             if (string.IsNullOrEmpty(email) || email.Length > 100)
                 return "Email must be 100 characters or fewer";
 
@@ -95,14 +95,12 @@ namespace Backend.Services
         }
 
         // Validates user credentials; returns the user, or null if the email/password is wrong
-        // Validates credentials; the identifier is an email (contains @) or a username.
-        // Returns the user, or null if the identifier/password is wrong.
+        // Validates credentials by email address.
+        // Returns the user, or null if the email/password is wrong.
         public async Task<UserModel?> ValidateUser(LoginModel user, DatabaseServices db)
         {
             var identifier = user.Identifier;
-            var userRecord = identifier.Contains('@')
-                ? await db.GetUserByEmail(identifier)
-                : await db.GetUserByUsername(identifier);
+            var userRecord = await db.GetUserByEmail(identifier);
 
             if (userRecord == null)
             {

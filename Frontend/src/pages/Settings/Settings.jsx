@@ -14,6 +14,7 @@ import Avatar from "../../components/Avatar";
 import { resizeImageToSquare } from "../../utils/avatarImage";
 import { formatBytes } from "../../utils/formatBytes";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
+import { MdColorize } from "react-icons/md";
 import { ACCENT_PRESETS, THEME_OPTIONS, setAccent, setThemePreference, useAccent, useTheme } from "../../utils/theme";
 import "./Settings.css";
 
@@ -47,7 +48,7 @@ function Settings() {
     const [loadError, setLoadError] = useState(null);
     const [usage, setUsage] = useState(null);
 
-    const [profile, setProfile] = useState({ username: "", email: "" });
+    const [profile, setProfile] = useState({ firstName: "", lastName: "", email: "" });
     const [profileStatus, setProfileStatus] = useState(null);
     const [hasAvatar, setHasAvatar] = useState(false);
     const [savingAvatar, setSavingAvatar] = useState(false);
@@ -68,7 +69,7 @@ function Settings() {
         Promise.all([getUserInfoAPI(), getUsageAPI()])
             .then(([info, usageData]) => {
                 if (cancelled) return;
-                setProfile({ username: info.username, email: info.email });
+                setProfile({ firstName: info.firstName, lastName: info.lastName, email: info.email });
                 setHasAvatar(!!info.avatarUpdatedAt);
                 setUsage(usageData);
             })
@@ -117,7 +118,7 @@ function Settings() {
         setProfileStatus(null);
         setSavingProfile(true);
         try {
-            await updateProfileAPI(profile.username.trim(), profile.email.trim());
+            await updateProfileAPI(profile.firstName.trim(), profile.lastName.trim(), profile.email.trim());
             setProfileStatus({ type: "success", message: "Profile updated" });
         } catch (err) {
             setProfileStatus({ type: "danger", message: getErrorMessage(err, "Could not update profile") });
@@ -238,15 +239,19 @@ function Settings() {
                             onClick={() => setAccent(color)}
                         />
                     ))}
-                    <label className="accent-custom">
-                        Custom
-                        <input type="color" value={accent || "#007bff"} onChange={(e) => setAccent(e.target.value)} />
+                    <label
+                        className={`accent-custom ${accent && !ACCENT_PRESETS.includes(accent) ? "selected" : ""}`}
+                        style={accent && !ACCENT_PRESETS.includes(accent) ? { backgroundColor: accent } : undefined}
+                        title="Pick a custom colour"
+                    >
+                        <MdColorize size={16} aria-hidden="true" />
+                        <input
+                            type="color"
+                            aria-label="Custom accent colour"
+                            value={accent || "#007bff"}
+                            onChange={(e) => setAccent(e.target.value)}
+                        />
                     </label>
-                    {accent && (
-                        <button type="button" className="settings-button secondary" onClick={() => setAccent(null)}>
-                            Reset
-                        </button>
-                    )}
                 </div>
             </section>
 
@@ -278,15 +283,25 @@ function Settings() {
 
                 <form onSubmit={handleProfileSubmit}>
                     <div className="form-group">
-                        <label htmlFor="settings-username">Username</label>
+                        <label htmlFor="settings-first-name">First name</label>
                         <input
-                            id="settings-username"
+                            id="settings-first-name"
                             type="text"
-                            value={profile.username}
-                            minLength={3}
+                            value={profile.firstName}
                             maxLength={50}
                             required
-                            onChange={(e) => setProfile({ ...profile, username: e.target.value })}
+                            onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label htmlFor="settings-last-name">Last name</label>
+                        <input
+                            id="settings-last-name"
+                            type="text"
+                            value={profile.lastName}
+                            maxLength={50}
+                            required
+                            onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
                         />
                     </div>
                     <div className="form-group">
