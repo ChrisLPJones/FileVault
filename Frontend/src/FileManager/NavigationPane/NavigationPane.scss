@@ -73,7 +73,6 @@
     // Folder icons line up under the menu button
     .sb-folders-list-item {
       justify-content: flex-start;
-      padding-left: 0;
       padding-right: 0;
 
       .file-type-icon {
@@ -90,8 +89,14 @@
     display: flex;
     align-items: center;
     margin-bottom: 4px;
-    padding: 6px 5px;
+    padding: 6px 5px 6px 0;
     border-radius: 4px;
+
+    // Expand arrow sits at the right so folder icons line up under the menu button, open or collapsed
+    > span {
+      order: 3;
+      margin-left: auto;
+    }
 
     &:hover {
       cursor: pointer;
@@ -107,7 +112,7 @@
       align-items: center;
 
       .file-type-icon {
-        margin: 0 8px 0 6px;
+        margin: 0 8px 0 7px;
       }
 
       .sb-folder-name {

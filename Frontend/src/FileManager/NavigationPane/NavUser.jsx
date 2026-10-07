@@ -7,7 +7,7 @@ import Avatar from "../../components/Avatar";
 
 // Bottom of the folder tree: avatar, first name and storage used (name and usage hidden when collapsed)
 export default function NavUser({ compact }) {
-  const [username, setUsername] = useState("");
+  const [firstName, setFirstName] = useState("");
   const [usage, setUsage] = useState(null);
   const { files } = useFiles();
 
@@ -15,7 +15,7 @@ export default function NavUser({ compact }) {
     let cancelled = false;
     const load = () =>
       getUserInfoAPI()
-        .then((info) => !cancelled && setUsername(info.username))
+        .then((info) => !cancelled && setFirstName(info.firstName))
         .catch(() => {});
     load();
     window.addEventListener(PROFILE_CHANGED_EVENT, load);
@@ -36,7 +36,6 @@ export default function NavUser({ compact }) {
     };
   }, [files]);
 
-  const firstName = username.trim().split(/\s+/)[0];
   const usageText = usage ? `${formatBytes(usage.used)} / ${formatBytes(usage.quota)}` : "";
 
   return (

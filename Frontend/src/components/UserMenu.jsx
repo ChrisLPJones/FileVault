@@ -8,7 +8,7 @@ import "./UserMenu.css";
 // Avatar button in the header that opens a menu with the account's name, Settings and Log out
 export default function UserMenu({ onLogout }) {
     const [open, setOpen] = useState(false);
-    const [user, setUser] = useState({ username: "", email: "" });
+    const [user, setUser] = useState({ name: "", email: "" });
     const containerRef = useRef(null);
     const buttonRef = useRef(null);
     const { pathname } = useLocation();
@@ -18,7 +18,7 @@ export default function UserMenu({ onLogout }) {
         let cancelled = false;
         const load = () =>
             getUserInfoAPI()
-                .then((info) => !cancelled && setUser({ username: info.username, email: info.email }))
+                .then((info) => !cancelled && setUser({ name: `${info.firstName} ${info.lastName}`.trim(), email: info.email }))
                 .catch(() => {});
 
         load();
@@ -76,7 +76,7 @@ export default function UserMenu({ onLogout }) {
                 className="user-menu-button"
                 aria-haspopup="menu"
                 aria-expanded={open}
-                aria-label={`Account menu${user.username ? ` for ${user.username}` : ""}`}
+                aria-label={`Account menu${user.name ? ` for ${user.name}` : ""}`}
                 onClick={() => setOpen((value) => !value)}
             >
                 <Avatar size={32} />
@@ -87,7 +87,7 @@ export default function UserMenu({ onLogout }) {
                     <div className="user-menu-identity">
                         <Avatar size={40} />
                         <div className="user-menu-names">
-                            <span className="user-menu-username">{user.username}</span>
+                            <span className="user-menu-username">{user.name}</span>
                             <span className="user-menu-email">{user.email}</span>
                         </div>
                     </div>

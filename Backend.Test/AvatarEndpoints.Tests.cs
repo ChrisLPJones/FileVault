@@ -26,7 +26,7 @@ namespace Backend.Test
             var client = _factory.CreateClient();
             var email = $"avatar_{Guid.NewGuid():N}@example.test";
             (await client.PostAsJsonAsync("/user/register",
-                new UserModel { Username = $"a_{Guid.NewGuid():N}"[..20], Email = email, Password = Password }))
+                new UserModel { FirstName = "Avatar", LastName = "User", Email = email, Password = Password }))
                 .EnsureSuccessStatusCode();
 
             var login = await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password });
