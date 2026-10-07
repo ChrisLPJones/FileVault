@@ -73,6 +73,11 @@
   &.compact {
     overflow-x: hidden;
 
+    // The folder rows are slightly wider than the strip: no horizontal scrollbar (the purple bar)
+    .sb-folders-scroll {
+      overflow-x: hidden !important;
+    }
+
     .sb-folder-name,
     .folder-icon-default,
     .non-expanable,
