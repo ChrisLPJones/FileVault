@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import UserMenu from "../../components/UserMenu";
 import { PROFILE_CHANGED_EVENT, getUsageAPI, getUserInfoAPI } from "../../api/accountAPI";
 import { formatBytes } from "../../utils/formatBytes";
 import { useFiles } from "../../contexts/FilesContext";
@@ -39,11 +39,7 @@ export default function NavUser({ compact }) {
   const usageText = usage ? `${formatBytes(usage.used)} / ${formatBytes(usage.quota)}` : "";
 
   return (
-    <Link
-      to="/settings"
-      className="nav-user"
-      title={[firstName, usageText].filter(Boolean).join(" · ")}
-    >
+    <UserMenu className="nav-user" title={[firstName, usageText].filter(Boolean).join(" · ")}>
       <Avatar size={28} />
       {!compact && (
         <>
@@ -51,6 +47,6 @@ export default function NavUser({ compact }) {
           <span className="nav-user-usage text-truncate">{usageText}</span>
         </>
       )}
-    </Link>
+    </UserMenu>
   );
 }
