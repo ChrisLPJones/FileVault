@@ -3,8 +3,7 @@ import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import "./Layout.css";
 import { logout } from "../../api/api";
 import { isAuthenticated } from "../../utils/auth";
-import ThemeToggle from "../../components/ThemeToggle";
-import Avatar from "../../components/Avatar";
+import UserMenu from "../../components/UserMenu";
 
 const navClass = ({ isActive }) => `link-style${isActive ? " active" : ""}`;
 
@@ -25,14 +24,9 @@ const Layout = () => {
                 <nav className="nav-container">
                     <div className="nav-left">
                         {loggedIn ? (
-                            <>
-                                <NavLink to="/dashboard" className={navClass}>
-                                    Files
-                                </NavLink>
-                                <NavLink to="/settings" className={navClass}>
-                                    Settings
-                                </NavLink>
-                            </>
+                            <NavLink to="/dashboard" className={navClass}>
+                                Files
+                            </NavLink>
                         ) : (
                             <>
                                 <NavLink to="/register" className={navClass}>
@@ -45,19 +39,11 @@ const Layout = () => {
                         )}
                     </div>
 
-                    <div className="nav-right">
-                        <ThemeToggle />
-                        {loggedIn && (
-                            <>
-                                <NavLink to="/settings" className="nav-avatar" title="Account settings" aria-label="Account settings">
-                                    <Avatar size={30} />
-                                </NavLink>
-                                <button type="button" className="link-style logout-button" onClick={handleLogout}>
-                                    Logout
-                                </button>
-                            </>
-                        )}
-                    </div>
+                    {loggedIn && (
+                        <div className="nav-right">
+                            <UserMenu onLogout={handleLogout} />
+                        </div>
+                    )}
                 </nav>
             </header>
             <main className="main-style">
