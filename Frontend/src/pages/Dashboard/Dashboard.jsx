@@ -122,6 +122,7 @@ function Dashboard() {
                     onRefresh={refreshFiles}
                     onError={handleError}
                     layout="grid"
+                    primaryColor="var(--fv-primary)"
                     enableFilePreview
                     maxFileSize={maxFileSize}
                     acceptedFileTypes=".txt, .png, .jpg, .jpeg, .pdf, .doc, .docx, .exe"

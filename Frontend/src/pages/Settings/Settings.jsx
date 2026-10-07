@@ -14,7 +14,7 @@ import Avatar from "../../components/Avatar";
 import { resizeImageToSquare } from "../../utils/avatarImage";
 import { formatBytes } from "../../utils/formatBytes";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
-import { THEME_OPTIONS, setThemePreference, useTheme } from "../../utils/theme";
+import { ACCENT_PRESETS, THEME_OPTIONS, setAccent, setThemePreference, useAccent, useTheme } from "../../utils/theme";
 import "./Settings.css";
 
 const DELETE_CONFIRMATION = "DELETE";
@@ -31,6 +31,7 @@ const Status = ({ status }) =>
 function Settings() {
     const navigate = useNavigate();
     const { preference } = useTheme();
+    const accent = useAccent();
 
     // Esc goes back to the files (unless typing in a field)
     useEffect(() => {
@@ -223,6 +224,30 @@ function Settings() {
                     ))}
                 </div>
                 <p className="settings-hint">System follows your device's light or dark setting. Saved on this device.</p>
+
+                <h3 id="accent-heading" className="accent-heading">Accent colour</h3>
+                <div className="accent-options" role="group" aria-labelledby="accent-heading">
+                    {ACCENT_PRESETS.map((color) => (
+                        <button
+                            key={color}
+                            type="button"
+                            className={`accent-swatch ${accent === color ? "selected" : ""}`}
+                            style={{ backgroundColor: color }}
+                            aria-label={color}
+                            aria-pressed={accent === color}
+                            onClick={() => setAccent(color)}
+                        />
+                    ))}
+                    <label className="accent-custom">
+                        Custom
+                        <input type="color" value={accent || "#007bff"} onChange={(e) => setAccent(e.target.value)} />
+                    </label>
+                    {accent && (
+                        <button type="button" className="settings-button secondary" onClick={() => setAccent(null)}>
+                            Reset
+                        </button>
+                    )}
+                </div>
             </section>
 
             <section className="settings-card" aria-labelledby="profile-heading">
