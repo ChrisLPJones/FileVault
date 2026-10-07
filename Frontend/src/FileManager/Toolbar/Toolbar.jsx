@@ -93,7 +93,6 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
           >
             {item.icon}
           </button>
-          {index !== toolbarRightItems.length - 1 && <div className="item-separator"></div>}
         </div>
       ))}
 
