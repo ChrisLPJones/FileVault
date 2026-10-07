@@ -86,7 +86,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
       {toolbarRightItems.map((item, index) => (
         <div key={index} className="toolbar-left-items">
           <button
-            className={`item-action icon-only ${item.active ? "active" : ""}`}
+            className="item-action icon-only"
             title={item.title}
             aria-pressed={item.active}
             onClick={item.onClick}

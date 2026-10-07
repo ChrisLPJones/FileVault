@@ -107,8 +107,7 @@ html, body {
     white-space: nowrap;
 }
 
-.nav-center .toolbar .item-action:hover:not(:disabled),
-.nav-center .toolbar .icon-only:focus-visible {
+.nav-center .toolbar .item-action:hover:not(:disabled) {
     background-color: rgba(255, 255, 255, 0.14) !important;
     color: var(--fv-header-text);
     text-shadow: none;
@@ -142,10 +141,6 @@ html, body {
     }
 }
 
-
-.nav-center .toolbar .icon-only.active {
-    background-color: rgba(255, 255, 255, 0.14);
-}
 
 .nav-back {
     display: inline-flex;
