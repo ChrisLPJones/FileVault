@@ -56,3 +56,61 @@ export const useTheme = () => {
     const theme = useSyncExternalStore(subscribe, () => resolveTheme(getThemePreference()));
     return { preference, theme };
 };
+
+// Accent colour: overrides --fv-primary (buttons, links, the file manager highlight). null = theme default.
+const ACCENT_KEY = "fv-accent";
+const ACCENT_EVENT = "fv-accent-change";
+export const ACCENT_PRESETS = ["#007bff", "#6155b4", "#0d9488", "#16a34a", "#e11d48", "#ea580c", "#db2777"];
+
+const isHex = (value) => /^#[0-9a-f]{6}$/i.test(value || "");
+
+export const getAccent = () => {
+    try {
+        const stored = localStorage.getItem(ACCENT_KEY);
+        return isHex(stored) ? stored.toLowerCase() : null;
+    } catch {
+        return null;
+    }
+};
+
+const shade = (hex, factor) => {
+    const channel = (i) => Math.round(parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) * factor);
+    return `#${[0, 1, 2].map((i) => channel(i).toString(16).padStart(2, "0")).join("")}`;
+};
+
+const readableText = (hex) => {
+    const [r, g, b] = [0, 1, 2].map((i) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16));
+    return (r * 299 + g * 587 + b * 114) / 1000 > 160 ? "#111" : "#fff";
+};
+
+const applyAccent = () => {
+    const style = document.documentElement.style;
+    const accent = getAccent();
+    if (!accent) {
+        ["--fv-primary", "--fv-primary-hover", "--fv-primary-text"].forEach((name) => style.removeProperty(name));
+        return;
+    }
+    style.setProperty("--fv-primary", accent);
+    style.setProperty("--fv-primary-hover", shade(accent, 0.82));
+    style.setProperty("--fv-primary-text", readableText(accent));
+};
+
+export const setAccent = (color) => {
+    try {
+        if (isHex(color)) localStorage.setItem(ACCENT_KEY, color.toLowerCase());
+        else localStorage.removeItem(ACCENT_KEY);
+    } catch {
+        // Storage unavailable: still apply for this page load
+    }
+    applyAccent();
+    window.dispatchEvent(new Event(ACCENT_EVENT));
+};
+
+applyAccent();
+
+const subscribeAccent = (callback) => {
+    window.addEventListener(ACCENT_EVENT, callback);
+    return () => window.removeEventListener(ACCENT_EVENT, callback);
+};
+
+export const useAccent = () => useSyncExternalStore(subscribeAccent, getAccent);

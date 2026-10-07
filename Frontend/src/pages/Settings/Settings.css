@@ -256,3 +256,45 @@ label.settings-button.disabled {
     margin: 0 0 16px;
 }
 
+
+.accent-heading {
+    margin: 18px 0 8px;
+    font-size: 0.95rem;
+}
+
+.accent-options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.accent-swatch {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.accent-swatch.selected {
+    outline: 2px solid var(--fv-text, currentColor);
+    outline-offset: 2px;
+}
+
+.accent-custom {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+}
+
+.accent-custom input {
+    width: 32px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+}
