@@ -488,3 +488,6 @@ $RECYCLE.BIN/
 
 # Local backend config with secrets (template: Backend/appsettings.Development.example.json)
 Backend/appsettings.Development.json
+
+# Local docker compose additions (template: docker-compose.override.example.yml)
+docker-compose.override.yml
