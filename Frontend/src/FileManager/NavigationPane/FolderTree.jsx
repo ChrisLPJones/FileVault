@@ -42,6 +42,7 @@ const FolderTree = ({ folder, onFileOpen }) => {
         <div
           className={`sb-folders-list-item ${isActive ? "active-list-item" : ""}`}
           onClick={handleFolderSwitch}
+          title={folder.name}
         >
           <span onClick={handleCollapseChange}>
             <MdKeyboardArrowRight
@@ -70,6 +71,7 @@ const FolderTree = ({ folder, onFileOpen }) => {
       <div
         className={`sb-folders-list-item ${isActive ? "active-list-item" : ""}`}
         onClick={handleFolderSwitch}
+        title={folder.name}
       >
         <span className="non-expanable"></span>
         <div className="sb-folder-details">
