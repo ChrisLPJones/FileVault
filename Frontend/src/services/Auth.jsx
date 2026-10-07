@@ -1,28 +1,13 @@
-import axios from "axios";
+import { api } from "../api/api";
 
-const API_URL = import.meta.env.VITE_API_URL;
+// Don't throw on HTTP errors (the forms read the status and error message),
+// and don't attach or refresh an access token for these calls
+const authRequest = { validateStatus: () => true, skipAuth: true };
 
 export const login = async (Email, Password) => {
-    const response = await axios.post(
-        `${API_URL}/user/login`,
-        { Email, Password },
-        {
-            // don’t throw, consider all HTTP responses as valid.
-            validateStatus: () => true,
-        }
-    );
-
-    return response;
+    return api.post("/user/login", { Email, Password }, authRequest);
 };
 
-export const register = async (Username, Email, Password) => {
-    const response = await axios.post(
-        `${API_URL}/user/register`,
-        { Username, Email, Password },
-        {
-            // don’t throw, consider all HTTP responses as valid.
-            validateStatus: () => true,
-        }
-    );
-    return response;
+export const register = async (FirstName, LastName, Email, Password) => {
+    return api.post("/user/register", { FirstName, LastName, Email, Password }, authRequest);
 };

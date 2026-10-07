@@ -4,20 +4,31 @@ import NavigationPane from "./NavigationPane/NavigationPane";
 import BreadCrumb from "./BreadCrumb/BreadCrumb";
 import FileList from "./FileList/FileList";
 import Actions from "./Actions/Actions";
+import DetailsPane from "./DetailsPane/DetailsPane";
 import { FilesProvider } from "../contexts/FilesContext";
 import { FileNavigationProvider } from "../contexts/FileNavigationContext";
-import { SelectionProvider } from "../contexts/SelectionContext";
+import { SelectionProvider, useSelection } from "../contexts/SelectionContext";
 import { ClipBoardProvider } from "../contexts/ClipboardContext";
 import { LayoutProvider } from "../contexts/LayoutContext";
+import { DetailsPaneProvider, useDetailsPane } from "../contexts/DetailsPaneContext";
 import { useTriggerAction } from "../hooks/useTriggerAction";
 import { useColumnResize } from "../hooks/useColumnResize";
 import PropTypes from "prop-types";
 import { dateStringValidator, urlValidator } from "../validators/propValidators";
 import { TranslationProvider } from "../contexts/TranslationProvider";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { defaultPermissions } from "../constants";
 import { formatDate as defaultFormatDate } from "../utils/formatDate";
 import "./FileManager.scss";
+
+// The details pane: shown while it is switched on and a single file (not a folder) is selected
+const DetailsPaneSlot = (props) => {
+  const { isDetailsOpen } = useDetailsPane();
+  const { selectedFiles } = useSelection();
+  const file = selectedFiles.length === 1 && !selectedFiles[0].isDirectory ? selectedFiles[0] : null;
+  return isDetailsOpen && file ? <DetailsPane file={file} {...props} /> : null;
+};
 
 const FileManager = ({
   files,
@@ -42,7 +53,6 @@ const FileManager = ({
   layout = "grid",
   enableFilePreview = true,
   maxFileSize,
-  filePreviewPath,
   acceptedFileTypes,
   height = "600px",
   width = "100%",
@@ -57,7 +67,9 @@ const FileManager = ({
   className = "",
   style = {},
   formatDate = defaultFormatDate,
+  toolbarContainer = null, // optional element to render the toolbar into (e.g. the app header)
 }) => {
+  const [isNavCompact, setNavCompact] = useState(false);
   const [isNavigationPaneOpen, setNavigationPaneOpen] = useState(defaultNavExpanded);
   const triggerAction = useTriggerAction();
   const { containerRef, colSizes, isDragging, handleMouseMove, handleMouseUp, handleMouseDown } =
@@ -76,7 +88,7 @@ const FileManager = ({
 
   return (
     <main
-      className={`file-explorer ${className}`}
+      className={`file-explorer ${toolbarContainer ? "toolbar-external" : ""} ${className}`}
       onContextMenu={(e) => e.preventDefault()}
       style={{ ...customStyles, ...style }}
     >
@@ -91,12 +103,24 @@ const FileManager = ({
             >
               <ClipBoardProvider onPaste={onPaste} onCut={onCut} onCopy={onCopy}>
                 <LayoutProvider layout={layout}>
-                  <Toolbar
-                    onLayoutChange={onLayoutChange}
-                    onRefresh={onRefresh}
-                    triggerAction={triggerAction}
-                    permissions={permissions}
-                  />
+                <DetailsPaneProvider>
+                  {/* The toolbar can live elsewhere (the app header) but stays inside these providers */}
+                  {toolbarContainer
+                    ? createPortal(
+                        <Toolbar
+                          onLayoutChange={onLayoutChange}
+                          onRefresh={onRefresh}
+                          triggerAction={triggerAction}
+                          permissions={permissions}
+                        />,
+                        toolbarContainer
+                      )
+                    : <Toolbar
+                      onLayoutChange={onLayoutChange}
+                      onRefresh={onRefresh}
+                      triggerAction={triggerAction}
+                      permissions={permissions}
+                    />}
                   <section
                     ref={containerRef}
                     onMouseMove={handleMouseMove}
@@ -104,21 +128,23 @@ const FileManager = ({
                     className="files-container"
                   >
                     <div
-                      className={`navigation-pane ${isNavigationPaneOpen ? "open" : "closed"}`}
-                      style={{
-                        width: colSizes.col1 + "%",
-                      }}
+                      className={`navigation-pane ${isNavigationPaneOpen ? "open" : "closed"} ${isNavCompact ? "compact" : ""}`}
+                      style={isNavCompact ? { width: "44px" } : { width: colSizes.col1 + "%" }}
                     >
-                      <NavigationPane onFileOpen={onFileOpen} />
-                      <div
+                      <NavigationPane
+                        onFileOpen={onFileOpen}
+                        compact={isNavCompact}
+                        onToggleCompact={() => setNavCompact((prev) => !prev)}
+                      />
+                      {!isNavCompact && <div
                         className={`sidebar-resize ${isDragging ? "sidebar-dragging" : ""}`}
                         onMouseDown={handleMouseDown}
-                      />
+                      />}
                     </div>
 
                     <div
                       className="folders-preview"
-                      style={{ width: (isNavigationPaneOpen ? colSizes.col2 : 100) + "%" }}
+                      style={{ width: (isNavigationPaneOpen && !isNavCompact ? colSizes.col2 : 100) + "%" }}
                     >
                       <BreadCrumb
                         collapsibleNav={collapsibleNav}
@@ -136,6 +162,8 @@ const FileManager = ({
                         formatDate={formatDate}
                       />
                     </div>
+
+                    <DetailsPaneSlot formatDate={formatDate} filePreviewComponent={filePreviewComponent} />
                   </section>
 
                   <Actions
@@ -145,12 +173,11 @@ const FileManager = ({
                     onDelete={onDelete}
                     onRefresh={onRefresh}
                     maxFileSize={maxFileSize}
-                    filePreviewPath={filePreviewPath}
-                    filePreviewComponent={filePreviewComponent}
                     acceptedFileTypes={acceptedFileTypes}
                     triggerAction={triggerAction}
                     permissions={permissions}
                   />
+                </DetailsPaneProvider>
                 </LayoutProvider>
               </ClipBoardProvider>
             </SelectionProvider>
@@ -170,6 +197,7 @@ FileManager.propTypes = {
       isDirectory: PropTypes.bool.isRequired,
       path: PropTypes.string.isRequired,
       updatedAt: dateStringValidator,
+      createdAt: dateStringValidator,
       size: PropTypes.number,
     })
   ).isRequired,
@@ -198,7 +226,6 @@ FileManager.propTypes = {
   layout: PropTypes.oneOf(["grid", "list"]),
   maxFileSize: PropTypes.number,
   enableFilePreview: PropTypes.bool,
-  filePreviewPath: urlValidator,
   acceptedFileTypes: PropTypes.string,
   height: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   width: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
@@ -221,6 +248,7 @@ FileManager.propTypes = {
   className: PropTypes.string,
   style: PropTypes.object,
   formatDate: PropTypes.func,
+  toolbarContainer: PropTypes.instanceOf(typeof Element === "undefined" ? Object : Element),
 };
 
 export default FileManager;

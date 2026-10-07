@@ -2,7 +2,6 @@ import { useState } from "react";
 import { BsCopy, BsFolderPlus, BsGridFill, BsScissors } from "react-icons/bs";
 import { FiRefreshCw } from "react-icons/fi";
 import {
-  MdClear,
   MdOutlineDelete,
   MdOutlineFileDownload,
   MdOutlineFileUpload,
@@ -50,12 +49,12 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
 
   const toolbarRightItems = [
     {
-      icon: activeLayout === "grid" ? <BsGridFill size={16} /> : <FaListUl size={16} />,
+      icon: activeLayout === "grid" ? <BsGridFill size={19} /> : <FaListUl size={19} />,
       title: t("changeView"),
       onClick: () => setShowToggleViewMenu((prev) => !prev),
     },
     {
-      icon: <FiRefreshCw size={16} />,
+      icon: <FiRefreshCw size={19} />,
       title: t("refresh"),
       onClick: () => {
         validateApiCallback(onRefresh, "onRefresh");
@@ -73,20 +72,44 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
     setSelectedFiles([]);
   };
 
+  // Details, view and refresh: on the right in both toolbars
+  const rightGroup = (
+    <div>
+      {toolbarRightItems.map((item, index) => (
+        <div key={index} className="toolbar-left-items">
+          <button
+            className="item-action icon-only"
+            title={item.title}
+            onClick={item.onClick}
+          >
+            {item.icon}
+          </button>
+        </div>
+      ))}
+
+      {showToggleViewMenu && (
+        <LayoutToggler
+          setShowToggleViewMenu={setShowToggleViewMenu}
+          onLayoutChange={onLayoutChange}
+        />
+      )}
+    </div>
+  );
+
   // Selected File/Folder Actions
   if (selectedFiles.length > 0) {
     return (
       <div className="toolbar file-selected">
-        <div className="file-action-container">
+        <div className="fm-toolbar file-action-container">
           <div>
             {permissions.move && (
-              <button className="item-action file-action" onClick={() => handleCutCopy(true)}>
+              <button className="item-action file-action" title={t("cut")} onClick={() => handleCutCopy(true)}>
                 <BsScissors size={18} />
                 <span>{t("cut")}</span>
               </button>
             )}
             {permissions.copy && (
-              <button className="item-action file-action" onClick={() => handleCutCopy(false)}>
+              <button className="item-action file-action" title={t("copy")} onClick={() => handleCutCopy(false)}>
                 <BsCopy strokeWidth={0.1} size={17} />
                 <span>{t("copy")}</span>
               </button>
@@ -94,6 +117,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
             {clipBoard?.files?.length > 0 && (
               <button
                 className="item-action file-action"
+                title={t("paste")}
                 onClick={handleFilePasting}
                 // disabled={!clipBoard}
               >
@@ -104,6 +128,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
             {selectedFiles.length === 1 && permissions.rename && (
               <button
                 className="item-action file-action"
+                title={t("rename")}
                 onClick={() => triggerAction.show("rename")}
               >
                 <BiRename size={19} />
@@ -111,7 +136,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
               </button>
             )}
             {permissions.download && (
-              <button className="item-action file-action" onClick={handleDownloadItems}>
+              <button className="item-action file-action" title={t("download")} onClick={handleDownloadItems}>
                 <MdOutlineFileDownload size={19} />
                 <span>{t("download")}</span>
               </button>
@@ -119,6 +144,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
             {permissions.delete && (
               <button
                 className="item-action file-action"
+                title={t("delete")}
                 onClick={() => triggerAction.show("delete")}
               >
                 <MdOutlineDelete size={19} />
@@ -126,17 +152,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
               </button>
             )}
           </div>
-          <button
-            className="item-action file-action"
-            title={t("clearSelection")}
-            onClick={() => setSelectedFiles([])}
-          >
-            <span>
-              {selectedFiles.length}{" "}
-              {t(selectedFiles.length > 1 ? "itemsSelected" : "itemSelected")}
-            </span>
-            <MdClear size={18} />
-          </button>
+          {rightGroup}
         </div>
       </div>
     );
@@ -150,29 +166,13 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
           {toolbarLeftItems
             .filter((item) => item.permission)
             .map((item, index) => (
-              <button className="item-action" key={index} onClick={item.onClick}>
+              <button className="item-action" key={index} title={item.text} onClick={item.onClick}>
                 {item.icon}
                 <span>{item.text}</span>
               </button>
             ))}
         </div>
-        <div>
-          {toolbarRightItems.map((item, index) => (
-            <div key={index} className="toolbar-left-items">
-              <button className="item-action icon-only" title={item.title} onClick={item.onClick}>
-                {item.icon}
-              </button>
-              {index !== toolbarRightItems.length - 1 && <div className="item-separator"></div>}
-            </div>
-          ))}
-
-          {showToggleViewMenu && (
-            <LayoutToggler
-              setShowToggleViewMenu={setShowToggleViewMenu}
-              onLayoutChange={onLayoutChange}
-            />
-          )}
-        </div>
+        {rightGroup}
       </div>
     </div>
   );

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- FileVault app icon: a vault door. Source for icon.png (512x512). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b8cff"/>
+      <stop offset="1" stop-color="#0b4fb3"/>
+    </linearGradient>
+    <linearGradient id="door" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dfe8f7"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#bg)"/>
+
+  <!-- Door -->
+  <rect x="104" y="104" width="304" height="304" rx="56" fill="url(#door)"/>
+  <rect x="104" y="104" width="304" height="304" rx="56" fill="none" stroke="#0b4fb3" stroke-opacity="0.18" stroke-width="6"/>
+
+  <!-- Hinges -->
+  <rect x="88" y="160" width="28" height="48" rx="10" fill="#0b4fb3"/>
+  <rect x="88" y="304" width="28" height="48" rx="10" fill="#0b4fb3"/>
+
+  <!-- Dial -->
+  <circle cx="256" cy="256" r="86" fill="none" stroke="#0b4fb3" stroke-width="18"/>
+  <g stroke="#0b4fb3" stroke-width="16" stroke-linecap="round">
+    <line x1="256" y1="196" x2="256" y2="226"/>
+    <line x1="256" y1="286" x2="256" y2="316"/>
+    <line x1="196" y1="256" x2="226" y2="256"/>
+    <line x1="286" y1="256" x2="316" y2="256"/>
+  </g>
+  <circle cx="256" cy="256" r="22" fill="#0b4fb3"/>
+</svg>

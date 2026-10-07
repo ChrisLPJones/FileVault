@@ -1,0 +1,119 @@
+/* App-wide colours and sizes. Pages and the file manager use these variables instead of
+   hard-coded colours. <html data-theme="light|dark"> is set by the script in index.html and
+   by utils/theme.js. */
+:root {
+    color-scheme: light;
+    --fv-header-height: 52px;
+
+    --fv-page-bg: #eef0f3;
+    --fv-header-bg: #2b2f36;
+    --fv-header-text: #fff;
+
+    --fv-surface: #fff;
+    --fv-text: #212529;
+    --fv-text-muted: #5f6368;
+    --fv-heading-on-page: #1f2328;
+    --fv-border: #ccc;
+    --fv-input-bg: #fff;
+    --fv-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+
+    --fv-primary: #007bff;
+    --fv-primary-hover: #0056b3;
+    --fv-primary-text: #fff;
+    --fv-focus-ring: rgba(0, 123, 255, 0.35);
+    --fv-link: #0b63ce;
+
+    --fv-danger: #dc3545;
+    --fv-danger-hover: #b02a37;
+    --fv-error-text: #c62828;
+    --fv-ok-text: #1b7a43;
+
+    --fv-alert-success-bg: #d4edda;
+    --fv-alert-success-text: #155724;
+    --fv-alert-danger-bg: #f8d7da;
+    --fv-alert-danger-text: #721c24;
+    --fv-alert-danger-border: #f5c2c7;
+
+    --fv-track: #e9ecef;
+
+    /* File manager */
+    --fm-bg: #fff;
+    --fm-text: #303030;
+    --fm-muted: #696969;
+    --fm-border: #cfcfcf;
+    --fm-surface-alt: #f3f3f3;
+    --fm-shade: 0, 0, 0; /* used as rgba(var(--fm-shade), alpha) for hover/selection tints */
+
+    /* File and folder icons (components/FileTypeIcon). Folders are amber like Windows... */
+    --fv-folder-back: #e3a21a;
+    --fv-folder-front-top: #ffd667;
+    --fv-folder-front-bottom: #f6bb34;
+    --fv-folder-paper: #fffdf6;
+    --fv-folder-highlight: rgba(255, 255, 255, 0.55);
+    --fv-folder-glyph: #a8650b;
+    --fv-file-page: #ffffff;
+    --fv-file-page-edge: #c9cfd6;
+    --fv-file-fold: #e7eaee;
+}
+
+/* ...and light blue like Finder when opened on a Mac (set in index.html) */
+:root[data-platform="mac"] {
+    --fv-folder-back: #3f8fe0;
+    --fv-folder-front-top: #8cc8fb;
+    --fv-folder-front-bottom: #5aa9f2;
+    --fv-folder-paper: #f4f9ff;
+    --fv-folder-glyph: #1d63b8;
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --fv-page-bg: #121316;
+    --fv-header-bg: #1b1d21;
+    --fv-header-text: #f1f3f4;
+
+    --fv-surface: #1e1f22;
+    --fv-text: #e6e6e6;
+    --fv-text-muted: #a5a9b0;
+    --fv-heading-on-page: #f1f3f4;
+    --fv-border: #3c3f45;
+    --fv-input-bg: #16171a;
+    --fv-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+
+    --fv-primary: #3b8cff;
+    --fv-primary-hover: #2f73d6;
+    --fv-primary-text: #fff;
+    --fv-focus-ring: rgba(59, 140, 255, 0.45);
+    --fv-link: #7ab0ff;
+
+    --fv-danger: #e5484d;
+    --fv-danger-hover: #c93a3f;
+    --fv-error-text: #ff8a80;
+    --fv-ok-text: #5dd39e;
+
+    --fv-alert-success-bg: #12341f;
+    --fv-alert-success-text: #9be3b4;
+    --fv-alert-danger-bg: #3d1618;
+    --fv-alert-danger-text: #ffb4ab;
+    --fv-alert-danger-border: #6b2a2d;
+
+    --fv-track: #2c2f34;
+
+    --fm-bg: #1e1f22;
+    --fm-text: #e3e3e3;
+    --fm-muted: #a0a4ab;
+    --fm-border: #3a3d42;
+    --fm-surface-alt: #2a2c30;
+    --fm-shade: 255, 255, 255;
+
+    --fv-file-page: #f4f5f7;
+    --fv-file-page-edge: #8a9099;
+    --fv-file-fold: #d5d9de;
+}
+
+html,
+body {
+    background-color: var(--fv-page-bg);
+    color: var(--fv-text);
+    font-family: Arial, sans-serif;
+}

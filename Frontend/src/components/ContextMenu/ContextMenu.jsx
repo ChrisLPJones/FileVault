@@ -84,7 +84,7 @@ const ContextMenu = ({ filesViewRef, contextMenuRef, menuItems, visible, clickPo
             {menuItems
               .filter((item) => !item.hidden)
               .map((item, index) => {
-                const hasChildren = item.hasOwnProperty("children");
+                const hasChildren = Object.hasOwn(item, "children");
                 const activeSubMenu = activeSubMenuIndex === index && hasChildren;
                 return (
                   <div key={item.title}>

@@ -1,4 +1,5 @@
-﻿using Backend.Services;
+using Backend.Models;
+using Backend.Services;
 using Microsoft.Data.SqlClient;
 
 namespace Backend.Routes
@@ -7,9 +8,11 @@ namespace Backend.Routes
     {
         public static void MapHealthCheckRoutes(this IEndpointRouteBuilder app)
         {
-            
             // Health check endpoint to verify the API is running
-            app.MapGet("/ping", () => Results.Ok(new { success = "Pong" }));
+            app.MapGet("/ping", () => Results.Ok(new { success = "Pong" }))
+                .WithTags("Health")
+                .WithSummary("Check the API is running")
+                .Produces<SuccessResponse>();
 
             // Health check endpoint to verify the SQL Server connection is working
             app.MapGet("/pingsql", async (DatabaseServices db) =>
@@ -23,7 +26,11 @@ namespace Backend.Routes
                 {
                     return Results.BadRequest(new { error = "Connection to SQL failed" });
                 }
-            });
+            })
+                .WithTags("Health")
+                .WithSummary("Check the API can reach the database")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400);
         }
     }
 }

@@ -9,13 +9,30 @@
                 "trustServerCertificate": true
             },
             "previewLimit": 50,
-            "server": "localhost",
+            "server": "127.0.0.1",
             "port": 1433,
             "driver": "MSSQL",
-            "name": "FileVault",
+            "name": "FileVault (dev DB)",
             "database": "SecureVaultDb",
             "username": "sa",
-            "password": "YourStrong!Passw0rd"
+            "askForPassword": true
+        },
+        {
+            "connectionTimeout": 15,
+            "mssqlOptions": {
+                "appName": "SQLTools",
+                "useUTC": true,
+                "encrypt": true,
+                "trustServerCertificate": true
+            },
+            "previewLimit": 50,
+            "server": "127.0.0.1",
+            "port": 1434,
+            "driver": "MSSQL",
+            "name": "FileVault (Docker stack)",
+            "database": "SecureVaultDb",
+            "username": "sa",
+            "askForPassword": true
         }
     ],
     "cSpell.words": [

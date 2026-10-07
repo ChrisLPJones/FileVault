@@ -1,0 +1,159 @@
+/* Shared styles for the login and register pages (all classes are prefixed with auth-) */
+
+/* The body doesn't scroll (see Layout.css), so this area scrolls itself on short screens.
+   margin: auto on the card centres it when there's room and lets it scroll when there isn't. */
+.auth-page {
+    display: flex;
+    height: calc(100dvh - var(--fv-header-height));
+    overflow-y: auto;
+    padding: 24px 16px;
+    box-sizing: border-box;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 400px;
+    margin: auto;
+    padding: 28px 24px 24px;
+    border-radius: 8px;
+    background-color: var(--fv-surface);
+    color: var(--fv-text);
+    box-shadow: var(--fv-shadow);
+    box-sizing: border-box;
+}
+
+.auth-title {
+    margin: 0 0 4px;
+    font-size: 1.6rem;
+    text-align: center;
+}
+
+.auth-subtitle {
+    margin: 0 0 20px;
+    color: var(--fv-text-muted);
+    text-align: center;
+    font-size: 0.95rem;
+}
+
+.auth-field {
+    margin-bottom: 16px;
+}
+
+.auth-field label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.auth-field input {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--fv-border);
+    border-radius: 6px;
+    background-color: var(--fv-input-bg);
+    color: var(--fv-text);
+    font-size: 15px;
+    box-sizing: border-box;
+}
+
+.auth-field input:focus {
+    outline: none;
+    border-color: var(--fv-primary);
+    box-shadow: 0 0 0 3px var(--fv-focus-ring);
+}
+
+.auth-field input[aria-invalid="true"] {
+    border-color: var(--fv-error-text);
+}
+
+.auth-field-error {
+    margin-top: 6px;
+    color: var(--fv-error-text);
+    font-size: 0.85rem;
+}
+
+.auth-field-error.auth-match {
+    color: var(--fv-ok-text);
+}
+
+.auth-rules {
+    margin: 8px 0 0;
+    padding-left: 20px;
+    font-size: 0.85rem;
+    color: var(--fv-text-muted);
+}
+
+.auth-rules li {
+    margin: 2px 0;
+}
+
+.auth-rules .met {
+    color: var(--fv-ok-text);
+}
+
+.auth-rules .unmet {
+    color: var(--fv-error-text);
+}
+
+.auth-button {
+    width: 100%;
+    margin-top: 4px;
+    padding: 11px;
+    border: none;
+    border-radius: 6px;
+    background-color: var(--fv-primary);
+    color: var(--fv-primary-text);
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.auth-button:hover:not(:disabled) {
+    background-color: var(--fv-primary-hover);
+}
+
+.auth-button:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+.auth-alert {
+    margin: 16px 0 0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 0.95rem;
+}
+
+/* ServerStatus sits at the top of the card */
+.auth-card > .auth-alert:first-child {
+    margin: 0 0 16px;
+}
+
+.auth-alert.success {
+    background-color: var(--fv-alert-success-bg);
+    color: var(--fv-alert-success-text);
+}
+
+.auth-alert.danger {
+    background-color: var(--fv-alert-danger-bg);
+    color: var(--fv-alert-danger-text);
+}
+
+.auth-switch {
+    margin: 20px 0 0;
+    text-align: center;
+    font-size: 0.95rem;
+    color: var(--fv-text-muted);
+}
+
+.auth-switch a {
+    color: var(--fv-link);
+    font-weight: 600;
+}
+
+/* An alert above the form (e.g. "Account created") */
+.auth-alert.auth-alert-top {
+    margin: 0 0 16px;
+}

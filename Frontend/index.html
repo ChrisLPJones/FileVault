@@ -3,17 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My FileVault</title>
+    <title>FileVault</title>
+    <script>
+      // Apply the saved theme before the page renders (see src/utils/theme.js)
+      (function () {
+        var preference = "system";
+        try { preference = localStorage.getItem("fv-theme") || "system"; } catch (e) {}
+        var dark = preference === "dark" ||
+          (preference !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        // Mac users get Finder-blue folders (see styles/theme.css)
+        var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+        if (/mac/i.test(platform)) document.documentElement.dataset.platform = "mac";
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <style>
-      body {
-        background-color: #1f1f1f;
-        margin: 0;
-        font-family: Arial, sans-serif;
-      }
-    </style>
   </body>
 </html>

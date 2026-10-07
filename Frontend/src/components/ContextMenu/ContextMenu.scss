@@ -2,8 +2,8 @@
 
 .fm-context-menu {
   position: absolute;
-  background-color: white;
-  border: 1px solid #c6c6c6;
+  background-color: var(--fm-bg);
+  border: 1px solid var(--fm-border);
   border-radius: 6px;
   padding: 4px;
   z-index: 1;
@@ -31,12 +31,12 @@
 
         &:hover {
           cursor: pointer;
-          background-color: rgb(0, 0, 0, 0.07);
+          background-color: rgba(var(--fm-shade), 0.07);
         }
       }
 
       li.active {
-        background-color: rgb(0, 0, 0, 0.07);
+        background-color: rgba(var(--fm-shade), 0.07);
       }
 
       li.disable-paste {
@@ -50,33 +50,33 @@
     }
 
     .divider {
-      border-bottom: 1px solid #c6c6c6;
+      border-bottom: 1px solid var(--fm-border);
       margin: 5px 0 3px 0;
     }
 
     .list-expand-icon {
       margin-left: auto;
-      color: #444444;
+      color: var(--fm-text);
     }
 
     .sub-menu {
       position: absolute;
       top: 0;
-      background-color: white;
-      border: 1px solid #c6c6c6;
+      background-color: var(--fm-bg);
+      border: 1px solid var(--fm-border);
       border-radius: 6px;
       padding: 4px;
       z-index: 1;
 
       .item-selected {
         width: 13px;
-        color: #444444;
+        color: var(--fm-text);
       }
 
       li {
 
         &:hover {
-          background-color: rgb(0, 0, 0, 0.07) !important;
+          background-color: rgba(var(--fm-shade), 0.07) !important;
         }
       }
     }

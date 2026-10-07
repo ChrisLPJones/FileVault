@@ -1,94 +1,117 @@
-import React, { useEffect, useState } from "react";
-import "./Login.css";
+import { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import "../Auth/Auth.css";
 import { login } from "../../services/Auth";
+import { setToken } from "../../utils/auth";
 import ServerStatus from "../../components/ServerStatus";
-import { useLocation, useNavigate } from "react-router-dom";
 
 function Login() {
-    const [email, setEmail] = useState("");
+    const [identifier, setIdentifier] = useState("");
     const [password, setPassword] = useState("");
     const [errors, setErrors] = useState({});
-    const [loginStatus, setLoginStatus] = useState(null);
+    const [loginError, setLoginError] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
     const location = useLocation();
-    const [regStatus, setRegStatus] = useState(false);
-    const registrationSuccess = location.state?.registrationSuccess;
     const navigate = useNavigate();
+    // "Account created" shows after arriving from the register page, until the first login attempt
+    const [regMessageDismissed, setRegMessageDismissed] = useState(false);
+    const showRegistered = location.state?.registrationSuccess && !regMessageDismissed;
 
-    useEffect(() => {
-        registrationSuccess && setRegStatus(true);
-    }, [registrationSuccess]);
+    // Update a field and clear its error, so stale messages don't linger while typing
+    const edit = (setter, name) => (event) => {
+        setter(event.target.value);
+        if (errors[name]) setErrors(({ ...rest }) => { delete rest[name]; return rest; });
+    };
 
     const validateForm = () => {
         const newErrors = {};
-        if (!email) newErrors.email = "Email is required";
-        else if (!/\S+@\S+\.\S+/.test(email))
-            newErrors.email = "Email is invalid";
+        if (!identifier.trim()) newErrors.identifier = "Enter your email address";
+        // Only check it's present: older accounts may predate the current password rules
         if (!password) newErrors.password = "Password is required";
-        else if (password.length < 6)
-            newErrors.password = "Password must be at least 6 characters";
         return newErrors;
     };
 
     const handleSubmit = async (event) => {
         event.preventDefault();
-        setRegStatus(false);
+        setRegMessageDismissed(true);
+        setLoginError(null);
+
         const formErrors = validateForm();
+        setErrors(formErrors);
+        if (Object.keys(formErrors).length > 0) return;
 
-        if (Object.keys(formErrors).length > 0) {
-            setErrors(formErrors);
-        } else {
-            setErrors({});
-            const response = await login(email, password);
-
+        setSubmitting(true);
+        try {
+            const response = await login(identifier.trim(), password);
             if (response.status === 200) {
-                localStorage.setItem("token", response.data.success);
+                setToken(response.data.success);
                 navigate("/dashboard", { replace: true });
-                setLoginStatus(true);
-            } else {
-                setLoginStatus(false);
+                return;
             }
+            // e.g. "Invalid email or password" or the rate-limit message
+            setLoginError(response.data?.error || "Login failed");
+        } catch {
+            setLoginError("Can't reach the server. Please try again.");
         }
+        setSubmitting(false);
     };
 
     return (
-        <div className="login-wrapper">
-            <div className="login-form-container">
+        <div className="auth-page">
+            <div className="auth-card">
                 <ServerStatus />
-                <h2 className="login-title">Login</h2>
-                <form onSubmit={handleSubmit} className="login-form">
-                    <div className="form-group">
-                        <label>Email address</label>
+                <h1 className="auth-title">Log in</h1>
+                <p className="auth-subtitle">Welcome back to FileVault</p>
+
+                {showRegistered && (
+                    <div className="auth-alert auth-alert-top success" role="status">
+                        Account created. You can log in now.
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit} noValidate>
+                    <div className="auth-field">
+                        <label htmlFor="login-identifier">Email address</label>
                         <input
+                            id="login-identifier"
+                            name="email"
                             type="email"
-                            placeholder="Enter email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className={errors.email ? "input-error" : ""}
+                            autoComplete="email"
+                            autoCapitalize="none"
+                            spellCheck={false}
+                            value={identifier}
+                            onChange={edit(setIdentifier, "identifier")}
+                            aria-invalid={!!errors.identifier}
+                            aria-describedby={errors.identifier ? "login-identifier-error" : undefined}
                         />
-                        {errors.email && <div className="error-message">{errors.email}</div>}
+                        {errors.identifier && <div id="login-identifier-error" className="auth-field-error">{errors.identifier}</div>}
                     </div>
 
-                    <div className="form-group">
-                        <label>Password</label>
+                    <div className="auth-field">
+                        <label htmlFor="login-password">Password</label>
                         <input
+                            id="login-password"
+                            name="password"
                             type="password"
-                            placeholder="Password"
+                            autoComplete="current-password"
                             value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className={errors.password ? "input-error" : ""}
+                            onChange={edit(setPassword, "password")}
+                            aria-invalid={!!errors.password}
+                            aria-describedby={errors.password ? "login-password-error" : undefined}
                         />
-                        {errors.password && <div className="error-message">{errors.password}</div>}
+                        {errors.password && <div id="login-password-error" className="auth-field-error">{errors.password}</div>}
                     </div>
 
-                    <button type="submit" className="login-button">Login</button>
+                    <button type="submit" className="auth-button" disabled={submitting}>
+                        {submitting ? "Logging in…" : "Log in"}
+                    </button>
 
-                    {regStatus && <div className="alert success">Registration Successful</div>}
-                    {loginStatus !== null && (
-                        loginStatus ? 
-                        <div className="alert success">Login Successful</div> : 
-                        <div className="alert danger">Login Failed</div>
-                    )}
+                    {loginError && <div className="auth-alert danger" role="alert">{loginError}</div>}
                 </form>
+
+                <p className="auth-switch">
+                    Don't have an account? <Link to="/register">Create one</Link>
+                </p>
             </div>
         </div>
     );

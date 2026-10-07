@@ -5,7 +5,98 @@
   margin: 0px 4px;
   height: 100%;
   font-size: $fm-font-size;
-  @include overflow-y-scroll;
+  display: flex;
+  flex-direction: column;
+
+  .sb-folders-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    @include overflow-y-scroll;
+  }
+
+  // Avatar menu at the bottom (the UserMenu wrapper and its button)
+  > .user-menu {
+    flex-shrink: 0;
+    margin-top: 4px;
+    border-top: 1px solid var(--fm-border);
+  }
+
+  .nav-user {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 4px;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+
+    // Hover shading is a circle around the avatar rather than a box around the row
+    &:hover .avatar,
+    &[aria-expanded="true"] .avatar {
+      box-shadow: 0 0 0 4px $item-hover-color;
+    }
+
+    .nav-user-name {
+      font-weight: 600;
+    }
+
+    .nav-user-usage {
+      margin-left: auto;
+      color: var(--fm-muted);
+      font-size: 0.85em;
+    }
+  }
+
+  .nav-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin: 0 0 4px 2px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+
+    &:hover {
+      background-color: $item-hover-color;
+    }
+  }
+
+  // Icons only: hide names, arrows and nested folders
+  &.compact {
+    overflow-x: hidden;
+
+    // The folder rows are slightly wider than the strip: no horizontal scrollbar (the purple bar)
+    .sb-folders-scroll {
+      overflow-x: hidden !important;
+    }
+
+    .sb-folder-name,
+    .folder-icon-default,
+    .non-expanable,
+    .folder-collapsible {
+      display: none;
+    }
+
+    // Folder icons line up under the menu button
+    .sb-folders-list-item {
+      justify-content: flex-start;
+      padding-right: 0;
+
+      .file-type-icon {
+        margin: 0 0 0 7px;
+      }
+    }
+  }
 
   .folder-collapsible {
     margin-left: 10px;
@@ -15,8 +106,14 @@
     display: flex;
     align-items: center;
     margin-bottom: 4px;
-    padding: 6px 5px;
+    padding: 6px 5px 6px 0;
     border-radius: 4px;
+
+    // Expand arrow sits at the right so folder icons line up under the menu button, open or collapsed
+    > span {
+      order: 3;
+      margin-left: auto;
+    }
 
     &:hover {
       cursor: pointer;
@@ -31,12 +128,8 @@
       display: flex;
       align-items: center;
 
-      .folder-open-icon {
-        margin: 0 7px;
-      }
-
-      .folder-close-icon {
-        margin: 1px 9px 0px 8px;
+      .file-type-icon {
+        margin: 0 8px 0 7px;
       }
 
       .sb-folder-name {

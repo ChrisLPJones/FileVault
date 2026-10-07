@@ -11,6 +11,7 @@ import { useLayout } from "../../contexts/LayoutContext";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { duplicateNameHandler } from "../../utils/duplicateNameHandler";
 import { validateApiCallback } from "../../utils/validateApiCallback";
+import { useDetailsPane } from "../../contexts/DetailsPaneContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
 
 const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, onFileOpen) => {
@@ -26,6 +27,7 @@ const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, o
     useFileNavigation();
   const { activeLayout, setActiveLayout } = useLayout();
   const t = useTranslation();
+  const { setDetailsOpen } = useDetailsPane();
 
   // Context Menu
   const handleFileOpen = () => {
@@ -36,7 +38,8 @@ const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, o
       setSelectedFileIndexes([]);
       setSelectedFiles([]);
     } else {
-      enableFilePreview && triggerAction.show("previewFile");
+      // Files open in the details pane on the right, like Explorer's preview pane
+      enableFilePreview && setDetailsOpen(true);
     }
     setVisible(false);
   };

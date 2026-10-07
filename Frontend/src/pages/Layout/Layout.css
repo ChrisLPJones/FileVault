@@ -14,12 +14,17 @@ html, body {
 }
 
 .header-style {
-    background-color: #333;
-    padding: 1rem;
+    display: flex;
+    align-items: center;
+    height: var(--fv-header-height);
+    padding: 0 1rem;
+    box-sizing: border-box;
+    background-color: var(--fv-header-bg);
 }
 
 /* Make nav flex */
 .nav-container {
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between; /* pushes left items left, logout right */
@@ -33,6 +38,121 @@ html, body {
 
 /* All links */
 .link-style {
-    color: white;
+    color: var(--fv-header-text);
     text-decoration: none;
+}
+
+.link-style.active {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+}
+
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.link-style:focus-visible {
+    outline: 2px solid var(--fv-focus-ring);
+    outline-offset: 2px;
+}
+
+/* Keep the header above the page so dropdowns that open from it (view switcher, account
+   menu) aren't covered by the file area */
+.header-style {
+    position: relative;
+    z-index: 20;
+}
+
+.nav-left,
+.nav-right {
+    flex: 0 0 auto;
+}
+
+/* Rest of the top bar: the dashboard puts the file toolbar here, spread across it like
+   it was above the files (actions on the left, view and refresh on the right) */
+.nav-center {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    padding-right: 1rem;
+}
+
+.nav-center .toolbar,
+.nav-center .toolbar.file-selected {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--fv-header-text);
+}
+
+.nav-center .fm-toolbar,
+.nav-center .file-action-container {
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.nav-center .toolbar .item-action {
+    background-color: transparent;
+    color: var(--fv-header-text);
+    padding: 7px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.nav-center .toolbar .item-action:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.14) !important;
+    color: var(--fv-header-text);
+    text-shadow: none;
+    border-radius: 4px;
+}
+
+.nav-center .toolbar .item-action:focus-visible {
+    outline: 2px solid var(--fv-focus-ring);
+    outline-offset: 1px;
+}
+
+.nav-center .toolbar .item-separator {
+    height: 20px;
+    align-self: center;
+    background: rgba(255, 255, 255, 0.25);
+}
+
+/* The view switcher opens below the header on the page's colours */
+.nav-center .toolbar .toggle-view {
+    color: var(--fm-text);
+    top: calc(100% + 10px);
+    right: 0;
+    box-shadow: var(--fv-shadow);
+}
+
+/* Narrow windows: icons only (each button keeps its name as a tooltip) */
+@media (max-width: 900px) {
+    .nav-center .fm-toolbar .item-action span,
+    .nav-center .file-action-container > div:first-child .item-action span {
+        display: none;
+    }
+}
+
+
+.nav-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Icon-only toolbar buttons (view, refresh): square, so the hover background is a square */
+.nav-center .toolbar .item-action.icon-only {
+    width: 34px;
+    height: 34px;
+    padding: 0 !important;
+    justify-content: center;
+    border-radius: 6px;
 }

@@ -1,0 +1,351 @@
+/* The page body doesn't scroll (see Layout.css), so this page scrolls itself */
+.settings-page {
+    height: calc(100dvh - var(--fv-header-height));
+    overflow-y: auto;
+    padding: 24px 16px 48px;
+    box-sizing: border-box;
+}
+
+.settings-title {
+    max-width: 560px;
+    margin: 0 auto 16px;
+    color: var(--fv-heading-on-page);
+    font-size: 1.5rem;
+}
+
+.settings-loading {
+    color: var(--fv-heading-on-page);
+    text-align: center;
+}
+
+.settings-card {
+    max-width: 560px;
+    margin: 0 auto 16px;
+    padding: 20px;
+    border-radius: 5px;
+    background-color: var(--fv-surface);
+    box-shadow: var(--fv-shadow);
+    color: var(--fv-text);
+}
+
+.settings-card h2 {
+    margin: 0 0 12px;
+    font-size: 1.15rem;
+}
+
+.settings-card .form-group {
+    margin-bottom: 15px;
+}
+
+.settings-card label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.settings-card input {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--fv-border);
+    border-radius: 6px;
+    background-color: var(--fv-input-bg);
+    color: var(--fv-text);
+    font-size: 15px;
+    box-sizing: border-box;
+}
+
+.settings-card input:focus {
+    outline: none;
+    border-color: var(--fv-primary);
+    box-shadow: 0 0 0 3px var(--fv-focus-ring);
+}
+
+.settings-hint {
+    margin: 0 0 12px;
+    color: var(--fv-text-muted);
+    font-size: 0.9rem;
+}
+
+.settings-button {
+    padding: 10px 16px;
+    background-color: var(--fv-primary);
+    color: var(--fv-primary-text);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 15px;
+}
+
+.settings-button:hover:not(:disabled) {
+    background-color: var(--fv-primary-hover);
+}
+
+.settings-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.settings-button.danger {
+    background-color: var(--fv-danger);
+}
+
+.settings-button.danger:hover:not(:disabled) {
+    background-color: var(--fv-danger-hover);
+}
+
+.danger-zone {
+    border: 1px solid var(--fv-alert-danger-border);
+}
+
+.settings-alert {
+    margin-top: 12px;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.settings-alert.success {
+    background-color: var(--fv-alert-success-bg);
+    color: var(--fv-alert-success-text);
+}
+
+.settings-alert.danger {
+    background-color: var(--fv-alert-danger-bg);
+    color: var(--fv-alert-danger-text);
+}
+
+.usage-bar {
+    height: 12px;
+    border-radius: 6px;
+    background-color: var(--fv-track);
+    overflow: hidden;
+}
+
+.usage-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.3s ease;
+}
+
+.usage-bar-fill.low {
+    background-color: #198754;
+}
+
+.usage-bar-fill.medium {
+    background-color: #fd7e14;
+}
+
+.usage-bar-fill.high {
+    background-color: #dc3545;
+}
+
+.usage-text {
+    margin: 8px 0 4px;
+    font-weight: 500;
+}
+
+.password-rules {
+    color: var(--fv-text-muted);
+    padding-left: 20px;
+    margin: 6px 0 0;
+    font-size: 0.85rem;
+}
+
+.password-rules .met {
+    color: var(--fv-ok-text);
+}
+
+.password-rules .unmet {
+    color: var(--fv-error-text);
+}
+
+.theme-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.settings-card .theme-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 8px 14px;
+    border: 1px solid var(--fv-border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.settings-card .theme-option.selected {
+    border-color: var(--fv-primary);
+    box-shadow: 0 0 0 1px var(--fv-primary);
+}
+
+.settings-card .theme-option input {
+    display: inline;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
+    /* Drawn to match the native radio, which picks a white or black ring depending on the accent's brightness */
+    appearance: none;
+    -webkit-appearance: none;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid var(--fv-text-muted, #767676);
+    background: transparent;
+}
+
+.avatar-editor {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.avatar-editor-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.avatar-editor-actions .settings-hint {
+    flex-basis: 100%;
+    margin: 0;
+}
+
+.settings-button.secondary {
+    background-color: transparent;
+    color: var(--fv-text);
+    border: 1px solid var(--fv-border);
+}
+
+.settings-button.secondary:hover:not(:disabled):not(.disabled) {
+    background-color: var(--fv-track);
+}
+
+label.settings-button {
+    display: inline-block;
+}
+
+label.settings-button.disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+/* Hidden but still focusable/clickable through its label */
+.visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0 0 0 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+/* The upload <label> and the Remove <button> should line up exactly */
+.avatar-editor-actions .settings-button {
+    display: inline-flex;
+    align-items: center;
+    height: 38px;
+    box-sizing: border-box;
+    font-family: inherit;
+    margin: 0; /* the label otherwise inherits the form-label bottom margin */
+    line-height: 1;
+}
+
+.avatar-editor + .settings-alert {
+    margin: 0 0 16px;
+}
+
+
+.accent-heading {
+    margin: 18px 0 8px;
+    font-size: 0.95rem;
+}
+
+.accent-options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.accent-swatch {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.accent-swatch.selected {
+    outline: 2px solid var(--fv-text, currentColor);
+    outline-offset: 2px;
+}
+
+/* Same size and shape as the preset swatches; margin reset because ".settings-card label" adds a bottom margin */
+.settings-card .accent-custom {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    box-sizing: border-box;
+    border: 2px solid var(--fv-border, #ccc);
+    border-radius: 50%;
+    background-color: var(--fv-input-bg, transparent);
+    color: var(--fv-text, currentColor);
+    cursor: pointer;
+}
+
+.settings-card .accent-custom.selected {
+    color: #fff;
+    border-color: transparent;
+    outline: 2px solid var(--fv-text, currentColor);
+    outline-offset: 2px;
+}
+
+.accent-custom.selected svg {
+    filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
+}
+
+.settings-card .accent-custom input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: none;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.settings-card .theme-option input:focus-visible {
+    outline: 2px solid var(--fv-primary);
+    outline-offset: 2px;
+}
+
+.settings-card .theme-option input:checked {
+    border-color: transparent;
+    /* Native radio look: accent outer circle, ring, accent dot. The ring is always black. */
+    background: radial-gradient(circle, var(--fv-primary) 0 26%, #000 30% 52%, var(--fv-primary) 56%);
+}
+
+/* Light mode: white ring (dark mode keeps the black one) */
+:root[data-theme="light"] .settings-card .theme-option input:checked {
+    background: radial-gradient(circle, var(--fv-primary) 0 26%, #fff 30% 52%, var(--fv-primary) 56%);
+}

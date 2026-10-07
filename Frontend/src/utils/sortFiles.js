@@ -13,19 +13,21 @@ const sortFiles = (items, sortKey = 'name', direction = 'asc') => {
         comparison = a.name.localeCompare(b.name);
         break;
       
-      case 'size':
+      case 'size': {
         // Handle missing size values
         const sizeA = a.size || 0;
         const sizeB = b.size || 0;
         comparison = sizeA - sizeB;
         break;
-      
-      case 'modified':
+      }
+
+      case 'modified': {
         // Handle date sorting
         const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
         const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
         comparison = dateA - dateB;
         break;
+      }
       
       default:
         // Fallback to name sorting

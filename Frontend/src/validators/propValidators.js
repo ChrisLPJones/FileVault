@@ -14,7 +14,7 @@ export const urlValidator = (props, propName, componentName) => {
   try {
     new URL(url);
     return;
-  } catch (error) {
+  } catch {
     return new Error(
       `Invalid prop \`${propName}\` supplied to \`${componentName}\`. Expected a valid URL but received \`${url}\`.`
     );

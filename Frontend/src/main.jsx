@@ -1,9 +1,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "./styles/theme.css";
 import Layout from "./pages/Layout/Layout";
 import Login from "./pages/Login/Login";
 import Register from "./pages/Register/Register";
 import Dashboard from "./pages/Dashboard/Dashboard";
+import Settings from "./pages/Settings/Settings";
 import ErrorPage from "./pages/Error/Errorpage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
@@ -16,7 +18,14 @@ const router = createBrowserRouter([
         element: <Layout />,
         errorElement: <ErrorPage />,
         children: [
-            { index: true, element: <Login /> },
+            {
+                index: true,
+                element: (
+                    <PublicRoute>
+                        <Login />
+                    </PublicRoute>
+                ),
+            },
             {
                 path: "login",
                 element: (
@@ -41,10 +50,17 @@ const router = createBrowserRouter([
                     </ProtectedRoute>
                 ),
             },
+            {
+                path: "settings",
+                element: (
+                    <ProtectedRoute>
+                        <Settings />
+                    </ProtectedRoute>
+                ),
+            },
         ],
     },
 ]);
-``;
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     <React.StrictMode>

@@ -1,0 +1,152 @@
+/* Matches the web app's colours (Frontend/src/styles/theme.css) and follows the OS theme */
+:root {
+  color-scheme: light dark;
+  --bg: #eef0f3;
+  --surface: #fff;
+  --text: #212529;
+  --muted: #5f6368;
+  --border: #ccc;
+  --input-bg: #fff;
+  --primary: #007bff;
+  --primary-hover: #0056b3;
+  --focus: rgba(0, 123, 255, 0.35);
+  --alert-bg: #f8d7da;
+  --alert-text: #721c24;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121316;
+    --surface: #1e1f22;
+    --text: #e6e6e6;
+    --muted: #a5a9b0;
+    --border: #3c3f45;
+    --input-bg: #16171a;
+    --primary: #3b8cff;
+    --primary-hover: #2f73d6;
+    --focus: rgba(59, 140, 255, 0.45);
+    --alert-bg: #3d1618;
+    --alert-text: #ffb4ab;
+  }
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, Arial, sans-serif;
+}
+
+.card {
+  width: 100%;
+  max-width: 440px;
+  margin: auto;
+  padding: 32px 28px 28px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.logo {
+  display: block;
+  margin: 0 auto 12px;
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 1.5rem;
+}
+
+.subtitle {
+  margin: 0 0 20px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.15);
+}
+
+form {
+  text-align: left;
+}
+
+label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+input {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 15px;
+  box-sizing: border-box;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+button {
+  flex: 1;
+  padding: 11px;
+  border: none;
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.alert {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--alert-bg);
+  color: var(--alert-text);
+  text-align: left;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}

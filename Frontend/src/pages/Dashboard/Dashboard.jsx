@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { API_BASE_URL, getErrorMessage } from "../../api/api";
+import { getUsageAPI } from "../../api/accountAPI";
 import { createFolderAPI } from "../../api/createFolderAPI";
 import { deleteAPI } from "../../api/deleteAPI";
 import { downloadFile } from "../../api/downloadFileAPI";
@@ -7,158 +9,104 @@ import { getAllFilesAPI } from "../../api/getAllFilesAPI";
 import { renameAPI } from "../../api/renameAPI";
 import "./Dashboard.scss";
 import FileManager from "../../FileManager/FileManager";
-import { jwtDecode } from "jwt-decode";
-import { useNavigate } from "react-router-dom";
-import useAuthCheck from "../../hooks/useAuthCheck";
+import { useHeaderSlot } from "../../contexts/HeaderSlotContext";
 
-function App() {
-    const navigate = useNavigate();
+// Matches the API's default Storage:MaxUploadBytes until /user/usage responds
+const DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
-    useAuthCheck()
+const fileUploadConfig = {
+    url: `${API_BASE_URL}/upload`,
+};
 
-    const fileUploadConfig = {
-        url: import.meta.env.VITE_API_BASE_URL + "/upload",
-    };
-
-    const [isLoading, setIsLoading] = useState(false);
+function Dashboard() {
+    // The file toolbar goes in the middle of the top bar
+    const headerSlot = useHeaderSlot();
+    const [isLoading, setIsLoading] = useState(true);
     const [files, setFiles] = useState([]);
     const [currentPath, setCurrentPath] = useState("");
-    const isMountRef = useRef(false);
+    const [error, setError] = useState(null);
+    const [maxFileSize, setMaxFileSize] = useState(DEFAULT_MAX_UPLOAD_BYTES);
 
-    // Get Files
-    const getFiles = async () => {
-        setIsLoading(true);
-        const response = await getAllFilesAPI();
-        if (response.status === 200 && response.data) {
-            setFiles(response.data);
-        } else {
-            console.error(response);
-            setFiles([]);
-        }
-        setIsLoading(false);
-    };
-
-    
-
+    // Initial load
     useEffect(() => {
-        if (isMountRef.current) return;
-        isMountRef.current = true;
-        getFiles();
+        let cancelled = false;
+
+        getAllFilesAPI()
+            .then((response) => !cancelled && setFiles(response.data))
+            .catch((err) => !cancelled && setError(getErrorMessage(err, "Could not load files")))
+            .finally(() => !cancelled && setIsLoading(false));
+
+        // Use the server's upload limit (quota is checked by the server on upload)
+        getUsageAPI()
+            .then((usage) => !cancelled && setMaxFileSize(usage.maxUploadBytes))
+            .catch(() => {});
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
-    // Create Folder
-    const handleCreateFolder = async (name, parentFolder) => {
+    // Run an API action with the loader shown, then reload the file list.
+    // Failures are shown in the error banner instead of leaving the loader stuck.
+    const runAction = async (action, errorMessage) => {
         setIsLoading(true);
-        const response = await createFolderAPI(name, parentFolder?._id);
-        console.log("Created folder response:", response.data);
-
-        if (response.status === 200 || response.status === 201) {
-            setFiles((prev) => [...prev, response.data]);
-        } else {
-            console.error(response);
-        }
-        setIsLoading(false);
-    };
-    //
-
-    // File Upload Handlers
-    const handleFileUploading = (file, parentFolder) => {
-        return { parentId: parentFolder?._id };
-    };
-
-    const handleFileUploaded = (response) => {
-        const uploadedFile = JSON.parse(response);
-        setFiles((prev) => [...prev, uploadedFile]);
-        getFiles();
-    };
-    //
-
-    // Rename File/Folder
-    const handleRename = async (file, newName) => {
-        setIsLoading(true);
-        const response = await renameAPI(file._id, newName);
-        if (response.status === 200) {
-            getFiles();
-        } else {
-            console.error(response);
-        }
-        setIsLoading(false);
-    };
-    //
-
-    // Delete File/Folder
-    const handleDelete = async (files) => {
-        setIsLoading(true);
-        const idsToDelete = files.map((file) => file._id);
-        const response = await deleteAPI(idsToDelete);
-        if (response.status === 200) {
-            getFiles();
-        } else {
-            console.error(response);
+        setError(null);
+        try {
+            await action();
+            const response = await getAllFilesAPI();
+            setFiles(response.data);
+        } catch (err) {
+            console.error(err);
+            setError(getErrorMessage(err, errorMessage));
+        } finally {
             setIsLoading(false);
         }
     };
-    //
 
-    // Paste File/Folder
-    const handlePaste = async (
-        copiedItems,
-        destinationFolder,
-        operationType
-    ) => {
-        setIsLoading(true);
-        const copiedItemIds = copiedItems.map((item) => item._id);
-        if (operationType === "copy") {
-            const response = await copyItemAPI(
-                copiedItemIds,
-                destinationFolder?._id
-            );
-        } else {
-            const response = await moveItemAPI(
-                copiedItemIds,
-                destinationFolder?._id
-            );
+    const refreshFiles = () => runAction(async () => {}, "Could not load files");
+
+    const handleCreateFolder = (name, parentFolder) =>
+        runAction(() => createFolderAPI(name, parentFolder?._id), "Could not create folder");
+
+    const handleFileUploading = (file, parentFolder) => ({ parentId: parentFolder?._id });
+
+    const handleRename = (file, newName) =>
+        runAction(() => renameAPI(file._id, newName), "Could not rename item");
+
+    const handleDelete = (filesToDelete) =>
+        runAction(() => deleteAPI(filesToDelete.map((file) => file._id)), "Could not delete items");
+
+    const handlePaste = (copiedItems, destinationFolder, operationType) => {
+        const ids = copiedItems.map((item) => item._id);
+        return operationType === "copy"
+            ? runAction(() => copyItemAPI(ids, destinationFolder?._id), "Could not copy items")
+            : runAction(() => moveItemAPI(ids, destinationFolder?._id), "Could not move items");
+    };
+
+    const handleDownload = async (filesToDownload) => {
+        setError(null);
+        try {
+            await downloadFile(filesToDownload);
+        } catch (err) {
+            console.error(err);
+            setError(getErrorMessage(err, "Could not download"));
         }
-        await getFiles();
-    };
-    //
-
-    const handleLayoutChange = (layout) => {
-        console.log(layout);
     };
 
-    // Refresh Files
-    const handleRefresh = () => {
-        getFiles();
-    };
-    //
-
-    const handleFileOpen = (file) => {
-        console.log(`Opening file: ${file.name}`);
-    };
-
-    const handleError = (error, file) => {
-        console.error(error);
-    };
-
-    const handleDownload = async (files) => {
-        await downloadFile(files);
-    };
-
-    const handleCut = (files) => {
-        console.log("Moving Files", files);
-    };
-
-    const handleCopy = (files) => {
-        console.log("Copied Files", files);
-    };
-
-    const handleSelectionChange = (files) => {
-        console.log("Selected Files", files);
+    const handleError = (err) => {
+        console.error(err);
     };
 
     return (
         <div className="app">
+            {error && (
+                <div className="dashboard-error" role="alert">
+                    <span>{error}</span>
+                    <button type="button" onClick={() => setError(null)} aria-label="Dismiss error">
+                        ×
+                    </button>
+                </div>
+            )}
             <div className="file-manager-container">
                 <FileManager
                     files={files}
@@ -166,31 +114,27 @@ function App() {
                     isLoading={isLoading}
                     onCreateFolder={handleCreateFolder}
                     onFileUploading={handleFileUploading}
-                    onFileUploaded={handleFileUploaded}
-                    onCut={handleCut}
-                    onCopy={handleCopy}
+                    onFileUploaded={refreshFiles}
                     onPaste={handlePaste}
                     onRename={handleRename}
                     onDownload={handleDownload}
                     onDelete={handleDelete}
-                    onLayoutChange={handleLayoutChange}
-                    onRefresh={handleRefresh}
-                    onFileOpen={handleFileOpen}
-                    onSelectionChange={handleSelectionChange}
+                    onRefresh={refreshFiles}
                     onError={handleError}
                     layout="grid"
+                    primaryColor="var(--fv-primary)"
                     enableFilePreview
-                    maxFileSize={10485760}
-                    filePreviewPath={import.meta.env.VITE_API_FILES_BASE_URL}
+                    maxFileSize={maxFileSize}
                     acceptedFileTypes=".txt, .png, .jpg, .jpeg, .pdf, .doc, .docx, .exe"
                     height="100%"
                     width="100%"
                     initialPath={currentPath}
                     onFolderChange={setCurrentPath}
+                    toolbarContainer={headerSlot}
                 />
             </div>
         </div>
     );
 }
 
-export default App;
+export default Dashboard;

@@ -12,7 +12,6 @@
 *.user
 *.userosscache
 *.sln.docstates
-.vscode
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -485,3 +484,16 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local backend config with secrets (template: Backend/appsettings.Development.example.json)
+Backend/appsettings.Development.json
+
+# Local docker compose additions (template: docker-compose.override.example.yml)
+docker-compose.override.yml
+
+# Local-only VS Code files (Backend/Docker/.vscode holds personal DB connections with credentials)
+Backend/Docker/.vscode/
+Backend/.vscode/launch.json
+
+# Desktop app build output
+Desktop/dist/

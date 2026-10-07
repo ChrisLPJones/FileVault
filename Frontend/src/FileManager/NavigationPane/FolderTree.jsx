@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Collapse from "../../components/Collapse/Collapse";
-import { FaRegFolder, FaRegFolderOpen } from "react-icons/fa";
+import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
 import { MdKeyboardArrowRight } from "react-icons/md";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
 
@@ -42,6 +42,7 @@ const FolderTree = ({ folder, onFileOpen }) => {
         <div
           className={`sb-folders-list-item ${isActive ? "active-list-item" : ""}`}
           onClick={handleFolderSwitch}
+          title={folder.name}
         >
           <span onClick={handleCollapseChange}>
             <MdKeyboardArrowRight
@@ -50,11 +51,7 @@ const FolderTree = ({ folder, onFileOpen }) => {
             />
           </span>
           <div className="sb-folder-details">
-            {isOpen || isActive ? (
-              <FaRegFolderOpen size={20} className="folder-open-icon" />
-            ) : (
-              <FaRegFolder size={17} className="folder-close-icon" />
-            )}
+            <FileTypeIcon name={folder.name} path={folder.path} isDirectory open={isOpen || isActive} size={22} />
             <span className="sb-folder-name" title={folder.name}>
               {folder.name}
             </span>
@@ -74,14 +71,11 @@ const FolderTree = ({ folder, onFileOpen }) => {
       <div
         className={`sb-folders-list-item ${isActive ? "active-list-item" : ""}`}
         onClick={handleFolderSwitch}
+        title={folder.name}
       >
         <span className="non-expanable"></span>
         <div className="sb-folder-details">
-          {isActive ? (
-            <FaRegFolderOpen size={20} className="folder-open-icon" />
-          ) : (
-            <FaRegFolder size={17} className="folder-close-icon" />
-          )}
+          <FileTypeIcon name={folder.name} path={folder.path} isDirectory open={isActive} size={22} />
           <span className="sb-folder-name" title={folder.name}>
             {folder.name}
           </span>

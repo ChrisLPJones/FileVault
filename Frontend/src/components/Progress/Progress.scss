@@ -6,7 +6,7 @@
   .fm-progress-bar {
     width: 100%;
     border-radius: 5px;
-    background-color: #c6c6c6;
+    background-color: var(--fm-border);
     height: 5px;
 
     .fm-progress-bar-fill {

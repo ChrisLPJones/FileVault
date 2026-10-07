@@ -1,15 +1,17 @@
-﻿namespace Backend.Models
+namespace Backend.Models
 {
-#nullable enable
     public record HttpReturnResult
     {
         public bool Success { get; init; }
         public string? Message { get; init; }
         public string? FileName { get; init; }
-        public byte[]? FileContent { get; init; }
-
-        // <-- Add this property
         public FolderModel? Folder { get; init; }
+
+        // HTTP status to use when Success is false (defaults to 400 in the routes)
+        public int? StatusCode { get; init; }
+
+        public static HttpReturnResult NotFound(string message) => new(false, message) { StatusCode = 404 };
+        public static HttpReturnResult Conflict(string message) => new(false, message) { StatusCode = 409 };
 
         public HttpReturnResult(bool success)
         {
@@ -28,13 +30,6 @@
             this.FileName = fileName;
         }
 
-        public HttpReturnResult(bool success, string? message, string? fileName, byte[]? fileContent)
-            : this(success, message, fileName)
-        {
-            this.FileContent = fileContent;
-        }
-
-        // <-- Add constructor for folder
         public HttpReturnResult(bool success, string? message, FolderModel folder)
             : this(success, message)
         {

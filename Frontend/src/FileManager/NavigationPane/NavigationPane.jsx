@@ -3,9 +3,11 @@ import FolderTree from "./FolderTree";
 import { getParentPath } from "../../utils/getParentPath";
 import { useFiles } from "../../contexts/FilesContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
+import NavUser from "./NavUser";
+import { MdMenu } from "react-icons/md";
 import "./NavigationPane.scss";
 
-const NavigationPane = ({ onFileOpen }) => {
+const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
   const [foldersTree, setFoldersTree] = useState([]);
   const { files } = useFiles();
   const t = useTranslation();
@@ -34,16 +36,27 @@ const NavigationPane = ({ onFileOpen }) => {
   }, [files]);
 
   return (
-    <div className="sb-folders-list">
-      {foldersTree?.length > 0 ? (
-        <>
-          {foldersTree?.map((folder, index) => {
-            return <FolderTree key={index} folder={folder} onFileOpen={onFileOpen} />;
-          })}
-        </>
-      ) : (
-        <div className="empty-nav-pane">{t("nothingHereYet")}</div>
-      )}
+    <div className={`sb-folders-list ${compact ? "compact" : ""}`}>
+      <button
+        type="button"
+        className="nav-toggle"
+        title={compact ? "Expand folders" : "Collapse folders"}
+        onClick={onToggleCompact}
+      >
+        <MdMenu size={20} />
+      </button>
+      <div className="sb-folders-scroll">
+        {foldersTree?.length > 0 ? (
+          <>
+            {foldersTree?.map((folder, index) => {
+              return <FolderTree key={index} folder={folder} onFileOpen={onFileOpen} />;
+            })}
+          </>
+        ) : (
+          <div className="empty-nav-pane">{t("nothingHereYet")}</div>
+        )}
+      </div>
+      <NavUser compact={compact} />
     </div>
   );
 };

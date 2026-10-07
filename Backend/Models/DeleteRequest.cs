@@ -2,7 +2,8 @@ using System.Text.Json;
 
 namespace Backend.Models
 {
-    public class IsList
+    // DELETE /delete body: { "ids": "one-id" } or { "ids": ["id1", "id2"] }
+    public class DeleteRequest
     {
         public JsonElement ids { get; set; }
     }

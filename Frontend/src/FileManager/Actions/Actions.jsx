@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import Modal from "../../components/Modal/Modal";
 import DeleteAction from "./Delete/Delete.action";
 import UploadFileAction from "./UploadFile/UploadFile.action";
-import PreviewFileAction from "./PreviewFile/PreviewFile.action";
-import { useSelection } from "../../contexts/SelectionContext";
 import { useShortcutHandler } from "../../hooks/useShortcutHandler";
 import { useTranslation } from "../../contexts/TranslationProvider";
 
@@ -14,14 +12,11 @@ const Actions = ({
   onDelete,
   onRefresh,
   maxFileSize,
-  filePreviewPath,
-  filePreviewComponent,
   acceptedFileTypes,
   triggerAction,
   permissions,
 }) => {
   const [activeAction, setActiveAction] = useState(null);
-  const { selectedFiles } = useSelection();
   const t = useTranslation();
 
   // Triggers all the keyboard shortcuts based actions
@@ -37,6 +32,7 @@ const Actions = ({
           acceptedFileTypes={acceptedFileTypes}
           onFileUploading={onFileUploading}
           onFileUploaded={onFileUploaded}
+          onClose={triggerAction.close}
         />
       ),
       width: "35%",
@@ -46,25 +42,11 @@ const Actions = ({
       component: <DeleteAction triggerAction={triggerAction} onDelete={onDelete} />,
       width: "25%",
     },
-    previewFile: {
-      title: t("preview"),
-      component: (
-        <PreviewFileAction
-          filePreviewPath={filePreviewPath}
-          filePreviewComponent={filePreviewComponent}
-        />
-      ),
-      width: "50%",
-    },
   };
 
   useEffect(() => {
     if (triggerAction.isActive) {
-      const actionType = triggerAction.actionType;
-      if (actionType === "previewFile") {
-        actionTypes[actionType].title = selectedFiles?.name ?? t("preview");
-      }
-      setActiveAction(actionTypes[actionType]);
+      setActiveAction(actionTypes[triggerAction.actionType]);
     } else {
       setActiveAction(null);
     }

@@ -1,11 +1,9 @@
 import { Navigate } from "react-router-dom";
+import { isAuthenticated } from "../utils/auth";
 
-// Simple wrapper for protected routes
+// Only render children for a logged-in user with an unexpired token
 const ProtectedRoute = ({ children }) => {
-    const isAuthenticated = !!localStorage.getItem("token"); // or your auth logic
-
-    if (!isAuthenticated) {
-        // Redirect to login if not logged in
+    if (!isAuthenticated()) {
         return <Navigate to="/login" replace />;
     }
 

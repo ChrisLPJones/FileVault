@@ -1,0 +1,12 @@
+# Optional local additions to docker-compose.yml.
+# Copy to docker-compose.override.yml (gitignored); `docker compose up` loads it automatically.
+
+services:
+  # Expose SQL Server to GUI tools (SSMS, Azure Data Studio, VS Code SQLTools) on this machine only.
+  # Connect to: 127.0.0.1,1434  user: sa  password: MSSQL_SA_PASSWORD from .env
+  # Use 127.0.0.1 rather than "localhost": localhost may resolve to IPv6 (::1), which
+  # Docker Desktop doesn't forward reliably, so some tools time out.
+  # (1434 avoids clashing with the dev database from Backend/Docker on 1433.)
+  sqlserver:
+    ports:
+      - "127.0.0.1:1434:1433"

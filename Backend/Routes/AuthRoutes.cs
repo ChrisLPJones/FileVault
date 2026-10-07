@@ -1,237 +1,318 @@
-﻿using Backend.Models;
+using Backend.Models;
 using Backend.Services;
-using Microsoft.Data.SqlClient;
-using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text.Json;
 
 namespace Backend.Routes
 {
+    // Unexpected errors (e.g. the database being down) are logged and turned into
+    // a 500 { error } response by the exception handler in Program.cs.
     public static class AuthRoutes
     {
+        // Accept both "Email" and "email" style property names
+        private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+        // Read a JSON body, or null if it's missing or malformed
+        private static async Task<T?> ReadJsonAsync<T>(HttpRequest request) where T : class
+        {
+            try
+            {
+                return await JsonSerializer.DeserializeAsync<T>(request.Body, JsonOptions);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
         public static void MapAuthRoutes(this IEndpointRouteBuilder app)
         {
             // Registers a new user
             app.MapPost("/user/register", async (
                 HttpRequest request,
                 DatabaseServices db,
-                AuthServices auth) =>
+                AuthServices auth,
+                FileServices fs) =>
             {
-                try
-                {
-                    // Read request
-                    using StreamReader reader = new(request.Body);
-                    var body = await reader.ReadToEndAsync();
+                var user = await ReadJsonAsync<UserModel>(request);
 
-                    // Parse request into UserModel
-                    UserModel user;
-                    try
-                    {
-                        user = JsonSerializer.Deserialize<UserModel>(body);
-                    }
-                    catch (JsonException)
-                    {
-                        return Results.BadRequest(new { error = "Invalid JSON" });
-                    }
-
-                    // Require all fields
-                    if (user is null ||
-                    string.IsNullOrWhiteSpace(user.Username) ||
+                // Require all fields
+                if (user is null ||
                     string.IsNullOrWhiteSpace(user.Email) ||
                     string.IsNullOrWhiteSpace(user.Password))
-                        return Results.BadRequest(new { error = "Invalid JSON" });
+                    return Results.BadRequest(new { error = "Invalid JSON" });
 
-                    // Check if User exists by email
-                    if (await db.UserExistsByEmail(user.Email))
-                        return Results.BadRequest(new { error = "Email already exists" });
+                var validationError = AuthServices.ValidateAccount(user.FirstName, user.LastName, user.Email)
+                    ?? AuthServices.ValidatePassword(user.Password);
+                if (validationError != null)
+                    return Results.BadRequest(new { error = validationError });
 
-                    // Check if user exists by username
-                    if (await db.UserExistsByUsername(user.Username))
-                        return Results.BadRequest(new { error = "Username already exists" });
+                if (await db.UserExistsByEmail(user.Email))
+                    return Results.BadRequest(new { error = "Email already exists" });
 
-                    // Hash and register user
-                    await auth.HashAndRegisterUser(user, db);
+                await auth.HashAndRegisterUser(user, db);
 
-                    // Return 200 OK 
-                    return Results.Ok(new { success = $"User {user.Username} registered" });
-                }
-                catch (SqlException ex)
-                {
-                    Console.WriteLine($"Database error: {ex.Message}");
-                    return Results.Json(new { error = "A database error has occurred" }, statusCode: 500);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Internal error: {ex.Message}");
-                    return Results.Json(new { error = "A internal error has occurred" }, statusCode: 500);
-                }
-            });
+                // Starter folders (Documents, Pictures, Music, Videos) for the new account
+                var created = await db.GetUserByEmail(user.Email.Trim());
+                if (created != null)
+                    await fs.CreateDefaultFoldersAsync(db, created.Id.ToString());
 
-            // Logs in a user and returns a success message or error
+                return Results.Ok(new { success = $"User {user.FirstName.Trim()} {user.LastName.Trim()} registered" });
+            })
+                .WithTags("Account")
+                .WithSummary("Create an account")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(429).RequireRateLimiting("auth");
+
+            // Logs in a user: returns an access token and sets the refresh token cookie
             app.MapPost("/user/login", async (
-                HttpRequest request,
+                HttpContext http,
                 AuthServices auth,
                 DatabaseServices db) =>
             {
-                try
+                var login = await ReadJsonAsync<LoginModel>(http.Request);
+
+                if (login == null ||
+                    string.IsNullOrWhiteSpace(login.Identifier) ||
+                    string.IsNullOrWhiteSpace(login.Password))
+                    return Results.BadRequest(new { error = "Invalid JSON" });
+
+                var userRecord = await auth.ValidateUser(login, db);
+                if (userRecord == null)
+                    return Results.Json(new { error = "Invalid email or password" }, statusCode: 401);
+
+                await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
+
+                return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
+            })
+                .WithTags("Account")
+                .WithSummary("Log in with email and password: returns an access token and sets the refresh-token cookie")
+                .Produces<TokenResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(401)
+                .Produces<ErrorResponse>(429).RequireRateLimiting("auth");
+
+            // Exchanges the refresh token cookie for a new access token (and a new refresh cookie)
+            app.MapPost("/user/refresh", async (
+                HttpContext http,
+                AuthServices auth,
+                DatabaseServices db) =>
+            {
+                var user = await auth.RotateRefreshTokenAsync(db, http);
+                if (user == null)
                 {
-                    StreamReader reader = new(request.Body);
-                    string body = await reader.ReadToEndAsync();
-
-                    LoginModel user;
-
-                    try
-                    {
-                        user = JsonSerializer.Deserialize<LoginModel>(body);
-                    }
-                    catch (JsonException)
-                    {
-                        return Results.BadRequest(new { error = "Invalid JSON" });
-                    }
-
-
-                    if (user == null ||
-                    string.IsNullOrWhiteSpace(user.Email) ||
-                    string.IsNullOrWhiteSpace(user.Password))
-                    {
-                        return Results.BadRequest(new { Error = "Invalid JSON" });
-                    }
-
-                    var result = await auth.ValidateUser(user, db, auth);
-                    if (!result.Success)
-                        //return Results.BadRequest(new { Error = result.Message });
-                        return Results.Unauthorized();
-
-                    return Results.Ok(new { Success = result.Message });
+                    AuthServices.ClearRefreshCookie(http);
+                    return Results.Json(new { error = "Session expired" }, statusCode: 401);
                 }
-                catch (SqlException ex)
-                {
-                    Console.WriteLine($"Database error: {ex.Message}");
-                    return Results.Json(new { error = "A database error has occurred" }, statusCode: 500);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Internal error: {ex.Message}");
-                    return Results.Json(new { error = "A internal error has occurred" }, statusCode: 500);
-                }
-            });
+
+                return Results.Ok(new { Success = auth.GetJWTToken(user) });
+            })
+                .WithTags("Account")
+                .WithSummary("Get a new access token using the refresh-token cookie")
+                .Produces<TokenResponse>()
+                .Produces<ErrorResponse>(401)
+                .Produces<ErrorResponse>(429).RequireRateLimiting("refresh");
+
+            // Logs out: revokes the refresh token and clears its cookie
+            app.MapPost("/user/logout", async (
+                HttpContext http,
+                AuthServices auth,
+                DatabaseServices db) =>
+            {
+                await auth.RevokeRefreshCookieAsync(db, http);
+                return Results.Ok(new { success = "Logged out" });
+            })
+                .WithTags("Account")
+                .WithSummary("Log out: revokes the refresh token and clears its cookie")
+                .Produces<SuccessResponse>();
 
             // Retrieves authenticated user's information
             app.MapGet("/user/info", async (
                 ClaimsPrincipal user,
                 DatabaseServices db) =>
             {
-                try
-                {
-                    var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userId = user.GetUserId();
+                var userInfo = await db.GetUserByUserId(userId);
+                if (userInfo == null)
+                    return Results.NotFound(new { error = "User not found" });
 
-                    var userInfo = await db.GetUserByUserId(userId);
+                var avatar = await db.GetAvatarAsync(userId);
+                return Results.Ok(new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt));
+            })
+                .WithTags("Account")
+                .WithSummary("Get the current user's name, email and when their profile picture last changed")
+                .Produces<UserInfoResponse>()
+                .Produces<ErrorResponse>(404).RequireAuthorization();
 
-                    if (userInfo == null)
-                    {
-                        return Results.NotFound(new { Error = "User not found" });
-                    }
-
-                    return Results.Ok(new
-                    {
-                        username = userInfo.Username,
-                        email = userInfo.Email
-                    });
-                }
-                catch (SqlException ex)
-                {
-                    Console.WriteLine($"Database error: {ex.Message}");
-                    return Results.Json(new { error = "A database error has occurred" }, statusCode: 500);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Internal error: {ex.Message}");
-                    return Results.Json(new { error = "A internal error has occurred" }, statusCode: 500);
-                }
-            }).RequireAuthorization();
-
-            // Updates authenticated user's account information
-            app.MapPut("/user", async (
+            // Updates the authenticated user's name and email
+            app.MapPatch("/user/profile", async (
                 ClaimsPrincipal user,
-                UserModel updateUser,
+                ProfileUpdateRequest request,
                 DatabaseServices db,
                 AuthServices auth) =>
             {
-                try
-                {
-                    // Not sure if all fields should be filled in this Put request
-                    if (updateUser == null ||
-                    string.IsNullOrWhiteSpace(updateUser.Username) ||
-                    string.IsNullOrWhiteSpace(updateUser.Email) ||
-                    string.IsNullOrWhiteSpace(updateUser.Password))
-                    {
-                        return Results.BadRequest(new { error = "invalid JSON" });
-                    }
+                var firstName = request?.FirstName?.Trim();
+                var lastName = request?.LastName?.Trim();
+                var email = request?.Email?.Trim().ToLowerInvariant();
 
-                    var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var validationError = AuthServices.ValidateAccount(firstName, lastName, email);
+                if (validationError != null || firstName is null || lastName is null || email is null)
+                    return Results.BadRequest(new { error = validationError ?? "Invalid JSON" });
 
-                    if (updateUser == null)
-                        return Results.BadRequest(new { Error = "Request body is missing or invalid JSON" });
+                var userId = user.GetUserId();
+                var account = await db.GetUserByUserId(userId);
+                if (account == null)
+                    return Results.NotFound(new { error = "User not found" });
 
-                    if (!string.IsNullOrEmpty(updateUser.Password))
-                        updateUser.Password = auth.GeneratePasswordHash(updateUser.Password);
+                var conflict = await db.FindAccountConflictAsync(email, userId);
+                if (conflict != null)
+                    return Results.Conflict(new { error = conflict });
 
-                    var oldUser = await db.GetUserByUserId(userId);
+                await db.UpdateProfileAsync(userId, firstName, lastName, email);
 
-                    if (oldUser == null)
-                        return Results.NotFound(new { Error = "User not found" });
+                // New access token so the email claim is current
+                account.FirstName = firstName;
+                account.LastName = lastName;
+                account.Email = email;
+                return Results.Ok(new { Success = "Profile updated", Token = auth.GetJWTToken(account) });
+            })
+                .WithTags("Account")
+                .WithSummary("Change name and email (returns a new access token)")
+                .Produces<TokenUpdateResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(409).RequireAuthorization();
 
-                    var response = await db.UpdateUser(oldUser, updateUser, userId);
-                    if (!response.Success)
-                        return Results.BadRequest(new { Error = response.Message });
+            // Changes the authenticated user's password (requires the current one)
+            app.MapPost("/user/password", async (
+                HttpContext http,
+                ClaimsPrincipal user,
+                PasswordChangeRequest request,
+                DatabaseServices db,
+                AuthServices auth) =>
+            {
+                var userId = user.GetUserId();
+                var account = await db.GetUserByUserId(userId);
+                if (account == null)
+                    return Results.NotFound(new { error = "User not found" });
 
-                    return Results.Ok(new { Success = "Updated user info" });
-                }
-                catch (SqlException ex)
-                {
-                    Console.WriteLine($"Database error: {ex.Message}");
-                    return Results.Json(new { error = "A database error has occurred" }, statusCode: 500);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Internal error: {ex.Message}");
-                    return Results.Json(new { error = "A internal error has occurred" }, statusCode: 500);
-                }
-            }).RequireAuthorization();
+                if (string.IsNullOrEmpty(request?.CurrentPassword) ||
+                    !BCrypt.Net.BCrypt.Verify(request.CurrentPassword, account.Password))
+                    return Results.BadRequest(new { error = "Current password is incorrect" });
+
+                var passwordError = AuthServices.ValidatePassword(request.NewPassword);
+                if (passwordError != null || request.NewPassword is null)
+                    return Results.BadRequest(new { error = passwordError ?? "New password is required" });
+
+                await db.UpdatePasswordHashAsync(userId, auth.GeneratePasswordHash(request.NewPassword));
+
+                // End every other session, then start a fresh one for this client
+                await db.RevokeAllRefreshTokensAsync(userId);
+                await auth.IssueRefreshTokenAsync(userId, db, http);
+
+                return Results.Ok(new { Success = "Password changed", Token = auth.GetJWTToken(account) });
+            })
+                .WithTags("Account")
+                .WithSummary("Change password (ends other sessions, returns a new access token)")
+                .Produces<TokenUpdateResponse>()
+                .Produces<ErrorResponse>(400).RequireAuthorization();
 
             // Deletes the authenticated user's account and all their files
             app.MapDelete("/user", async (
+                HttpContext http,
                 ClaimsPrincipal user,
                 DatabaseServices db,
-                FileServices fs) =>
+                FileServices fs,
+                AvatarService avatars) =>
             {
+                var userId = user.GetUserId();
+                if (await db.GetUserByUserId(userId) == null)
+                    return Results.NotFound(new { error = "User not found" });
+
+                var response = await db.DeleteUserAndFilesById(userId, fs);
+                if (!response.Success)
+                    return Results.Json(new { error = response.Message }, statusCode: 500);
+
+                avatars.DeleteFile(userId);
+
+                // Refresh tokens are deleted with the user; clear the cookie too
+                AuthServices.ClearRefreshCookie(http);
+
+                return Results.Ok(new { response.Message });
+            })
+                .WithTags("Account")
+                .WithSummary("Delete the account and every stored file")
+                .Produces(200)
+                .Produces<ErrorResponse>(404).RequireAuthorization();
+
+            // Sets the profile picture (multipart field "avatar": PNG, JPEG or WebP, up to 2 MB)
+            app.MapPut("/user/avatar", async (
+                ClaimsPrincipal user,
+                HttpRequest request,
+                DatabaseServices db,
+                AvatarService avatars) =>
+            {
+                if (!request.HasFormContentType)
+                    return Results.BadRequest(new { error = "Expected form-data content type" });
+
+                IFormCollection form;
                 try
                 {
-                    var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-                    var userModel = await db.GetUserByUserId(userId);
-
-                    if (userModel == null)
-                        return Results.BadRequest(new { error = "User not found" });
-
-                    var response = await db.DeleteUserAndFilesById(userId, fs);
-
-                    return Results.Ok(new { response.Message });
+                    form = await request.ReadFormAsync();
                 }
-                catch (SqlException ex)
+                catch (Exception ex) when (ex is BadHttpRequestException or InvalidDataException)
                 {
-                    Console.WriteLine($"Database error: {ex.Message}");
-                    return Results.Json(new { error = "A database error has occurred" }, statusCode: 500);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Internal error: {ex.Message}");
-                    return Results.Json(new { error = "An internal error has occurred" }, statusCode: 500);
+                    return Results.Json(new { error = "Profile pictures must be 2 MB or smaller" }, statusCode: 413);
                 }
 
-            }).RequireAuthorization();
+                var file = form.Files.GetFile("avatar") ?? form.Files.FirstOrDefault();
+                if (file == null)
+                    return Results.BadRequest(new { error = "No image uploaded" });
 
-            // TODO: Implement token refresh and logout endpoints
+                var result = await avatars.SaveAsync(file, db, user.GetUserId());
+                return result.Success
+                    ? Results.Ok(new { success = result.Message })
+                    : Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
+            })
+                .WithTags("Account")
+                .WithSummary("Set the profile picture (multipart field \"avatar\": PNG, JPEG or WebP, up to 2 MB)")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(413)
+                .WithMetadata(new MultipartUploadMetadata("avatar", "PNG, JPEG or WebP image, up to 2 MB", IncludeParentId: false)).RequireAuthorization();
+
+            // Returns the profile picture
+            app.MapGet("/user/avatar", async (
+                HttpContext http,
+                ClaimsPrincipal user,
+                DatabaseServices db,
+                AvatarService avatars) =>
+            {
+                var avatar = await avatars.OpenAsync(db, user.GetUserId());
+                if (avatar == null)
+                    return Results.NotFound(new { error = "No profile picture" });
+
+                http.Response.Headers.CacheControl = "private, no-cache";
+                return Results.File(avatar.Stream, avatar.MimeType,
+                    lastModified: new DateTimeOffset(DateTime.SpecifyKind(avatar.UpdatedAt, DateTimeKind.Utc)));
+            })
+                .WithTags("Account")
+                .WithSummary("Get the profile picture")
+                .Produces(200, contentType: "image/png")
+                .Produces<ErrorResponse>(404).RequireAuthorization();
+
+            // Removes the profile picture
+            app.MapDelete("/user/avatar", async (
+                ClaimsPrincipal user,
+                DatabaseServices db,
+                AvatarService avatars) =>
+            {
+                await avatars.DeleteAsync(db, user.GetUserId());
+                return Results.Ok(new { success = "Profile picture removed" });
+            })
+                .WithTags("Account")
+                .WithSummary("Remove the profile picture")
+                .Produces<SuccessResponse>().RequireAuthorization();
         }
     }
 }

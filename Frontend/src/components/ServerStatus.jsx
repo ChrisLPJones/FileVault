@@ -1,60 +1,48 @@
-import { Alert } from "react-bootstrap";
 import axios from "axios";
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "../api/api";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const POLL_INTERVAL_MS = 10_000;
 
+// Returns an error message if the API or its database is unreachable, otherwise null
+const checkServer = async () => {
+    try {
+        await axios.get(`${API_BASE_URL}/ping`);
+    } catch {
+        return "Can't reach the FileVault server. Please try again shortly.";
+    }
+
+    try {
+        await axios.get(`${API_BASE_URL}/pingsql`);
+    } catch {
+        return "The FileVault server can't reach its database. Please try again shortly.";
+    }
+
+    return null;
+};
+
+// Banner shown on the login/register pages while the backend is down
 export default function ServerStatus() {
-    const [serverUp, setServerUp] = useState(true);
-    const [errorMessage, setErrorMessage] = useState();
+    const [errorMessage, setErrorMessage] = useState(null);
 
-    const checkServer = async () => {
-        let serverIsUp = true;
-        let error = null;
-
-        try {
-            await axios.get(`${API_URL}/ping`);
-        } catch (err) {
-            serverIsUp = false;
-            error = "503 Service Unavailable";
-            setServerUp(serverIsUp);
-            setErrorMessage(error);
-            return;
-        }
-
-        try {
-            await axios.get(`${API_URL}/pingsql`);
-        } catch (err) {
-            serverIsUp = false;
-            error = "500 Internal Server Error";
-        }
-        
-        setServerUp(serverIsUp);
-        setErrorMessage(error);
-
-    };
-    
     useEffect(() => {
+        let cancelled = false;
+        const update = () => checkServer().then((message) => !cancelled && setErrorMessage(message));
 
-        checkServer();
+        update();
+        const interval = setInterval(update, POLL_INTERVAL_MS);
 
-        const interval = setInterval(() => {
-            checkServer();
-        }, 3000);
-
-        return () => clearInterval(interval);
-        
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
     }, []);
 
-    if (!serverUp) {
-        return (
-            <Alert className="server-alert" variant="danger">
-                {errorMessage}
-            </Alert>
-        );
-    }
-    return null;
+    if (!errorMessage) return null;
 
-
-
+    return (
+        <div className="auth-alert danger" role="alert">
+            {errorMessage}
+        </div>
+    );
 }

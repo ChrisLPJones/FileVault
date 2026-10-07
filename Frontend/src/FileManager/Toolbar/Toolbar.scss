@@ -21,7 +21,7 @@
 
       &:hover:not(:disabled) {
         cursor: pointer;
-        background-color: rgb(0, 0, 0, 0.55) !important;
+        background-color: rgba(0, 0, 0, 0.55) !important;
         border-radius: 3px;
         color: white;
         text-shadow: 0px 0px 1px white;
@@ -54,9 +54,9 @@
       z-index: 3;
       top: 105%;
       right: 22%;
-      background-color: white;
+      background-color: var(--fm-bg);
       margin: 0;
-      border: 1px solid #c4c4c4;
+      border: 1px solid var(--fm-border);
       border-radius: 5px;
       font-size: $fm-font-size;
 
@@ -76,7 +76,7 @@
 
           &:hover {
             cursor: pointer;
-            background-color: rgba(0, 0, 0, 0.075);
+            background-color: rgba(var(--fm-shade), 0.075);
           }
 
           span:nth-child(1) {
@@ -88,7 +88,7 @@
   }
 
   .item-action {
-    background-color: white;
+    background-color: var(--fm-bg);
     display: flex;
     align-items: center;
     gap: 7px;
@@ -99,7 +99,7 @@
 
     &:hover {
       cursor: pointer;
-      background-color: rgb(0 0 0 / 12%) !important;
+      background-color: rgba(var(--fm-shade), 0.12) !important;
       border-radius: 3px;
     }
 
@@ -115,11 +115,6 @@
 
   .icon-only {
     padding: 0 8px !important;
-
-    &:focus {
-      background-color: rgb(0 0 0 / 12%);
-      border-radius: 3px;
-    }
 
     &:hover {
       color: var(--file-manager-primary-color);

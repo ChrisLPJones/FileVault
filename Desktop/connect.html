@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FileVault · Connect</title>
+  <link rel="stylesheet" href="connect.css" />
+</head>
+<body>
+  <main class="card">
+    <img class="logo" src="build/icon.png" alt="" width="64" height="64" />
+    <h1>Connect to FileVault</h1>
+    <p class="subtitle">Enter the address of your FileVault server. With the Docker setup that's
+      <code>http://localhost:5173</code>.</p>
+
+    <div id="message" class="alert" role="alert" hidden></div>
+
+    <form id="connect-form" novalidate>
+      <label for="server">Server address</label>
+      <input id="server" name="server" type="url" placeholder="http://localhost:5173" autocomplete="url" required />
+      <div class="actions">
+        <button type="submit" id="connect">Connect</button>
+        <button type="button" id="retry" class="secondary" hidden>Retry</button>
+      </div>
+    </form>
+  </main>
+  <script src="connect.js"></script>
+</body>
+</html>

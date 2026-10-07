@@ -17,7 +17,7 @@ svg {
 }
 
 .fm-modal {
-  border: 1px solid #c6c6c6;
+  border: 1px solid var(--fm-border);
   border-radius: 5px;
   width: fit-content;
   overflow-x: hidden;
@@ -32,17 +32,19 @@ svg {
 .file-explorer {
   min-height: 400px;
   height: 100%;
+  box-sizing: border-box; // keep the border inside the 100% height
   width: 100%;
   font-family: var(--file-manager-font-family);
   border: 1px solid $border-color;
   border-radius: 8px;
+  color: var(--fm-text);
 
   button {
     font-family: var(--file-manager-font-family);
   }
 
   position: relative;
-  background-color: white;
+  background-color: var(--fm-bg);
   cursor: default;
   // Disable Text Selection on Double Click
   -webkit-user-select: none;
@@ -79,6 +81,10 @@ svg {
       }
     }
 
+    .navigation-pane.compact {
+      border-right: 1px solid $border-color;
+    }
+
     .navigation-pane.open {
       display: block;
     }
@@ -89,7 +95,7 @@ svg {
 
     .folders-preview {
       z-index: 2;
-      background-color: white;
+      background-color: var(--fm-bg);
       padding-right: 0px;
       padding-left: 0px;
       border-bottom-right-radius: 8px;
@@ -104,7 +110,7 @@ svg {
 
   &:hover {
     cursor: pointer;
-    background-color: rgb(0, 0, 0, 0.07);
+    background-color: rgba(var(--fm-shade), 0.07);
   }
 }
 
@@ -113,7 +119,7 @@ svg {
   text-align: left;
 
   .fm-rename-folder-input {
-    border-bottom: 1px solid #c6c6c6;
+    border-bottom: 1px solid var(--fm-border);
     padding: 8px 12px 12px;
 
     .fm-rename-warning {
@@ -134,5 +140,21 @@ svg {
 .file-selcted {
   .select-files {
     width: 40%;
+  }
+}
+// No toolbar above the files when it is rendered in the app header
+.file-explorer.toolbar-external .files-container {
+  height: 100%;
+}
+
+// The details pane takes a fixed width on the right; the file list gives up the space
+.file-explorer .files-container {
+  .navigation-pane {
+    flex-shrink: 0;
+  }
+
+  .folders-preview {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }
