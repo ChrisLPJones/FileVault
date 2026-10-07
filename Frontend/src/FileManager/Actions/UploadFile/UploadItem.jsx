@@ -9,7 +9,7 @@ import { FaRegCheckCircle } from "react-icons/fa";
 import { IoMdRefresh } from "react-icons/io";
 import { useFiles } from "../../../contexts/FilesContext";
 import { useTranslation } from "../../../contexts/TranslationProvider";
-import { getToken } from "../../../utils/auth";
+import { getFreshToken } from "../../../api/api";
 
 const UploadItem = ({
     index,
@@ -102,25 +102,29 @@ const UploadItem = ({
                 handleUploadError(xhr);
             };
 
-            const method = fileUploadConfig?.method || "POST";
-            xhr.open(method, fileUploadConfig?.url, true);
-            const headers = { ...fileUploadConfig?.headers };
-            const token = getToken();
-            if(token){
-              headers["Authorization"] = `Bearer ${token}`;
-            }
-            for (let key in headers) {
-                xhr.setRequestHeader(key, headers[key]);
-            }
+            // Refresh the access token first if it is about to expire
+            getFreshToken().then((token) => {
+                if (xhr.cancelled) return;
 
-            const formData = new FormData();
-            const appendData = fileData?.appendData;
-            for (let key in appendData) {
-                appendData[key] && formData.append(key, appendData[key]);
-            }
-            formData.append("file", fileData.file);
+                const method = fileUploadConfig?.method || "POST";
+                xhr.open(method, fileUploadConfig?.url, true);
+                const headers = { ...fileUploadConfig?.headers };
+                if (token) {
+                    headers["Authorization"] = `Bearer ${token}`;
+                }
+                for (let key in headers) {
+                    xhr.setRequestHeader(key, headers[key]);
+                }
 
-            xhr.send(formData);
+                const formData = new FormData();
+                const appendData = fileData?.appendData;
+                for (let key in appendData) {
+                    appendData[key] && formData.append(key, appendData[key]);
+                }
+                formData.append("file", fileData.file);
+
+                xhr.send(formData);
+            });
         });
     };
 
@@ -133,6 +137,7 @@ const UploadItem = ({
 
     const handleAbortUpload = () => {
         if (xhrRef.current) {
+            xhrRef.current.cancelled = true; // in case it hasn't been sent yet
             xhrRef.current.abort();
             setIsUploading((prev) => ({
                 ...prev,

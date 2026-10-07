@@ -4,6 +4,14 @@ import { register } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
 import { useNavigate } from "react-router-dom";
 
+// Must match AuthServices.ValidatePassword on the server
+const passwordRules = [
+    { label: "At least 8 characters", test: (p) => p.length >= 8 },
+    { label: "At least one number", test: (p) => /\d/.test(p) },
+    { label: "At least one uppercase letter", test: (p) => /[A-Z]/.test(p) },
+    { label: "At least one lowercase letter", test: (p) => /[a-z]/.test(p) },
+];
+
 function Register() {
     const [username, setUsername] = useState("");
     const [email, setEmail] = useState("");
@@ -14,18 +22,8 @@ function Register() {
     const [errors, setErrors] = useState({});
     const [registerStatus, setRegisterStatus] = useState(null);
     const [returnMessage, setReturnMessage] = useState("");
-    const [passwordValid, setPasswordValid] = useState(false);
 
     const navigate = useNavigate();
-
-    const checkPasswordRequirements = (pass) => {
-        const lengthOK = pass.length >= 6;
-        const hasNumber = /\d/.test(pass);
-        const hasUpper = /[A-Z]/.test(pass);
-
-        setPasswordValid(lengthOK && hasNumber && hasUpper);
-        return lengthOK && hasNumber && hasUpper;
-    };
 
     const validatePasswordMatch = (pass, passVerify) => {
         if (!passVerify) {
@@ -46,14 +44,18 @@ function Register() {
     const validateForm = () => {
         const newErrors = {};
 
-        if (!username) newErrors.username = "Username is required";
+        const trimmedUsername = username.trim();
+        if (!trimmedUsername) newErrors.username = "Username is required";
+        else if (trimmedUsername.length < 3 || trimmedUsername.length > 50)
+            newErrors.username = "Username must be 3-50 characters";
+
         if (!email) newErrors.email = "Email is required";
         else if (!/\S+@\S+\.\S+/.test(email))
             newErrors.email = "Email is invalid";
 
         if (!password) newErrors.password = "Password is required";
-        else if (password.length < 6)
-            newErrors.password = "Password must be at least 6 characters";
+        else if (!passwordRules.every((rule) => rule.test(password)))
+            newErrors.password = "Password doesn't meet the requirements below";
 
         if (password !== passwordVerify)
             newErrors.passwordVerify = "Passwords do not match!";
@@ -146,7 +148,6 @@ function Register() {
                             onChange={(e) => {
                                 const value = e.target.value;
                                 setPassword(value);
-                                checkPasswordRequirements(value);
                                 validatePasswordMatch(value, passwordVerify);
                             }}
                             className={errors.password ? "input-error" : ""}
@@ -171,15 +172,14 @@ function Register() {
 
                         {/* PASSWORD RULES + MATCH */}
                         <ul className="password-rules">
-                            <li style={{ color: password.length >= 6 ? "green" : "red" }}>
-                                At least 6 characters
-                            </li>
-                            <li style={{ color: /\d/.test(password) ? "green" : "red" }}>
-                                At least one number
-                            </li>
-                            <li style={{ color: /[A-Z]/.test(password) ? "green" : "red" }}>
-                                At least one uppercase letter
-                            </li>
+                            {passwordRules.map((rule) => (
+                                <li
+                                    key={rule.label}
+                                    style={{ color: rule.test(password) ? "green" : "red" }}
+                                >
+                                    {rule.label}
+                                </li>
+                            ))}
 
                             {passwordMatchValid !== null && (
                                 <li

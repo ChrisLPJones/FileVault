@@ -21,7 +21,7 @@ namespace Backend.Test
         private static readonly string RunId = Guid.NewGuid().ToString("N")[..8];
         private static readonly string TestUsername = $"testuser_{RunId}";
         private static readonly string TestEmail = $"test_{RunId}@address.com";
-        private const string TestPassword = "testpassword";
+        private const string TestPassword = "TestPassw0rd";
 
         private readonly WebApplicationFactory<Program> _factory;
         private readonly HttpClient _client;
@@ -151,7 +151,7 @@ namespace Backend.Test
             {
                 Username = $"user_{RunId}",
                 Email = $"updated_{RunId}@example.com",
-                Password = "asdasd"
+                Password = "NewPassw0rd1"
             };
             string updateUserJson = JsonSerializer.Serialize(updateUser);
             StringContent updateUserContent = new(updateUserJson, Encoding.UTF8, "application/json");
@@ -160,7 +160,7 @@ namespace Backend.Test
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be("{\"success\":\"Updated user info\"}");
+            content.Should().Contain("\"success\":\"Updated user info\"").And.Contain("\"token\":");
         }
 
         [Fact, TestPriority(5)]

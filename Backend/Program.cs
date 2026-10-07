@@ -3,6 +3,7 @@ using Backend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Threading.RateLimiting;
 
 namespace Backend
 {
@@ -39,9 +40,39 @@ namespace Backend
                 {
                     policy.WithOrigins("http://localhost:5173")
                     .AllowAnyHeader()
-                    .AllowAnyMethod();
+                    .AllowAnyMethod()
+                    .AllowCredentials(); // the refresh token cookie
                     });
                     });
+
+            // Per-IP limits on endpoints that check passwords or issue tokens.
+            // Limits are read per request so they can be changed in config (and in tests).
+            builder.Services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.OnRejected = async (context, ct) =>
+                {
+                    if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                        context.HttpContext.Response.Headers.RetryAfter = ((int)retryAfter.TotalSeconds).ToString();
+
+                    await context.HttpContext.Response.WriteAsJsonAsync(
+                        new { error = "Too many attempts. Please wait a minute and try again." }, ct);
+                };
+
+                foreach (var (policy, defaultLimit) in new[] { ("auth", 10), ("refresh", 30) })
+                {
+                    options.AddPolicy(policy, http =>
+                    {
+                        var config = http.RequestServices.GetRequiredService<IConfiguration>();
+                        var permitLimit = config.GetValue($"RateLimiting:{policy}:PermitLimit", defaultLimit);
+                        var window = TimeSpan.FromSeconds(config.GetValue($"RateLimiting:{policy}:WindowSeconds", 60));
+
+                        return RateLimitPartition.GetFixedWindowLimiter(
+                            http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                            _ => new FixedWindowRateLimiterOptions { PermitLimit = permitLimit, Window = window });
+                    });
+                }
+            });
             builder.Services.AddSingleton<FileEncryption>();
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<DatabaseServices>();
@@ -58,7 +89,9 @@ namespace Backend
                         ValidateIssuerSigningKey = true,
                         ValidateLifetime = true,
                         ValidateIssuer = true,
-                        ValidateAudience = true
+                        ValidateAudience = true,
+                        // Access tokens are short-lived; don't add the default 5 minutes of leeway
+                        ClockSkew = TimeSpan.FromSeconds(30)
                     };
 
                     option.Events = new JwtBearerEvents
@@ -84,6 +117,7 @@ namespace Backend
             // Map Routes
             app.UseAuthentication();
             app.UseAuthorization();
+            app.UseRateLimiter();
             app.MapFileRoutes();
             app.MapHealthCheckRoutes();
             app.MapAuthRoutes();

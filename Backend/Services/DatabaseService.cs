@@ -662,4 +662,91 @@ public class DatabaseServices
 
         return count > 0;
     }
+
+
+
+    // Store a new refresh token (hash only) and drop this user's expired ones
+    public async Task StoreRefreshTokenAsync(string userId, string tokenHash, DateTime expiresAtUtc)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = @"
+            DELETE FROM RefreshTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
+            INSERT INTO RefreshTokens (UserId, TokenHash, ExpiresAt) VALUES (@UserId, @TokenHash, @ExpiresAt);";
+
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        command.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
+        await command.ExecuteNonQueryAsync();
+    }
+
+
+
+    public record RefreshTokenUse(string UserId, bool Valid, DateTime? RevokedAt);
+
+    // Atomically revoke a refresh token so it can only be used once.
+    // Returns null if the token doesn't exist. Valid is true only if this call revoked an active, unexpired token.
+    public async Task<RefreshTokenUse> ConsumeRefreshTokenAsync(string tokenHash)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string consume = @"
+            UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
+            OUTPUT inserted.UserId, inserted.ExpiresAt
+            WHERE TokenHash = @TokenHash AND RevokedAt IS NULL;";
+
+        await using (var command = new SqlCommand(consume, connection))
+        {
+            command.Parameters.AddWithValue("@TokenHash", tokenHash);
+            await using var reader = await command.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                var expiresAt = reader.GetDateTime(1);
+                return new RefreshTokenUse(reader.GetGuid(0).ToString(), expiresAt > DateTime.UtcNow, null);
+            }
+        }
+
+        // Not active: either unknown or already used/revoked
+        const string lookup = "SELECT UserId, RevokedAt FROM RefreshTokens WHERE TokenHash = @TokenHash";
+        await using (var command = new SqlCommand(lookup, connection))
+        {
+            command.Parameters.AddWithValue("@TokenHash", tokenHash);
+            await using var reader = await command.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+                return new RefreshTokenUse(reader.GetGuid(0).ToString(), false, reader.GetDateTime(1));
+        }
+
+        return null;
+    }
+
+
+
+    // Revoke one refresh token (logout)
+    public async Task RevokeRefreshTokenAsync(string tokenHash)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = "UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE TokenHash = @TokenHash AND RevokedAt IS NULL";
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        await command.ExecuteNonQueryAsync();
+    }
+
+
+
+    // Revoke every refresh token for a user (password change, suspected token theft)
+    public async Task RevokeAllRefreshTokensAsync(string userId)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = "UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE UserId = @UserId AND RevokedAt IS NULL";
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+        await command.ExecuteNonQueryAsync();
+    }
 }

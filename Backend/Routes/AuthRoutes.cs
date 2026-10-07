@@ -1,7 +1,6 @@
 ﻿using Backend.Models;
 using Backend.Services;
 using Microsoft.Data.SqlClient;
-using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text.Json;
 
@@ -9,6 +8,9 @@ namespace Backend.Routes
 {
     public static class AuthRoutes
     {
+        // Accept both "Email" and "email" style property names
+        private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
         public static void MapAuthRoutes(this IEndpointRouteBuilder app)
         {
             // Registers a new user
@@ -27,7 +29,7 @@ namespace Backend.Routes
                     UserModel user;
                     try
                     {
-                        user = JsonSerializer.Deserialize<UserModel>(body);
+                        user = JsonSerializer.Deserialize<UserModel>(body, JsonOptions);
                     }
                     catch (JsonException)
                     {
@@ -40,6 +42,11 @@ namespace Backend.Routes
                     string.IsNullOrWhiteSpace(user.Email) ||
                     string.IsNullOrWhiteSpace(user.Password))
                         return Results.BadRequest(new { error = "Invalid JSON" });
+
+                    var validationError = AuthServices.ValidateAccount(user.Username, user.Email)
+                        ?? AuthServices.ValidatePassword(user.Password);
+                    if (validationError != null)
+                        return Results.BadRequest(new { error = validationError });
 
                     // Check if User exists by email
                     if (await db.UserExistsByEmail(user.Email))
@@ -65,10 +72,11 @@ namespace Backend.Routes
                     Console.WriteLine($"Internal error: {ex.Message}");
                     return Results.Json(new { error = "A internal error has occurred" }, statusCode: 500);
                 }
-            });
+            }).RequireRateLimiting("auth");
 
-            // Logs in a user and returns a success message or error
+            // Logs in a user: returns an access token and sets the refresh token cookie
             app.MapPost("/user/login", async (
+                HttpContext http,
                 HttpRequest request,
                 AuthServices auth,
                 DatabaseServices db) =>
@@ -82,7 +90,7 @@ namespace Backend.Routes
 
                     try
                     {
-                        user = JsonSerializer.Deserialize<LoginModel>(body);
+                        user = JsonSerializer.Deserialize<LoginModel>(body, JsonOptions);
                     }
                     catch (JsonException)
                     {
@@ -97,12 +105,13 @@ namespace Backend.Routes
                         return Results.BadRequest(new { Error = "Invalid JSON" });
                     }
 
-                    var result = await auth.ValidateUser(user, db, auth);
-                    if (!result.Success)
-                        //return Results.BadRequest(new { Error = result.Message });
-                        return Results.Unauthorized();
+                    var userRecord = await auth.ValidateUser(user, db);
+                    if (userRecord == null)
+                        return Results.Json(new { error = "Invalid email or password" }, statusCode: 401);
 
-                    return Results.Ok(new { Success = result.Message });
+                    await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
+
+                    return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
                 }
                 catch (SqlException ex)
                 {
@@ -114,6 +123,32 @@ namespace Backend.Routes
                     Console.WriteLine($"Internal error: {ex.Message}");
                     return Results.Json(new { error = "A internal error has occurred" }, statusCode: 500);
                 }
+            }).RequireRateLimiting("auth");
+
+            // Exchanges the refresh token cookie for a new access token (and a new refresh cookie)
+            app.MapPost("/user/refresh", async (
+                HttpContext http,
+                AuthServices auth,
+                DatabaseServices db) =>
+            {
+                var user = await auth.RotateRefreshTokenAsync(db, http);
+                if (user == null)
+                {
+                    AuthServices.ClearRefreshCookie(http);
+                    return Results.Json(new { error = "Session expired" }, statusCode: 401);
+                }
+
+                return Results.Ok(new { Success = auth.GetJWTToken(user) });
+            }).RequireRateLimiting("refresh");
+
+            // Logs out: revokes the refresh token and clears its cookie
+            app.MapPost("/user/logout", async (
+                HttpContext http,
+                AuthServices auth,
+                DatabaseServices db) =>
+            {
+                await auth.RevokeRefreshCookieAsync(db, http);
+                return Results.Ok(new { success = "Logged out" });
             });
 
             // Retrieves authenticated user's information
@@ -152,6 +187,7 @@ namespace Backend.Routes
 
             // Updates authenticated user's account information
             app.MapPut("/user", async (
+                HttpContext http,
                 ClaimsPrincipal user,
                 UserModel updateUser,
                 DatabaseServices db,
@@ -168,13 +204,14 @@ namespace Backend.Routes
                         return Results.BadRequest(new { error = "invalid JSON" });
                     }
 
+                    var validationError = AuthServices.ValidateAccount(updateUser.Username, updateUser.Email)
+                        ?? AuthServices.ValidatePassword(updateUser.Password);
+                    if (validationError != null)
+                        return Results.BadRequest(new { error = validationError });
+
                     var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-                    if (updateUser == null)
-                        return Results.BadRequest(new { Error = "Request body is missing or invalid JSON" });
-
-                    if (!string.IsNullOrEmpty(updateUser.Password))
-                        updateUser.Password = auth.GeneratePasswordHash(updateUser.Password);
+                    updateUser.Password = auth.GeneratePasswordHash(updateUser.Password);
 
                     var oldUser = await db.GetUserByUserId(userId);
 
@@ -185,7 +222,13 @@ namespace Backend.Routes
                     if (!response.Success)
                         return Results.BadRequest(new { Error = response.Message });
 
-                    return Results.Ok(new { Success = "Updated user info" });
+                    // The password changed: end every other session, then start a fresh one
+                    // for this client with a token that carries the updated email
+                    await db.RevokeAllRefreshTokensAsync(userId);
+                    await auth.IssueRefreshTokenAsync(userId, db, http);
+                    var updated = await db.GetUserByUserId(userId);
+
+                    return Results.Ok(new { Success = "Updated user info", Token = auth.GetJWTToken(updated) });
                 }
                 catch (SqlException ex)
                 {
@@ -230,8 +273,6 @@ namespace Backend.Routes
                 }
 
             }).RequireAuthorization();
-
-            // TODO: Implement token refresh and logout endpoints
         }
     }
 }

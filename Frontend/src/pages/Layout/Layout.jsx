@@ -1,12 +1,9 @@
 import React from "react";
 import { Outlet, Link } from "react-router-dom";
 import "./Layout.css";
-import { clearToken } from "../../utils/auth";
+import { logout } from "../../api/api";
 
 const Layout = () => {
-    function logout() {
-        clearToken();
-    }
     return (
         <div className="page">
             <header className="header-style">

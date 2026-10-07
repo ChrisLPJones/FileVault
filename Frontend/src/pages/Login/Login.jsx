@@ -24,9 +24,8 @@ function Login() {
         if (!email) newErrors.email = "Email is required";
         else if (!/\S+@\S+\.\S+/.test(email))
             newErrors.email = "Email is invalid";
+        // Only check it's present: older accounts may predate the current password rules
         if (!password) newErrors.password = "Password is required";
-        else if (password.length < 6)
-            newErrors.password = "Password must be at least 6 characters";
         return newErrors;
     };
 
@@ -44,9 +43,9 @@ function Login() {
             if (response.status === 200) {
                 setToken(response.data.success);
                 navigate("/dashboard", { replace: true });
-                setLoginStatus(true);
             } else {
-                setLoginStatus(false);
+                // e.g. "Invalid email or password" or the rate-limit message
+                setLoginStatus(response.data?.error || "Login failed");
             }
         }
     };
@@ -84,11 +83,7 @@ function Login() {
                     <button type="submit" className="login-button">Login</button>
 
                     {regStatus && <div className="alert success">Registration Successful</div>}
-                    {loginStatus !== null && (
-                        loginStatus ? 
-                        <div className="alert success">Login Successful</div> : 
-                        <div className="alert danger">Login Failed</div>
-                    )}
+                    {loginStatus && <div className="alert danger">{loginStatus}</div>}
                 </form>
             </div>
         </div>

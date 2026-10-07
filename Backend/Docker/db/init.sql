@@ -92,6 +92,36 @@ END
 GO
 
 ------------------------------------------------------------
+-- REFRESH TOKENS
+------------------------------------------------------------
+-- Only a SHA-256 hash of each token is stored. Tokens are single-use:
+-- each refresh revokes the old one and issues a new one.
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'RefreshTokens')
+BEGIN
+    CREATE TABLE RefreshTokens
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        UserId UNIQUEIDENTIFIER NOT NULL,
+        TokenHash CHAR(64) NOT NULL,
+        ExpiresAt DATETIME2 NOT NULL,
+        CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        RevokedAt DATETIME2 NULL,
+        CONSTRAINT PK_RefreshTokens PRIMARY KEY CLUSTERED (Id ASC),
+        CONSTRAINT UQ_RefreshTokens_TokenHash UNIQUE NONCLUSTERED (TokenHash),
+        CONSTRAINT FK_RefreshTokens_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_RefreshTokens_UserId ON RefreshTokens (UserId);
+    PRINT 'Table "RefreshTokens" created.';
+END
+ELSE
+BEGIN
+    PRINT 'Table "RefreshTokens" already exists.';
+END
+GO
+
+------------------------------------------------------------
 -- RECURSIVE DELETE TRIGGER (FULL DEPTH CASCADE)
 ------------------------------------------------------------
 CREATE OR ALTER TRIGGER TR_Files_RecursiveDelete
