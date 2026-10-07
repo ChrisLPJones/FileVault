@@ -494,3 +494,6 @@ docker-compose.override.yml
 # Local-only VS Code files (Backend/Docker/.vscode holds personal DB connections with credentials)
 Backend/Docker/.vscode/
 Backend/.vscode/launch.json
+
+# Desktop app build output
+Desktop/dist/

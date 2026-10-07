@@ -4,20 +4,23 @@
 
 ## Features
 
-- Secure user authentication (register & login)
-- Upload and download files
-- File metadata (filename, upload date, size, type)
-- Delete files
-- SQL Server backend with metadata tracking
-- Encrypted Files stored securely on disk
-- Dockerized for easy deployment
+- Secure authentication: short-lived access tokens, rotating refresh-token cookie, password rules and rate limiting
+- Upload, download (single files or zips), rename, move, copy and delete files and folders
+- Files encrypted at rest with AES-256-GCM (per-file keys)
+- Per-user storage quotas and an account settings page
+- Profile pictures
+- Light, dark and system themes
+- Interactive API docs (Swagger) at `/swagger`
+- Desktop app (Electron) for Windows, macOS and Linux
+- Runs with one command using Docker Compose
 
 ## Technologies Used
 
 - **Backend**: C# (.NET 8 Minimal APIs)
 - **Database**: SQL Server
-- **Frontend**: ReactJS
-- **Storage**: Filesystem-based storage
+- **Frontend**: React (Vite)
+- **Desktop**: Electron
+- **Storage**: Filesystem-based storage, encrypted
 - **Containerization**: Docker + Docker Compose
 
 ## Getting Started
@@ -111,6 +114,20 @@ cd Frontend
 npm install
 npm run dev
 ```
+
+## Desktop app
+
+`Desktop/` contains an Electron app that opens your FileVault server in its own window, with a
+first-run "connect to server" screen, a remembered window position and an installer build:
+
+```bash
+cd Desktop
+npm install
+npm start          # run it
+npm run dist       # build the Windows installer (dist/FileVault Setup <version>.exe)
+```
+
+See [Desktop/README.md](Desktop/README.md) for details.
 
 ## API Documentation
 
