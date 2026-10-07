@@ -5,7 +5,41 @@
   margin: 0px 4px;
   height: 100%;
   font-size: $fm-font-size;
-  @include overflow-y-scroll;
+  display: flex;
+  flex-direction: column;
+
+  .sb-folders-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    @include overflow-y-scroll;
+  }
+
+  .nav-user {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 8px;
+    margin-top: 4px;
+    border-top: 1px solid var(--fm-border);
+    border-radius: 4px;
+    color: inherit;
+    text-decoration: none;
+
+    &:hover {
+      background-color: $item-hover-color;
+    }
+
+    .nav-user-name {
+      font-weight: 600;
+    }
+
+    .nav-user-usage {
+      margin-left: auto;
+      color: var(--fm-muted);
+      font-size: 0.85em;
+    }
+  }
 
   .nav-toggle {
     display: flex;
@@ -36,8 +70,15 @@
       display: none;
     }
 
+    // Folder icons line up under the menu button
     .sb-folders-list-item {
-      justify-content: center;
+      justify-content: flex-start;
+      padding-left: 0;
+      padding-right: 0;
+
+      .file-type-icon {
+        margin: 0 0 0 7px;
+      }
     }
   }
 

@@ -3,6 +3,7 @@ import FolderTree from "./FolderTree";
 import { getParentPath } from "../../utils/getParentPath";
 import { useFiles } from "../../contexts/FilesContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
+import NavUser from "./NavUser";
 import { MdMenu } from "react-icons/md";
 import "./NavigationPane.scss";
 
@@ -44,15 +45,18 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
       >
         <MdMenu size={20} />
       </button>
-      {foldersTree?.length > 0 ? (
-        <>
-          {foldersTree?.map((folder, index) => {
-            return <FolderTree key={index} folder={folder} onFileOpen={onFileOpen} />;
-          })}
-        </>
-      ) : (
-        <div className="empty-nav-pane">{t("nothingHereYet")}</div>
-      )}
+      <div className="sb-folders-scroll">
+        {foldersTree?.length > 0 ? (
+          <>
+            {foldersTree?.map((folder, index) => {
+              return <FolderTree key={index} folder={folder} onFileOpen={onFileOpen} />;
+            })}
+          </>
+        ) : (
+          <div className="empty-nav-pane">{t("nothingHereYet")}</div>
+        )}
+      </div>
+      <NavUser compact={compact} />
     </div>
   );
 };
