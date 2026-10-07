@@ -1,28 +1,18 @@
 using Backend.Models;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
-using System.Security.Claims;
-using System.Threading.Tasks;
 
 namespace Backend.Services;
 
 public class DatabaseServices
 {
-
-
-
     // Store database connection string from configuration
     private readonly string _connectionString;
+    private readonly ILogger<DatabaseServices> _logger;
 
-
-
-
-    // Store root directory path for file storage from configuration
-    private readonly string _storageRoot;
-    public DatabaseServices(IConfiguration config)
+    public DatabaseServices(IConfiguration config, ILogger<DatabaseServices> logger)
     {
         _connectionString = config.GetConnectionString("DefaultConnection");
-        _storageRoot = config.GetValue<string>("StorageRoot");
+        _logger = logger;
     }
 
 
@@ -396,21 +386,21 @@ public class DatabaseServices
 
 
     // Retrieve all filenames that belong to a specific user
-    public List<FileModel> GetFilesFromDb(string userId)
+    public async Task<List<FileModel>> GetFilesFromDb(string userId)
     {
         var filesList = new List<FileModel>();
 
-        using var connection = new SqlConnection(_connectionString);
-        connection.Open();
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
 
         string query = "SELECT Id, FileName, FilePath, UpdatedAt, GUID, isDirectory, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
 
-        using var command = new SqlCommand(query, connection);
+        await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
 
-        using var reader = command.ExecuteReader();
+        await using var reader = await command.ExecuteReaderAsync();
 
-        while (reader.Read())
+        while (await reader.ReadAsync())
         {
             filesList.Add(new FileModel
             {
@@ -597,7 +587,7 @@ public class DatabaseServices
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            Console.WriteLine($"SQL error: {ex.Message}");
+            _logger.LogError(ex, "Failed to delete user {UserId} and their files", userId);
             return new HttpReturnResult(false, "Error deleting user and files");
         }
 

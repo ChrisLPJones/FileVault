@@ -1,25 +1,25 @@
-﻿using Backend.Services;
-using System.Security.Claims;
 using Backend.Models;
+using Backend.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace Backend.Routes
 {
+    // Unexpected errors are logged and turned into a 500 { error } response by
+    // the exception handler in Program.cs.
     public static class FileRoutes
     {
         // Error response using the result's status code (400 by default)
         private static IResult Error(HttpReturnResult result) =>
             Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
 
+        private static IResult Success(HttpReturnResult result) =>
+            result.Success ? Results.Ok(new { success = result.Message }) : Error(result);
+
         // Maps all file-related API endpoints
         public static void MapFileRoutes(this IEndpointRouteBuilder app)
         {
-
-
-
-
-
             // Uploads a file and stores metadata in the database
             app.MapPost("/upload", async (
                 ClaimsPrincipal user,
@@ -27,36 +27,32 @@ namespace Backend.Routes
                 FileServices fs,
                 DatabaseServices db) =>
             {
+                if (!request.HasFormContentType)
+                    return Results.BadRequest(new { error = "Expected form-data content type" });
+
+                IFormCollection form;
                 try
                 {
-                    var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-                    if (!request.HasFormContentType)
-                        return Results.BadRequest(new { error = "Expected form-data content type" });
-
-                    var form = await request.ReadFormAsync();
-                    var parentId = form["parentId"].FirstOrDefault() ?? "";
-                    var file = form.Files.Count > 0 ? form.Files[0] : null;
-
-                    if (file == null || file.Length == 0)
-                        return Results.BadRequest(new { error = "No file uploaded" });
-
-                    var mimeType = file.ContentType;
-
-                    var result = await fs.UploadFile(file, db, userId, parentId, mimeType);
-
-                    return result.Success
-                        ? Results.Ok(new { success = $"File Uploaded: {result.FileName}" })
-                        : Error(result);
+                    form = await request.ReadFormAsync();
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is BadHttpRequestException or InvalidDataException)
                 {
-                    Console.WriteLine($"Upload error: {ex}");
-                    return Results.BadRequest(new { error = "Upload failed" });
+                    // Body larger than the server's request size limit
+                    return Results.Json(new { error = "File is too large to upload" }, statusCode: 413);
                 }
+
+                var parentId = form["parentId"].FirstOrDefault() ?? "";
+                var file = form.Files.Count > 0 ? form.Files[0] : null;
+
+                if (file == null || file.Length == 0)
+                    return Results.BadRequest(new { error = "No file uploaded" });
+
+                var result = await fs.UploadFile(file, db, user.GetUserId(), parentId, file.ContentType);
+
+                return result.Success
+                    ? Results.Ok(new { success = $"File Uploaded: {result.FileName}" })
+                    : Error(result);
             }).RequireAuthorization();
-
-
 
             // Create folder metadata in the database
             app.MapPost("/folder", async (
@@ -65,45 +61,20 @@ namespace Backend.Routes
                 FileServices fs,
                 DatabaseServices db) =>
             {
-                try
-                {
-                    var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                    if (userId == null) return Results.Unauthorized();
+                if (string.IsNullOrWhiteSpace(request?.Name))
+                    return Results.BadRequest(new { error = "Folder name is required" });
 
-                    if (string.IsNullOrWhiteSpace(request.Name))
-                        return Results.BadRequest(new { error = "Folder name is required" });
-
-                    var result = await fs.CreateFolder(request, db, userId);
-
-                    return result.Success
-                    ? Results.Ok(result.Folder)
-                    : Error(result);
-
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Create folder error: {ex}");
-                    return Results.BadRequest(new { error = "Error creating folder" });
-                }
+                var result = await fs.CreateFolder(request, db, user.GetUserId());
+                return result.Success ? Results.Ok(result.Folder) : Error(result);
             }).RequireAuthorization();
-
-
 
             // Returns a list of all files stored for the authenticated user
-            app.MapGet("/files", (
-                DatabaseServices db,
-                ClaimsPrincipal user) =>
+            app.MapGet("/files", async (
+                ClaimsPrincipal user,
+                DatabaseServices db) =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                var files = db.GetFilesFromDb(userId);
-
-                return Results.Ok(files);
+                return Results.Ok(await db.GetFilesFromDb(user.GetUserId()));
             }).RequireAuthorization();
-
-
-
-
-
 
             // Storage used, quota and upload size limit for the authenticated user
             app.MapGet("/user/usage", async (
@@ -111,11 +82,8 @@ namespace Backend.Routes
                 FileServices fs,
                 DatabaseServices db) =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                return Results.Ok(await fs.GetUsageAsync(db, userId));
+                return Results.Ok(await fs.GetUsageAsync(db, user.GetUserId()));
             }).RequireAuthorization();
-
-
 
             // Streams a file belonging to the authenticated user (supports range requests)
             app.MapGet("/download/{fileId}", async (
@@ -124,9 +92,7 @@ namespace Backend.Routes
                 FileServices fs,
                 DatabaseServices db) =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-                var (error, file, stream) = await fs.GetDownloadAsync(fileId, db, userId);
+                var (error, file, stream) = await fs.GetDownloadAsync(fileId, db, user.GetUserId());
                 if (error != null)
                     return Error(error);
 
@@ -138,8 +104,6 @@ namespace Backend.Routes
                 );
             }).RequireAuthorization();
 
-
-
             // Downloads several files and/or folders as a single zip
             app.MapPost("/download/zip", async (
                 ClaimsPrincipal user,
@@ -147,16 +111,12 @@ namespace Backend.Routes
                 FileServices fs,
                 DatabaseServices db) =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-                var (error, stream, fileName) = await fs.CreateZipAsync(request?.Ids, db, userId);
+                var (error, stream, fileName) = await fs.CreateZipAsync(request?.Ids, db, user.GetUserId());
                 if (error != null)
                     return Error(error);
 
                 return Results.File(stream, "application/zip", fileName);
             }).RequireAuthorization();
-
-
 
             // Renames a file or folder
             app.MapPatch("/rename", async (
@@ -165,13 +125,8 @@ namespace Backend.Routes
                 FileServices fs,
                 DatabaseServices db) =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-                var result = await fs.Rename(request, db, userId);
-                return result.Success ? Results.Ok(new { success = result.Message }) : Error(result);
+                return Success(await fs.Rename(request, db, user.GetUserId()));
             }).RequireAuthorization();
-
-
 
             // Moves files/folders into another folder (destinationId null = root)
             app.MapPut("/move", async (
@@ -180,13 +135,8 @@ namespace Backend.Routes
                 FileServices fs,
                 DatabaseServices db) =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-                var result = await fs.Move(request, db, userId);
-                return result.Success ? Results.Ok(new { success = result.Message }) : Error(result);
+                return Success(await fs.Move(request, db, user.GetUserId()));
             }).RequireAuthorization();
-
-
 
             // Copies files/folders into another folder (destinationId null = root)
             app.MapPost("/copy", async (
@@ -195,39 +145,27 @@ namespace Backend.Routes
                 FileServices fs,
                 DatabaseServices db) =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-                var result = await fs.Copy(request, db, userId);
-                return result.Success ? Results.Ok(new { success = result.Message }) : Error(result);
+                return Success(await fs.Copy(request, db, user.GetUserId()));
             }).RequireAuthorization();
 
-
-
-            // Deletes a specific file and its metadata for the authenticated user
+            // Deletes a file or folder (and everything inside it) for the authenticated user
             app.MapDelete("/delete/{fileId}", async (
                 ClaimsPrincipal user,
-                FileServices fs,
                 string fileId,
-                DatabaseServices db) =>
-                {
-                    var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-                    var result = await fs.DeleteFile(fileId, db, userId);
-
-                    return result.Success
-                        ? Results.Ok(new { success = result.Message })
-                        : Results.BadRequest(new { error = result.Message });
-                }).RequireAuthorization();
-
-            // Delete multiple files and it metadata for the authenticated user
-            app.MapDelete("/delete", async (
-                ClaimsPrincipal user,
                 FileServices fs,
-                [FromBody] IsList request,
                 DatabaseServices db) =>
             {
-                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                return Success(await fs.DeleteFile(fileId, db, user.GetUserId()));
+            }).RequireAuthorization();
 
+            // Deletes several files/folders for the authenticated user
+            app.MapDelete("/delete", async (
+                ClaimsPrincipal user,
+                [FromBody] DeleteRequest request,
+                FileServices fs,
+                DatabaseServices db) =>
+            {
+                var userId = user.GetUserId();
                 List<string> ids = new();
 
                 if (request?.ids.ValueKind == JsonValueKind.String)

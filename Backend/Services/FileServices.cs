@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 
 namespace Backend.Services;
 
-public class FileServices(IConfiguration config, FileEncryption encryption)
+public class FileServices(IConfiguration config, FileEncryption encryption, ILogger<FileServices> logger)
 {
     private readonly string _storageRoot = config.GetValue<string>("StorageRoot");
 
@@ -127,7 +127,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
             if (File.Exists(fullFilePath))
                 File.Delete(fullFilePath);
 
-            Console.WriteLine($"Upload error: {ex}");
+            logger.LogError(ex, "Upload failed for user {UserId}", userId);
             return new HttpReturnResult(false, "Error saving file"); // Failure
         }
         finally
@@ -175,7 +175,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Create folder error: {ex}");
+            logger.LogError(ex, "Creating a folder failed for user {UserId}", userId);
             return new HttpReturnResult(false, "Error creating folder");
         }
     }
@@ -254,7 +254,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
         }
         catch (CryptographicException ex)
         {
-            Console.WriteLine($"Decrypt error for {file.Guid}: {ex.Message}");
+            logger.LogError(ex, "Could not decrypt stored file {FileGuid}", file.Guid);
             return (new HttpReturnResult(false, "File could not be decrypted") { StatusCode = 500 }, null, null);
         }
     }
@@ -319,7 +319,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
         catch (Exception ex)
         {
             await stream.DisposeAsync();
-            Console.WriteLine($"Zip error: {ex}");
+            logger.LogError(ex, "Creating a zip failed for user {UserId}", userId);
             return (new HttpReturnResult(false, "Error creating zip") { StatusCode = 500 }, null, null);
         }
     }
@@ -351,7 +351,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Rename error: {ex}");
+            logger.LogError(ex, "Rename failed for user {UserId}", userId);
             return new HttpReturnResult(false, "Error renaming item") { StatusCode = 500 };
         }
     }
@@ -400,7 +400,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Move error: {ex}");
+            logger.LogError(ex, "Move failed for user {UserId}", userId);
             return new HttpReturnResult(false, "Error moving items") { StatusCode = 500 };
         }
     }
@@ -481,7 +481,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
                     committed.Add(guid);
             await DeleteAllFilesFromUser(copiedFiles.Where(g => !committed.Contains(g)).ToList());
 
-            Console.WriteLine($"Copy error: {ex}");
+            logger.LogError(ex, "Copy failed for user {UserId}", userId);
             return new HttpReturnResult(false, "Error copying items") { StatusCode = 500 };
         }
     }
@@ -509,7 +509,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Delete error: {ex}");
+            logger.LogError(ex, "Delete failed for {FileId}", fileId);
             return new HttpReturnResult(false, "Error: File delete failed.");
         }
     }
@@ -528,7 +528,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption)
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error deleting file {file}: {ex.Message}");
+                logger.LogWarning(ex, "Could not delete stored file {FileGuid}", file);
             }
         }
     }

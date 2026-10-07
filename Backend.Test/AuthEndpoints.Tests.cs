@@ -347,6 +347,25 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task UnexpectedError_ReturnsJson500_WithCorsHeaders()
+        {
+            var (_, token, _) = await NewUserSessionAsync();
+
+            // Same app, but the database is unreachable
+            var brokenDb = WithSettings(("ConnectionStrings:DefaultConnection",
+                "Server=127.0.0.1,1;Database=SecureVaultDb;User Id=sa;Password=x;Connect Timeout=1;TrustServerCertificate=True"));
+            var client = NewClient(brokenDb);
+
+            var request = Authed(HttpMethod.Get, "/user/info", token);
+            request.Headers.Add("Origin", "http://localhost:5173");
+            var response = await client.SendAsync(request);
+
+            response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+            (await response.Content.ReadAsStringAsync()).Should().Be("{\"error\":\"An internal error has occurred\"}");
+            response.Headers.GetValues("Access-Control-Allow-Origin").Should().ContainSingle("http://localhost:5173");
+        }
+
+        [Fact]
         public async Task Login_IsRateLimitedPerClient()
         {
             var client = NewClient(WithSettings(("RateLimiting:auth:PermitLimit", "3")));

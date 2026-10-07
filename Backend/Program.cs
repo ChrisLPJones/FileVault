@@ -1,6 +1,7 @@
 using Backend.Routes;
 using Backend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -118,8 +119,19 @@ namespace Backend
                 });
 
             var app = builder.Build();
-            
+
             app.UseCors("AllowFrontend");
+
+            // Unexpected errors: log them and return a JSON 500 instead of an HTML page or stack trace.
+            // (After UseCors so the browser can still read the error.)
+            app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+            {
+                var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+                app.Logger.LogError(error, "Unhandled error on {Method} {Path}", context.Request.Method, context.Request.Path);
+
+                context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                await context.Response.WriteAsJsonAsync(new { error = "An internal error has occurred" });
+            }));
 
             // Map Routes
             app.UseAuthentication();
