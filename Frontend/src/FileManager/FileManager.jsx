@@ -7,7 +7,7 @@ import Actions from "./Actions/Actions";
 import DetailsPane from "./DetailsPane/DetailsPane";
 import { FilesProvider } from "../contexts/FilesContext";
 import { FileNavigationProvider } from "../contexts/FileNavigationContext";
-import { SelectionProvider } from "../contexts/SelectionContext";
+import { SelectionProvider, useSelection } from "../contexts/SelectionContext";
 import { ClipBoardProvider } from "../contexts/ClipboardContext";
 import { LayoutProvider } from "../contexts/LayoutContext";
 import { DetailsPaneProvider, useDetailsPane } from "../contexts/DetailsPaneContext";
@@ -22,10 +22,12 @@ import { defaultPermissions } from "../constants";
 import { formatDate as defaultFormatDate } from "../utils/formatDate";
 import "./FileManager.scss";
 
-// The details pane, when it is switched on
+// The details pane: shown while it is switched on and a single file (not a folder) is selected
 const DetailsPaneSlot = (props) => {
   const { isDetailsOpen } = useDetailsPane();
-  return isDetailsOpen ? <DetailsPane {...props} /> : null;
+  const { selectedFiles } = useSelection();
+  const file = selectedFiles.length === 1 && !selectedFiles[0].isDirectory ? selectedFiles[0] : null;
+  return isDetailsOpen && file ? <DetailsPane file={file} {...props} /> : null;
 };
 
 const FileManager = ({
