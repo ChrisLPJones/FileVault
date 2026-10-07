@@ -1,0 +1,17 @@
+.avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 50%;
+    object-fit: cover;
+    box-sizing: border-box;
+}
+
+.avatar-initial {
+    background-color: var(--fv-primary);
+    color: var(--fv-primary-text);
+    font-weight: 700;
+    line-height: 1;
+    user-select: none;
+}

@@ -774,4 +774,50 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@UserId", userId);
         await command.ExecuteNonQueryAsync();
     }
+
+
+
+    public record AvatarRecord(string WrappedKey, long Size, string MimeType, DateTime UpdatedAt);
+
+    // The user's avatar metadata, or null if they haven't set one
+    public async Task<AvatarRecord?> GetAvatarAsync(string userId)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = @"
+            SELECT AvatarWrappedKey, AvatarSize, AvatarMimeType, AvatarUpdatedAt
+            FROM Users WHERE Id = @UserId AND AvatarWrappedKey IS NOT NULL";
+
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+            return null;
+
+        return new AvatarRecord(reader.GetString(0), reader.GetInt64(1), reader.GetString(2), reader.GetDateTime(3));
+    }
+
+
+
+    // Save (or clear, with null) the user's avatar metadata
+    public async Task SetAvatarAsync(string userId, string? wrappedKey, long? size, string? mimeType)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = @"
+            UPDATE Users
+            SET AvatarWrappedKey = @WrappedKey, AvatarSize = @Size, AvatarMimeType = @MimeType,
+                AvatarUpdatedAt = CASE WHEN @WrappedKey IS NULL THEN NULL ELSE SYSUTCDATETIME() END
+            WHERE Id = @UserId";
+
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@WrappedKey", (object?)wrappedKey ?? DBNull.Value);
+        command.Parameters.AddWithValue("@Size", (object?)size ?? DBNull.Value);
+        command.Parameters.AddWithValue("@MimeType", (object?)mimeType ?? DBNull.Value);
+        command.Parameters.AddWithValue("@UserId", userId);
+        await command.ExecuteNonQueryAsync();
+    }
 }

@@ -85,3 +85,17 @@ html, body {
     outline: 2px solid var(--fv-focus-ring);
     outline-offset: 2px;
 }
+
+.nav-avatar {
+    display: inline-flex;
+    border-radius: 50%;
+}
+
+.nav-avatar:focus-visible {
+    outline: 2px solid var(--fv-focus-ring);
+    outline-offset: 2px;
+}
+
+.nav-avatar.active .avatar {
+    box-shadow: 0 0 0 2px var(--fv-header-text);
+}

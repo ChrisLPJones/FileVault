@@ -9,5 +9,5 @@ namespace Backend.Models
 
     public record TokenUpdateResponse(string Success, string Token);
 
-    public record UserInfoResponse(string Username, string Email);
+    public record UserInfoResponse(string Username, string Email, DateTime? AvatarUpdatedAt);
 }

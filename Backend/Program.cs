@@ -111,6 +111,7 @@ namespace Backend
 
             builder.Services.AddSingleton<FileEncryption>();
             builder.Services.AddScoped<FileServices>();
+            builder.Services.AddScoped<AvatarService>();
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();
             builder.Services.AddAuthorization();

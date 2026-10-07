@@ -189,3 +189,69 @@
     margin: 0;
     accent-color: var(--fv-primary);
 }
+
+.avatar-editor {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.avatar-editor-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.avatar-editor-actions .settings-hint {
+    flex-basis: 100%;
+    margin: 0;
+}
+
+.settings-button.secondary {
+    background-color: transparent;
+    color: var(--fv-text);
+    border: 1px solid var(--fv-border);
+}
+
+.settings-button.secondary:hover:not(:disabled):not(.disabled) {
+    background-color: var(--fv-track);
+}
+
+label.settings-button {
+    display: inline-block;
+}
+
+label.settings-button.disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+/* Hidden but still focusable/clickable through its label */
+.visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0 0 0 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+/* The upload <label> and the Remove <button> should line up exactly */
+.avatar-editor-actions .settings-button {
+    display: inline-flex;
+    align-items: center;
+    height: 38px;
+    box-sizing: border-box;
+    font-family: inherit;
+    margin: 0; /* the label otherwise inherits the form-label bottom margin */
+    line-height: 1;
+}
+
+.avatar-editor + .settings-alert {
+    margin: 0 0 16px;
+}

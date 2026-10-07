@@ -3,16 +3,27 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Backend.Routes
 {
-    // Marks the upload endpoint, which reads the multipart form itself (so it can turn an
-    // oversized body into a 413), so the docs can still show a file picker for it.
-    public sealed class MultipartUploadMetadata;
+    // Marks endpoints that read the multipart form themselves (so they can turn an oversized
+    // body into a 413), so the docs can still show a file picker for them.
+    public sealed record MultipartUploadMetadata(
+        string FieldName = "file",
+        string Description = "The file to upload",
+        bool IncludeParentId = true);
 
     public sealed class MultipartUploadOperationFilter : IOperationFilter
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
-            if (!context.ApiDescription.ActionDescriptor.EndpointMetadata.OfType<MultipartUploadMetadata>().Any())
+            var upload = context.ApiDescription.ActionDescriptor.EndpointMetadata.OfType<MultipartUploadMetadata>().FirstOrDefault();
+            if (upload == null)
                 return;
+
+            var properties = new Dictionary<string, OpenApiSchema>
+            {
+                [upload.FieldName] = new() { Type = "string", Format = "binary", Description = upload.Description }
+            };
+            if (upload.IncludeParentId)
+                properties["parentId"] = new() { Type = "string", Description = "Folder ID to upload into (omit for the root)" };
 
             operation.RequestBody = new OpenApiRequestBody
             {
@@ -24,12 +35,8 @@ namespace Backend.Routes
                         Schema = new OpenApiSchema
                         {
                             Type = "object",
-                            Required = new HashSet<string> { "file" },
-                            Properties =
-                            {
-                                ["file"] = new OpenApiSchema { Type = "string", Format = "binary", Description = "The file to upload" },
-                                ["parentId"] = new OpenApiSchema { Type = "string", Description = "Folder ID to upload into (omit for the root)" }
-                            }
+                            Required = new HashSet<string> { upload.FieldName },
+                            Properties = properties
                         }
                     }
                 }

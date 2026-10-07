@@ -4,6 +4,7 @@ import "./Layout.css";
 import { logout } from "../../api/api";
 import { isAuthenticated } from "../../utils/auth";
 import ThemeToggle from "../../components/ThemeToggle";
+import Avatar from "../../components/Avatar";
 
 const navClass = ({ isActive }) => `link-style${isActive ? " active" : ""}`;
 
@@ -47,9 +48,14 @@ const Layout = () => {
                     <div className="nav-right">
                         <ThemeToggle />
                         {loggedIn && (
-                            <button type="button" className="link-style logout-button" onClick={handleLogout}>
-                                Logout
-                            </button>
+                            <>
+                                <NavLink to="/settings" className="nav-avatar" title="Account settings" aria-label="Account settings">
+                                    <Avatar size={30} />
+                                </NavLink>
+                                <button type="button" className="link-style logout-button" onClick={handleLogout}>
+                                    Logout
+                                </button>
+                            </>
                         )}
                     </div>
                 </nav>

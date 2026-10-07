@@ -4,10 +4,14 @@ import { getErrorMessage } from "../../api/api";
 import {
     changePasswordAPI,
     deleteAccountAPI,
+    deleteAvatarAPI,
     getUsageAPI,
     getUserInfoAPI,
     updateProfileAPI,
+    uploadAvatarAPI,
 } from "../../api/accountAPI";
+import Avatar from "../../components/Avatar";
+import { resizeImageToSquare } from "../../utils/avatarImage";
 import { formatBytes } from "../../utils/formatBytes";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
 import { THEME_OPTIONS, setThemePreference, useTheme } from "../../utils/theme";
@@ -33,6 +37,9 @@ function Settings() {
 
     const [profile, setProfile] = useState({ username: "", email: "" });
     const [profileStatus, setProfileStatus] = useState(null);
+    const [hasAvatar, setHasAvatar] = useState(false);
+    const [savingAvatar, setSavingAvatar] = useState(false);
+    const [avatarStatus, setAvatarStatus] = useState(null);
     const [savingProfile, setSavingProfile] = useState(false);
 
     const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
@@ -50,6 +57,7 @@ function Settings() {
             .then(([info, usageData]) => {
                 if (cancelled) return;
                 setProfile({ username: info.username, email: info.email });
+                setHasAvatar(!!info.avatarUpdatedAt);
                 setUsage(usageData);
             })
             .catch((err) => !cancelled && setLoadError(getErrorMessage(err, "Could not load your account")))
@@ -59,6 +67,38 @@ function Settings() {
             cancelled = true;
         };
     }, []);
+
+    const handleAvatarChange = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = ""; // allow picking the same file again
+        if (!file) return;
+
+        setAvatarStatus(null);
+        setSavingAvatar(true);
+        try {
+            await uploadAvatarAPI(await resizeImageToSquare(file));
+            setHasAvatar(true);
+            setAvatarStatus({ type: "success", message: "Profile picture updated" });
+        } catch (err) {
+            setAvatarStatus({ type: "danger", message: getErrorMessage(err, "Could not update profile picture") });
+        } finally {
+            setSavingAvatar(false);
+        }
+    };
+
+    const handleAvatarRemove = async () => {
+        setAvatarStatus(null);
+        setSavingAvatar(true);
+        try {
+            await deleteAvatarAPI();
+            setHasAvatar(false);
+            setAvatarStatus({ type: "success", message: "Profile picture removed" });
+        } catch (err) {
+            setAvatarStatus({ type: "danger", message: getErrorMessage(err, "Could not remove profile picture") });
+        } finally {
+            setSavingAvatar(false);
+        }
+    };
 
     const handleProfileSubmit = async (event) => {
         event.preventDefault();
@@ -176,6 +216,30 @@ function Settings() {
 
             <section className="settings-card" aria-labelledby="profile-heading">
                 <h2 id="profile-heading">Profile</h2>
+
+                <div className="avatar-editor">
+                    <Avatar size={72} />
+                    <div className="avatar-editor-actions">
+                        <label className={`settings-button secondary ${savingAvatar ? "disabled" : ""}`}>
+                            {savingAvatar ? "Saving…" : hasAvatar ? "Change picture" : "Upload picture"}
+                            <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                className="visually-hidden"
+                                disabled={savingAvatar}
+                                onChange={handleAvatarChange}
+                            />
+                        </label>
+                        {hasAvatar && (
+                            <button type="button" className="settings-button secondary" disabled={savingAvatar} onClick={handleAvatarRemove}>
+                                Remove
+                            </button>
+                        )}
+                        <p className="settings-hint">PNG, JPEG or WebP. It's cropped to a square and resized to 256×256.</p>
+                    </div>
+                </div>
+                <Status status={avatarStatus} />
+
                 <form onSubmit={handleProfileSubmit}>
                     <div className="form-group">
                         <label htmlFor="settings-username">Username</label>

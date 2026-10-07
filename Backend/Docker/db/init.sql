@@ -121,6 +121,22 @@ END
 GO
 
 ------------------------------------------------------------
+-- AVATAR COLUMNS (added to existing databases too)
+------------------------------------------------------------
+-- The image is stored encrypted on disk (StorageRoot/avatars/<UserId>);
+-- these columns hold its wrapped key, size, type and when it last changed.
+IF COL_LENGTH('Users', 'AvatarWrappedKey') IS NULL
+BEGIN
+    ALTER TABLE Users ADD
+        AvatarWrappedKey NVARCHAR(200) NULL,
+        AvatarSize BIGINT NULL,
+        AvatarMimeType NVARCHAR(50) NULL,
+        AvatarUpdatedAt DATETIME2 NULL;
+    PRINT 'Avatar columns added to "Users".';
+END
+GO
+
+------------------------------------------------------------
 -- REFRESH TOKENS
 ------------------------------------------------------------
 -- Only a SHA-256 hash of each token is stored. Tokens are single-use:

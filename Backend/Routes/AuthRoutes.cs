@@ -130,18 +130,16 @@ namespace Backend.Routes
                 ClaimsPrincipal user,
                 DatabaseServices db) =>
             {
-                var userInfo = await db.GetUserByUserId(user.GetUserId());
+                var userId = user.GetUserId();
+                var userInfo = await db.GetUserByUserId(userId);
                 if (userInfo == null)
                     return Results.NotFound(new { error = "User not found" });
 
-                return Results.Ok(new
-                {
-                    username = userInfo.Username,
-                    email = userInfo.Email
-                });
+                var avatar = await db.GetAvatarAsync(userId);
+                return Results.Ok(new UserInfoResponse(userInfo.Username, userInfo.Email, avatar?.UpdatedAt));
             })
                 .WithTags("Account")
-                .WithSummary("Get the current user's username and email")
+                .WithSummary("Get the current user's username, email and when their profile picture last changed")
                 .Produces<UserInfoResponse>()
                 .Produces<ErrorResponse>(404).RequireAuthorization();
 
@@ -220,7 +218,8 @@ namespace Backend.Routes
                 HttpContext http,
                 ClaimsPrincipal user,
                 DatabaseServices db,
-                FileServices fs) =>
+                FileServices fs,
+                AvatarService avatars) =>
             {
                 var userId = user.GetUserId();
                 if (await db.GetUserByUserId(userId) == null)
@@ -229,6 +228,8 @@ namespace Backend.Routes
                 var response = await db.DeleteUserAndFilesById(userId, fs);
                 if (!response.Success)
                     return Results.Json(new { error = response.Message }, statusCode: 500);
+
+                avatars.DeleteFile(userId);
 
                 // Refresh tokens are deleted with the user; clear the cookie too
                 AuthServices.ClearRefreshCookie(http);
@@ -239,6 +240,75 @@ namespace Backend.Routes
                 .WithSummary("Delete the account and every stored file")
                 .Produces(200)
                 .Produces<ErrorResponse>(404).RequireAuthorization();
+
+            // Sets the profile picture (multipart field "avatar": PNG, JPEG or WebP, up to 2 MB)
+            app.MapPut("/user/avatar", async (
+                ClaimsPrincipal user,
+                HttpRequest request,
+                DatabaseServices db,
+                AvatarService avatars) =>
+            {
+                if (!request.HasFormContentType)
+                    return Results.BadRequest(new { error = "Expected form-data content type" });
+
+                IFormCollection form;
+                try
+                {
+                    form = await request.ReadFormAsync();
+                }
+                catch (Exception ex) when (ex is BadHttpRequestException or InvalidDataException)
+                {
+                    return Results.Json(new { error = "Profile pictures must be 2 MB or smaller" }, statusCode: 413);
+                }
+
+                var file = form.Files.GetFile("avatar") ?? form.Files.FirstOrDefault();
+                if (file == null)
+                    return Results.BadRequest(new { error = "No image uploaded" });
+
+                var result = await avatars.SaveAsync(file, db, user.GetUserId());
+                return result.Success
+                    ? Results.Ok(new { success = result.Message })
+                    : Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
+            })
+                .WithTags("Account")
+                .WithSummary("Set the profile picture (multipart field \"avatar\": PNG, JPEG or WebP, up to 2 MB)")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(413)
+                .WithMetadata(new MultipartUploadMetadata("avatar", "PNG, JPEG or WebP image, up to 2 MB", IncludeParentId: false)).RequireAuthorization();
+
+            // Returns the profile picture
+            app.MapGet("/user/avatar", async (
+                HttpContext http,
+                ClaimsPrincipal user,
+                DatabaseServices db,
+                AvatarService avatars) =>
+            {
+                var avatar = await avatars.OpenAsync(db, user.GetUserId());
+                if (avatar == null)
+                    return Results.NotFound(new { error = "No profile picture" });
+
+                http.Response.Headers.CacheControl = "private, no-cache";
+                return Results.File(avatar.Stream, avatar.MimeType,
+                    lastModified: new DateTimeOffset(DateTime.SpecifyKind(avatar.UpdatedAt, DateTimeKind.Utc)));
+            })
+                .WithTags("Account")
+                .WithSummary("Get the profile picture")
+                .Produces(200, contentType: "image/png")
+                .Produces<ErrorResponse>(404).RequireAuthorization();
+
+            // Removes the profile picture
+            app.MapDelete("/user/avatar", async (
+                ClaimsPrincipal user,
+                DatabaseServices db,
+                AvatarService avatars) =>
+            {
+                await avatars.DeleteAsync(db, user.GetUserId());
+                return Results.Ok(new { success = "Profile picture removed" });
+            })
+                .WithTags("Account")
+                .WithSummary("Remove the profile picture")
+                .Produces<SuccessResponse>().RequireAuthorization();
         }
     }
 }

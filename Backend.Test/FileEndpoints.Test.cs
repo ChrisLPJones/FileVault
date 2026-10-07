@@ -139,7 +139,7 @@ namespace Backend.Test
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be($"{{\"username\":\"{TestUsername}\",\"email\":\"{TestEmail}\"}}");
+            content.Should().Be($"{{\"username\":\"{TestUsername}\",\"email\":\"{TestEmail}\",\"avatarUpdatedAt\":null}}");
         }
 
         [Fact, TestPriority(4)]
@@ -155,7 +155,7 @@ namespace Backend.Test
             content.Should().Contain("\"success\":\"Profile updated\"").And.Contain("\"token\":");
 
             var info = await _client.GetStringAsync("/user/info");
-            info.Should().Be($"{{\"username\":\"user_{RunId}\",\"email\":\"updated_{RunId}@example.com\"}}");
+            info.Should().Be($"{{\"username\":\"user_{RunId}\",\"email\":\"updated_{RunId}@example.com\",\"avatarUpdatedAt\":null}}");
         }
 
         [Fact, TestPriority(5)]
