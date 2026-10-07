@@ -58,7 +58,7 @@
       &:focus {
         cursor: pointer;
         color: var(--file-manager-primary-color);
-        background-color: #dddcdc;
+        background-color: var(--fm-surface-alt);
         border-radius: 5px;
       }
     }

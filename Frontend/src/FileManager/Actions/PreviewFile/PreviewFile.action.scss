@@ -41,7 +41,7 @@
         gap: 10px;
 
         .error-icon {
-            color: rgb(73, 73, 73);
+            color: var(--fm-muted);
         }
 
         .error-msg {
@@ -58,8 +58,8 @@
 
             .file-name {
                 padding: 4px 15px;
-                background-color: rgb(233, 233, 233);
-                border: 1px solid rgb(163, 173, 173);
+                background-color: var(--fm-surface-alt);
+                border: 1px solid var(--fm-border);
                 border-radius: 3px;
             }
 

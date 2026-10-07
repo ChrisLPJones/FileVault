@@ -8,11 +8,13 @@ import {
     getUserInfoAPI,
     updateProfileAPI,
 } from "../../api/accountAPI";
-import { getDataSize } from "../../utils/getDataSize";
+import { formatBytes } from "../../utils/formatBytes";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
+import { THEME_OPTIONS, setThemePreference, useTheme } from "../../utils/theme";
 import "./Settings.css";
 
 const DELETE_CONFIRMATION = "DELETE";
+const THEME_LABELS = { system: "System", light: "Light", dark: "Dark" };
 
 // Success/error message under a form
 const Status = ({ status }) =>
@@ -24,6 +26,7 @@ const Status = ({ status }) =>
 
 function Settings() {
     const navigate = useNavigate();
+    const { preference } = useTheme();
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [usage, setUsage] = useState(null);
@@ -145,11 +148,30 @@ function Settings() {
                     <div className={`usage-bar-fill ${usageLevel}`} style={{ width: `${usedPercent}%` }} />
                 </div>
                 <p className="usage-text">
-                    {getDataSize(usage.used, 1)} of {getDataSize(usage.quota, 1)} used
+                    {formatBytes(usage.used)} of {formatBytes(usage.quota)} used
                     {" · "}
-                    {getDataSize(Math.max(0, usage.quota - usage.used), 1)} free
+                    {formatBytes(usage.quota - usage.used)} free
                 </p>
-                <p className="settings-hint">Files can be up to {getDataSize(usage.maxUploadBytes, 0)} each.</p>
+                <p className="settings-hint">Files can be up to {formatBytes(usage.maxUploadBytes, 0)} each.</p>
+            </section>
+
+            <section className="settings-card" aria-labelledby="appearance-heading">
+                <h2 id="appearance-heading">Appearance</h2>
+                <div className="theme-options" role="radiogroup" aria-labelledby="appearance-heading">
+                    {THEME_OPTIONS.map((option) => (
+                        <label key={option} className={`theme-option ${preference === option ? "selected" : ""}`}>
+                            <input
+                                type="radio"
+                                name="theme"
+                                value={option}
+                                checked={preference === option}
+                                onChange={() => setThemePreference(option)}
+                            />
+                            {THEME_LABELS[option]}
+                        </label>
+                    ))}
+                </div>
+                <p className="settings-hint">System follows your device's light or dark setting. Saved on this device.</p>
             </section>
 
             <section className="settings-card" aria-labelledby="profile-heading">

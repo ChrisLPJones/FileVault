@@ -19,8 +19,8 @@
 }
 
 .fm-button-secondary {
-  background-color: #f0f0f0;
-  color: black;
+  background-color: var(--fm-surface-alt);
+  color: var(--fm-text);
 
   &:hover {
     background-image: linear-gradient(rgba(0, 0, 0, 0.1),

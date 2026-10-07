@@ -54,3 +54,34 @@ html, body {
     font: inherit;
     cursor: pointer;
 }
+
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: none;
+    color: var(--fv-header-text);
+    cursor: pointer;
+}
+
+.theme-toggle:hover {
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.theme-toggle:focus-visible,
+.logout-button:focus-visible,
+.link-style:focus-visible {
+    outline: 2px solid var(--fv-focus-ring);
+    outline-offset: 2px;
+}

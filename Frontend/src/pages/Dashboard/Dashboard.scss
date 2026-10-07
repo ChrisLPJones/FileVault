@@ -7,7 +7,6 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  // background-color: #32363a;
 
   position: relative;
 
@@ -28,9 +27,9 @@ body {
     max-width: calc(100% - 32px);
     padding: 8px 12px;
     border-radius: 6px;
-    background-color: #f8d7da;
-    color: #842029;
-    border: 1px solid #f5c2c7;
+    background-color: var(--fv-alert-danger-bg);
+    color: var(--fv-alert-danger-text);
+    border: 1px solid var(--fv-alert-danger-border);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 
     button {

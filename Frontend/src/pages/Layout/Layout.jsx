@@ -3,6 +3,7 @@ import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import "./Layout.css";
 import { logout } from "../../api/api";
 import { isAuthenticated } from "../../utils/auth";
+import ThemeToggle from "../../components/ThemeToggle";
 
 const navClass = ({ isActive }) => `link-style${isActive ? " active" : ""}`;
 
@@ -43,11 +44,14 @@ const Layout = () => {
                         )}
                     </div>
 
-                    {loggedIn && (
-                        <button type="button" className="link-style logout-button" onClick={handleLogout}>
-                            Logout
-                        </button>
-                    )}
+                    <div className="nav-right">
+                        <ThemeToggle />
+                        {loggedIn && (
+                            <button type="button" className="link-style logout-button" onClick={handleLogout}>
+                                Logout
+                            </button>
+                        )}
+                    </div>
                 </nav>
             </header>
             <main className="main-style">
