@@ -111,6 +111,12 @@
     --fv-file-fold: #d5d9de;
 }
 
+/* Everything is shown slightly larger; the file/folder tiles are sized down in FileList.scss to
+   end up a bit smaller than before */
+html {
+    zoom: 1.08;
+}
+
 html,
 body {
     background-color: var(--fv-page-bg);
