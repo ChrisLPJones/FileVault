@@ -81,6 +81,10 @@ svg {
       }
     }
 
+    .navigation-pane.compact {
+      border-right: 1px solid $border-color;
+    }
+
     .navigation-pane.open {
       display: block;
     }
