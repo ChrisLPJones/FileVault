@@ -9,7 +9,8 @@ import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
 const ruleClass = (typed, passed) => (!typed ? undefined : passed ? "met" : "unmet");
 
 function Register() {
-    const [username, setUsername] = useState("");
+    const [firstName, setFirstName] = useState("");
+    const [lastName, setLastName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [passwordVerify, setPasswordVerify] = useState("");
@@ -29,12 +30,11 @@ function Register() {
     const validateForm = () => {
         const newErrors = {};
 
-        const trimmedUsername = username.trim();
-        if (!trimmedUsername) newErrors.username = "Username is required";
-        else if (trimmedUsername.length < 3 || trimmedUsername.length > 50)
-            newErrors.username = "Username must be 3-50 characters";
-        else if (trimmedUsername.includes("@"))
-            newErrors.username = "Username can't contain @";
+        if (!firstName.trim()) newErrors.firstName = "First name is required";
+        else if (firstName.trim().length > 50) newErrors.firstName = "First name must be 50 characters or fewer";
+
+        if (!lastName.trim()) newErrors.lastName = "Last name is required";
+        else if (lastName.trim().length > 50) newErrors.lastName = "Last name must be 50 characters or fewer";
 
         if (!email) newErrors.email = "Email is required";
         else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = "Email is invalid";
@@ -58,7 +58,7 @@ function Register() {
 
         setSubmitting(true);
         try {
-            const response = await register(username.trim(), email.trim(), password);
+            const response = await register(firstName.trim(), lastName.trim(), email.trim(), password);
             if (response?.status === 200) {
                 navigate("/login", { state: { registrationSuccess: true } });
                 return;
@@ -87,17 +87,31 @@ function Register() {
 
                 <form onSubmit={handleSubmit} noValidate>
                     <div className="auth-field">
-                        <label htmlFor="register-username">Username</label>
+                        <label htmlFor="register-first-name">First name</label>
                         <input
-                            id="register-username"
-                            name="username"
+                            id="register-first-name"
+                            name="firstName"
                             type="text"
-                            autoComplete="username"
-                            value={username}
-                            onChange={edit(setUsername, "username")}
-                            {...fieldProps("username")}
+                            autoComplete="given-name"
+                            value={firstName}
+                            onChange={edit(setFirstName, "firstName")}
+                            {...fieldProps("firstName")}
                         />
-                        {fieldError("username")}
+                        {fieldError("firstName")}
+                    </div>
+
+                    <div className="auth-field">
+                        <label htmlFor="register-last-name">Last name</label>
+                        <input
+                            id="register-last-name"
+                            name="lastName"
+                            type="text"
+                            autoComplete="family-name"
+                            value={lastName}
+                            onChange={edit(setLastName, "lastName")}
+                            {...fieldProps("lastName")}
+                        />
+                        {fieldError("lastName")}
                     </div>
 
                     <div className="auth-field">

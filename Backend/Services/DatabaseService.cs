@@ -431,10 +431,11 @@ public class DatabaseServices
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "INSERT INTO Users (Username, Email, PasswordHash) VALUES (@Username, @Email, @PasswordHash)";
+        string query = "INSERT INTO Users (FirstName, LastName, Email, PasswordHash) VALUES (@FirstName, @LastName, @Email, @PasswordHash)";
         using var command = new SqlCommand(query, connection);
 
-        command.Parameters.AddWithValue("@Username", user.Username.Trim());
+        command.Parameters.AddWithValue("@FirstName", user.FirstName.Trim());
+        command.Parameters.AddWithValue("@LastName", user.LastName.Trim());
         command.Parameters.AddWithValue("@Email", user.Email.Trim().ToLower());
         command.Parameters.AddWithValue("@PasswordHash", user.Password);
 
@@ -451,7 +452,7 @@ public class DatabaseServices
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Email = @Email";
+        string query = "SELECT Id, FirstName, LastName, Email, PasswordHash FROM Users WHERE Email = @Email";
         using var command = new SqlCommand(query, connection);
 
         command.Parameters.AddWithValue("@Email", email);
@@ -463,9 +464,10 @@ public class DatabaseServices
             return new UserModel
             {
                 Id = reader.GetGuid(0),
-                Username = reader.GetString(1),
-                Email = reader.GetString(2),
-                Password = reader.GetString(3),
+                FirstName = reader.GetString(1),
+                LastName = reader.GetString(2),
+                Email = reader.GetString(3),
+                Password = reader.GetString(4),
             };
         }
         return null;
@@ -474,40 +476,34 @@ public class DatabaseServices
 
 
 
-    // Returns which of the username/email is already used by another account, or null if both are free
-    public async Task<string?> FindAccountConflictAsync(string username, string email, string excludeUserId)
+    // Returns an error if the email is already used by another account, or null if it is free
+    public async Task<string?> FindAccountConflictAsync(string email, string excludeUserId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = @"
-            SELECT
-                (SELECT COUNT(1) FROM Users WHERE Username = @Username AND Id <> @UserId),
-                (SELECT COUNT(1) FROM Users WHERE Email = @Email AND Id <> @UserId)";
+        const string query = "SELECT COUNT(1) FROM Users WHERE Email = @Email AND Id <> @UserId";
 
         await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@Username", username);
         command.Parameters.AddWithValue("@Email", email);
         command.Parameters.AddWithValue("@UserId", excludeUserId);
 
-        await using var reader = await command.ExecuteReaderAsync();
-        await reader.ReadAsync();
-        if (reader.GetInt32(0) > 0) return "Username already exists";
-        if (reader.GetInt32(1) > 0) return "Email already exists";
-        return null;
+        var count = (int)(await command.ExecuteScalarAsync() ?? 0);
+        return count > 0 ? "Email already exists" : null;
     }
 
 
 
-    // Update a user's username and email
-    public async Task UpdateProfileAsync(string userId, string username, string email)
+    // Update a user's name and email
+    public async Task UpdateProfileAsync(string userId, string firstName, string lastName, string email)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = "UPDATE Users SET Username = @Username, Email = @Email WHERE Id = @UserId";
+        const string query = "UPDATE Users SET FirstName = @FirstName, LastName = @LastName, Email = @Email WHERE Id = @UserId";
         await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@Username", username);
+        command.Parameters.AddWithValue("@FirstName", firstName);
+        command.Parameters.AddWithValue("@LastName", lastName);
         command.Parameters.AddWithValue("@Email", email);
         command.Parameters.AddWithValue("@UserId", userId);
         await command.ExecuteNonQueryAsync();
@@ -608,7 +604,7 @@ public class DatabaseServices
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Id = @Id";
+        string query = "SELECT Id, FirstName, LastName, Email, PasswordHash FROM Users WHERE Id = @Id";
         using var command = new SqlCommand(query, connection);
 
         command.Parameters.AddWithValue("@Id", userId);
@@ -620,9 +616,10 @@ public class DatabaseServices
             return new UserModel
             {
                 Id = reader.GetGuid(0),
-                Username = reader.GetString(1),
-                Email = reader.GetString(2),
-                Password = reader.GetString(3),
+                FirstName = reader.GetString(1),
+                LastName = reader.GetString(2),
+                Email = reader.GetString(3),
+                Password = reader.GetString(4),
             };
         }
 
@@ -645,50 +642,6 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@UserId", userId);
         await command.ExecuteNonQueryAsync();
     }
-
-
-
-    // Retrieve a user by username (case-insensitive, like the database collation), or null
-    public async Task<UserModel?> GetUserByUsername(string username)
-    {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        const string query = "SELECT Id, Username, Email, PasswordHash FROM Users WHERE Username = @Username";
-        await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@Username", username);
-
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
-            return null;
-
-        return new UserModel
-        {
-            Id = reader.GetGuid(0),
-            Username = reader.GetString(1),
-            Email = reader.GetString(2),
-            Password = reader.GetString(3),
-        };
-    }
-
-
-
-
-    public async Task<bool> UserExistsByUsername(string username)
-    {
-        using SqlConnection connection = new(_connectionString);
-        await connection.OpenAsync();
-
-        string query = "SELECT COUNT(1) FROM Users WHERE Username = @Username";
-
-        using SqlCommand command = new(query, connection);
-        command.Parameters.AddWithValue("@Username", username);
-
-        int count = (int)(await command.ExecuteScalarAsync() ?? 0);
-
-        return count > 0;
-    }
-
 
 
 

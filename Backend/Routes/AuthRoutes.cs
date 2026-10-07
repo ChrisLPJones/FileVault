@@ -38,21 +38,19 @@ namespace Backend.Routes
 
                 // Require all fields
                 if (user is null ||
-                    string.IsNullOrWhiteSpace(user.Username) ||
+                    string.IsNullOrWhiteSpace(user.FirstName) ||
+                    string.IsNullOrWhiteSpace(user.LastName) ||
                     string.IsNullOrWhiteSpace(user.Email) ||
                     string.IsNullOrWhiteSpace(user.Password))
                     return Results.BadRequest(new { error = "Invalid JSON" });
 
-                var validationError = AuthServices.ValidateAccount(user.Username, user.Email)
+                var validationError = AuthServices.ValidateAccount(user.FirstName, user.LastName, user.Email)
                     ?? AuthServices.ValidatePassword(user.Password);
                 if (validationError != null)
                     return Results.BadRequest(new { error = validationError });
 
                 if (await db.UserExistsByEmail(user.Email))
                     return Results.BadRequest(new { error = "Email already exists" });
-
-                if (await db.UserExistsByUsername(user.Username))
-                    return Results.BadRequest(new { error = "Username already exists" });
 
                 await auth.HashAndRegisterUser(user, db);
 
@@ -61,7 +59,7 @@ namespace Backend.Routes
                 if (created != null)
                     await fs.CreateDefaultFoldersAsync(db, created.Id.ToString());
 
-                return Results.Ok(new { success = $"User {user.Username} registered" });
+                return Results.Ok(new { success = $"User {user.FirstName.Trim()} {user.LastName.Trim()} registered" });
             })
                 .WithTags("Account")
                 .WithSummary("Create an account")
@@ -84,14 +82,14 @@ namespace Backend.Routes
 
                 var userRecord = await auth.ValidateUser(login, db);
                 if (userRecord == null)
-                    return Results.Json(new { error = "Invalid email/username or password" }, statusCode: 401);
+                    return Results.Json(new { error = "Invalid email or password" }, statusCode: 401);
 
                 await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
 
                 return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
             })
                 .WithTags("Account")
-                .WithSummary("Log in with email or username (field \"login\"): returns an access token and sets the refresh-token cookie")
+                .WithSummary("Log in with email and password: returns an access token and sets the refresh-token cookie")
                 .Produces<TokenResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(401)
@@ -142,25 +140,26 @@ namespace Backend.Routes
                     return Results.NotFound(new { error = "User not found" });
 
                 var avatar = await db.GetAvatarAsync(userId);
-                return Results.Ok(new UserInfoResponse(userInfo.Username, userInfo.Email, avatar?.UpdatedAt));
+                return Results.Ok(new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt));
             })
                 .WithTags("Account")
-                .WithSummary("Get the current user's username, email and when their profile picture last changed")
+                .WithSummary("Get the current user's name, email and when their profile picture last changed")
                 .Produces<UserInfoResponse>()
                 .Produces<ErrorResponse>(404).RequireAuthorization();
 
-            // Updates the authenticated user's username and email
+            // Updates the authenticated user's name and email
             app.MapPatch("/user/profile", async (
                 ClaimsPrincipal user,
                 ProfileUpdateRequest request,
                 DatabaseServices db,
                 AuthServices auth) =>
             {
-                var username = request?.Username?.Trim();
+                var firstName = request?.FirstName?.Trim();
+                var lastName = request?.LastName?.Trim();
                 var email = request?.Email?.Trim().ToLowerInvariant();
 
-                var validationError = AuthServices.ValidateAccount(username, email);
-                if (validationError != null || username is null || email is null)
+                var validationError = AuthServices.ValidateAccount(firstName, lastName, email);
+                if (validationError != null || firstName is null || lastName is null || email is null)
                     return Results.BadRequest(new { error = validationError ?? "Invalid JSON" });
 
                 var userId = user.GetUserId();
@@ -168,19 +167,20 @@ namespace Backend.Routes
                 if (account == null)
                     return Results.NotFound(new { error = "User not found" });
 
-                var conflict = await db.FindAccountConflictAsync(username, email, userId);
+                var conflict = await db.FindAccountConflictAsync(email, userId);
                 if (conflict != null)
                     return Results.Conflict(new { error = conflict });
 
-                await db.UpdateProfileAsync(userId, username, email);
+                await db.UpdateProfileAsync(userId, firstName, lastName, email);
 
                 // New access token so the email claim is current
-                account.Username = username;
+                account.FirstName = firstName;
+                account.LastName = lastName;
                 account.Email = email;
                 return Results.Ok(new { Success = "Profile updated", Token = auth.GetJWTToken(account) });
             })
                 .WithTags("Account")
-                .WithSummary("Change username and email (returns a new access token)")
+                .WithSummary("Change name and email (returns a new access token)")
                 .Produces<TokenUpdateResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(409).RequireAuthorization();

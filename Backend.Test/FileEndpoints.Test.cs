@@ -19,7 +19,8 @@ namespace Backend.Test
     {
         // Unique per test run so a failed earlier run doesn't block registration
         private static readonly string RunId = Guid.NewGuid().ToString("N")[..8];
-        private static readonly string TestUsername = $"testuser_{RunId}";
+        private static readonly string TestFirstName = $"Test{RunId}";
+        private const string TestLastName = "User";
         private static readonly string TestEmail = $"test_{RunId}@address.com";
         private const string TestPassword = "TestPassw0rd";
 
@@ -42,9 +43,9 @@ namespace Backend.Test
             _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _jwt);
         }
 
-        private static async Task RegisterAsync(HttpClient client, string username, string email, string password)
+        private static async Task RegisterAsync(HttpClient client, string firstName, string email, string password)
         {
-            UserModel user = new() { Username = username, Email = email, Password = password };
+            UserModel user = new() { FirstName = firstName, LastName = "User", Email = email, Password = password };
             StringContent content = new(JsonSerializer.Serialize(user), Encoding.UTF8, "application/json");
 
             var response = await client.PostAsync("/user/register", content);
@@ -108,7 +109,8 @@ namespace Backend.Test
         {
             UserModel registerUser = new()
             {
-                Username = TestUsername,
+                FirstName = TestFirstName,
+                LastName = TestLastName,
                 Email = TestEmail,
                 Password = TestPassword
             };
@@ -119,7 +121,7 @@ namespace Backend.Test
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be($"{{\"success\":\"User {TestUsername} registered\"}}");
+            content.Should().Be($"{{\"success\":\"User {TestFirstName} {TestLastName} registered\"}}");
         }
 
         [Fact, TestPriority(2)]
@@ -139,7 +141,7 @@ namespace Backend.Test
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be($"{{\"username\":\"{TestUsername}\",\"email\":\"{TestEmail}\",\"avatarUpdatedAt\":null}}");
+            content.Should().Be($"{{\"firstName\":\"{TestFirstName}\",\"lastName\":\"{TestLastName}\",\"email\":\"{TestEmail}\",\"avatarUpdatedAt\":null}}");
         }
 
         [Fact, TestPriority(4)]
@@ -148,14 +150,14 @@ namespace Backend.Test
             await AuthenticateAsync();
 
             var response = await _client.PatchAsJsonAsync("/user/profile",
-                new { username = $"user_{RunId}", email = $"updated_{RunId}@example.com" });
+                new { firstName = $"Updated{RunId}", lastName = "Person", email = $"updated_{RunId}@example.com" });
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             content.Should().Contain("\"success\":\"Profile updated\"").And.Contain("\"token\":");
 
             var info = await _client.GetStringAsync("/user/info");
-            info.Should().Be($"{{\"username\":\"user_{RunId}\",\"email\":\"updated_{RunId}@example.com\",\"avatarUpdatedAt\":null}}");
+            info.Should().Be($"{{\"firstName\":\"Updated{RunId}\",\"lastName\":\"Person\",\"email\":\"updated_{RunId}@example.com\",\"avatarUpdatedAt\":null}}");
         }
 
         [Fact, TestPriority(5)]

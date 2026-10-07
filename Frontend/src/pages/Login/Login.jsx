@@ -25,7 +25,7 @@ function Login() {
 
     const validateForm = () => {
         const newErrors = {};
-        if (!identifier.trim()) newErrors.identifier = "Enter your email or username";
+        if (!identifier.trim()) newErrors.identifier = "Enter your email address";
         // Only check it's present: older accounts may predate the current password rules
         if (!password) newErrors.password = "Password is required";
         return newErrors;
@@ -48,7 +48,7 @@ function Login() {
                 navigate("/dashboard", { replace: true });
                 return;
             }
-            // e.g. "Invalid email/username or password" or the rate-limit message
+            // e.g. "Invalid email or password" or the rate-limit message
             setLoginError(response.data?.error || "Login failed");
         } catch {
             setLoginError("Can't reach the server. Please try again.");
@@ -71,12 +71,12 @@ function Login() {
 
                 <form onSubmit={handleSubmit} noValidate>
                     <div className="auth-field">
-                        <label htmlFor="login-identifier">Email or username</label>
+                        <label htmlFor="login-identifier">Email address</label>
                         <input
                             id="login-identifier"
-                            name="username"
-                            type="text"
-                            autoComplete="username"
+                            name="email"
+                            type="email"
+                            autoComplete="email"
                             autoCapitalize="none"
                             spellCheck={false}
                             value={identifier}

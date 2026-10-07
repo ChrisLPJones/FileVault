@@ -5,14 +5,14 @@ import { clearToken, setToken } from "../utils/auth";
 export const PROFILE_CHANGED_EVENT = "fv-profile-change";
 export const notifyProfileChanged = () => window.dispatchEvent(new Event(PROFILE_CHANGED_EVENT));
 
-// { username, email, avatarUpdatedAt }
+// { firstName, lastName, email, avatarUpdatedAt }
 export const getUserInfoAPI = async () => (await api.get("/user/info")).data;
 
 // { used, quota, maxUploadBytes } in bytes
 export const getUsageAPI = async () => (await api.get("/user/usage")).data;
 
-export const updateProfileAPI = async (username, email) => {
-    const response = await api.patch("/user/profile", { username, email });
+export const updateProfileAPI = async (firstName, lastName, email) => {
+    const response = await api.patch("/user/profile", { firstName, lastName, email });
     setToken(response.data.token);
     notifyProfileChanged();
     return response.data;

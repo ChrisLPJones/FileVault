@@ -7,8 +7,11 @@ namespace Backend.Models
     {
         public Guid Id { get; set; }
 
-        [JsonPropertyName("Username")]
-        public string Username { get; set; } = "";
+        [JsonPropertyName("FirstName")]
+        public string FirstName { get; set; } = "";
+
+        [JsonPropertyName("LastName")]
+        public string LastName { get; set; } = "";
 
         [JsonPropertyName("Email")]
         public string Email { get; set; } = "";

@@ -27,7 +27,8 @@ BEGIN
     CREATE TABLE Users
     (
         Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-        Username NVARCHAR(50) UNIQUE NOT NULL,
+        FirstName NVARCHAR(50) NOT NULL,
+        LastName NVARCHAR(50) NOT NULL,
         Email NVARCHAR(100) UNIQUE NOT NULL,
         PasswordHash NVARCHAR(255) NOT NULL,
         CreatedAt DATETIME DEFAULT GETDATE(),
@@ -107,6 +108,40 @@ IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Files_ParentId' AND ob
 BEGIN
     CREATE INDEX IX_Files_ParentId ON Files (ParentId);
     PRINT 'Index "IX_Files_ParentId" created.';
+END
+GO
+
+------------------------------------------------------------
+-- FIRST/LAST NAME REPLACE USERNAME (migrates existing databases too)
+------------------------------------------------------------
+IF COL_LENGTH('Users', 'FirstName') IS NULL
+BEGIN
+    ALTER TABLE Users ADD FirstName NVARCHAR(50) NULL, LastName NVARCHAR(50) NULL;
+    PRINT 'Columns "Users.FirstName/LastName" added.';
+END
+GO
+
+IF COL_LENGTH('Users', 'Username') IS NOT NULL
+BEGIN
+    -- Existing accounts keep their old username as the first name
+    EXEC('UPDATE Users SET FirstName = LEFT(Username, 50), LastName = '''' WHERE FirstName IS NULL');
+
+    -- Drop the unique constraint on Username, then the column
+    DECLARE @drop NVARCHAR(MAX) = N'';
+    SELECT @drop += N'ALTER TABLE Users DROP CONSTRAINT ' + QUOTENAME(kc.name) + N';'
+    FROM sys.key_constraints kc
+    JOIN sys.index_columns ic ON ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id
+    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+    WHERE kc.parent_object_id = OBJECT_ID('Users') AND c.name = 'Username' AND kc.type = 'UQ';
+    EXEC sp_executesql @drop;
+    ALTER TABLE Users DROP COLUMN Username;
+    PRINT 'Column "Users.Username" removed.';
+END
+
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Users') AND name = 'FirstName' AND is_nullable = 1)
+BEGIN
+    EXEC('ALTER TABLE Users ALTER COLUMN FirstName NVARCHAR(50) NOT NULL');
+    EXEC('ALTER TABLE Users ALTER COLUMN LastName NVARCHAR(50) NOT NULL');
 END
 GO
 
