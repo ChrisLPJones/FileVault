@@ -56,7 +56,12 @@ namespace Backend.Routes
                 await auth.HashAndRegisterUser(user, db);
 
                 return Results.Ok(new { success = $"User {user.Username} registered" });
-            }).RequireRateLimiting("auth");
+            })
+                .WithTags("Account")
+                .WithSummary("Create an account")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(429).RequireRateLimiting("auth");
 
             // Logs in a user: returns an access token and sets the refresh token cookie
             app.MapPost("/user/login", async (
@@ -78,7 +83,13 @@ namespace Backend.Routes
                 await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
 
                 return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
-            }).RequireRateLimiting("auth");
+            })
+                .WithTags("Account")
+                .WithSummary("Log in: returns an access token and sets the refresh-token cookie")
+                .Produces<TokenResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(401)
+                .Produces<ErrorResponse>(429).RequireRateLimiting("auth");
 
             // Exchanges the refresh token cookie for a new access token (and a new refresh cookie)
             app.MapPost("/user/refresh", async (
@@ -94,7 +105,12 @@ namespace Backend.Routes
                 }
 
                 return Results.Ok(new { Success = auth.GetJWTToken(user) });
-            }).RequireRateLimiting("refresh");
+            })
+                .WithTags("Account")
+                .WithSummary("Get a new access token using the refresh-token cookie")
+                .Produces<TokenResponse>()
+                .Produces<ErrorResponse>(401)
+                .Produces<ErrorResponse>(429).RequireRateLimiting("refresh");
 
             // Logs out: revokes the refresh token and clears its cookie
             app.MapPost("/user/logout", async (
@@ -104,7 +120,10 @@ namespace Backend.Routes
             {
                 await auth.RevokeRefreshCookieAsync(db, http);
                 return Results.Ok(new { success = "Logged out" });
-            });
+            })
+                .WithTags("Account")
+                .WithSummary("Log out: revokes the refresh token and clears its cookie")
+                .Produces<SuccessResponse>();
 
             // Retrieves authenticated user's information
             app.MapGet("/user/info", async (
@@ -120,7 +139,11 @@ namespace Backend.Routes
                     username = userInfo.Username,
                     email = userInfo.Email
                 });
-            }).RequireAuthorization();
+            })
+                .WithTags("Account")
+                .WithSummary("Get the current user's username and email")
+                .Produces<UserInfoResponse>()
+                .Produces<ErrorResponse>(404).RequireAuthorization();
 
             // Updates the authenticated user's username and email
             app.MapPatch("/user/profile", async (
@@ -151,7 +174,12 @@ namespace Backend.Routes
                 account.Username = username;
                 account.Email = email;
                 return Results.Ok(new { Success = "Profile updated", Token = auth.GetJWTToken(account) });
-            }).RequireAuthorization();
+            })
+                .WithTags("Account")
+                .WithSummary("Change username and email (returns a new access token)")
+                .Produces<TokenUpdateResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(409).RequireAuthorization();
 
             // Changes the authenticated user's password (requires the current one)
             app.MapPost("/user/password", async (
@@ -181,7 +209,11 @@ namespace Backend.Routes
                 await auth.IssueRefreshTokenAsync(userId, db, http);
 
                 return Results.Ok(new { Success = "Password changed", Token = auth.GetJWTToken(account) });
-            }).RequireAuthorization();
+            })
+                .WithTags("Account")
+                .WithSummary("Change password (ends other sessions, returns a new access token)")
+                .Produces<TokenUpdateResponse>()
+                .Produces<ErrorResponse>(400).RequireAuthorization();
 
             // Deletes the authenticated user's account and all their files
             app.MapDelete("/user", async (
@@ -202,7 +234,11 @@ namespace Backend.Routes
                 AuthServices.ClearRefreshCookie(http);
 
                 return Results.Ok(new { response.Message });
-            }).RequireAuthorization();
+            })
+                .WithTags("Account")
+                .WithSummary("Delete the account and every stored file")
+                .Produces(200)
+                .Produces<ErrorResponse>(404).RequireAuthorization();
         }
     }
 }

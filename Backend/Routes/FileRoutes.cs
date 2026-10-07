@@ -52,7 +52,13 @@ namespace Backend.Routes
                 return result.Success
                     ? Results.Ok(new { success = $"File Uploaded: {result.FileName}" })
                     : Error(result);
-            }).RequireAuthorization();
+            })
+                .WithTags("Files")
+                .WithSummary("Upload a file (multipart form: file, optional parentId)")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(413)
+                .WithMetadata(new MultipartUploadMetadata()).RequireAuthorization();
 
             // Create folder metadata in the database
             app.MapPost("/folder", async (
@@ -66,7 +72,12 @@ namespace Backend.Routes
 
                 var result = await fs.CreateFolder(request, db, user.GetUserId());
                 return result.Success ? Results.Ok(result.Folder) : Error(result);
-            }).RequireAuthorization();
+            })
+                .WithTags("Files")
+                .WithSummary("Create a folder")
+                .Produces<FolderModel>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(409).RequireAuthorization();
 
             // Returns a list of all files stored for the authenticated user
             app.MapGet("/files", async (
@@ -74,7 +85,10 @@ namespace Backend.Routes
                 DatabaseServices db) =>
             {
                 return Results.Ok(await db.GetFilesFromDb(user.GetUserId()));
-            }).RequireAuthorization();
+            })
+                .WithTags("Files")
+                .WithSummary("List every file and folder the user owns")
+                .Produces<List<FileModel>>().RequireAuthorization();
 
             // Storage used, quota and upload size limit for the authenticated user
             app.MapGet("/user/usage", async (
@@ -83,7 +97,10 @@ namespace Backend.Routes
                 DatabaseServices db) =>
             {
                 return Results.Ok(await fs.GetUsageAsync(db, user.GetUserId()));
-            }).RequireAuthorization();
+            })
+                .WithTags("Account")
+                .WithSummary("Storage used, storage quota and the upload size limit (bytes)")
+                .Produces<StorageUsage>().RequireAuthorization();
 
             // Streams a file belonging to the authenticated user (supports range requests)
             app.MapGet("/download/{fileId}", async (
@@ -103,7 +120,11 @@ namespace Backend.Routes
                     fileDownloadName: file.Name,
                     enableRangeProcessing: true
                 );
-            }).RequireAuthorization();
+            })
+                .WithTags("Files")
+                .WithSummary("Download a file (supports Range requests)")
+                .Produces(200, contentType: "application/octet-stream")
+                .Produces<ErrorResponse>(404).RequireAuthorization();
 
             // Downloads several files and/or folders as a single zip
             app.MapPost("/download/zip", async (
@@ -117,7 +138,12 @@ namespace Backend.Routes
                     return Error(zip.Error);
 
                 return Results.File(zip.Value.Stream, "application/zip", zip.Value.FileName);
-            }).RequireAuthorization();
+            })
+                .WithTags("Files")
+                .WithSummary("Download files and folders as one zip")
+                .Produces(200, contentType: "application/zip")
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(404).RequireAuthorization();
 
             // Renames a file or folder
             app.MapPatch("/rename", async (
@@ -127,7 +153,13 @@ namespace Backend.Routes
                 DatabaseServices db) =>
             {
                 return Success(await fs.Rename(request, db, user.GetUserId()));
-            }).RequireAuthorization();
+            })
+                .WithTags("Files")
+                .WithSummary("Rename a file or folder")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(404)
+                .Produces<ErrorResponse>(409).RequireAuthorization();
 
             // Moves files/folders into another folder (destinationId null = root)
             app.MapPut("/move", async (
@@ -137,7 +169,13 @@ namespace Backend.Routes
                 DatabaseServices db) =>
             {
                 return Success(await fs.Move(request, db, user.GetUserId()));
-            }).RequireAuthorization();
+            })
+                .WithTags("Files")
+                .WithSummary("Move files/folders into a folder (omit destinationId for the root)")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(404)
+                .Produces<ErrorResponse>(409).RequireAuthorization();
 
             // Copies files/folders into another folder (destinationId null = root)
             app.MapPost("/copy", async (
@@ -147,7 +185,13 @@ namespace Backend.Routes
                 DatabaseServices db) =>
             {
                 return Success(await fs.Copy(request, db, user.GetUserId()));
-            }).RequireAuthorization();
+            })
+                .WithTags("Files")
+                .WithSummary("Copy files/folders into a folder (omit destinationId for the root)")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(404)
+                .Produces<ErrorResponse>(413).RequireAuthorization();
 
             // Deletes a file or folder (and everything inside it) for the authenticated user
             app.MapDelete("/delete/{fileId}", async (
@@ -157,7 +201,11 @@ namespace Backend.Routes
                 DatabaseServices db) =>
             {
                 return Success(await fs.DeleteFile(fileId, db, user.GetUserId()));
-            }).RequireAuthorization();
+            })
+                .WithTags("Files")
+                .WithSummary("Delete a file or folder and everything inside it")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400).RequireAuthorization();
 
             // Deletes several files/folders for the authenticated user
             app.MapDelete("/delete", async (
@@ -205,7 +253,12 @@ namespace Backend.Routes
                     return Results.Json(new { error = "Some items could not be deleted", failed }, statusCode: 500);
 
                 return Results.Ok(new { success = "Deleted Successfully" });
-            }).RequireAuthorization();
+            })
+                .WithTags("Files")
+                .WithSummary("Delete several files/folders (body: { ids: [...] })")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(500).RequireAuthorization();
         }
     }
 }

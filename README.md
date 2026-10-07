@@ -114,26 +114,13 @@ npm run dev
 
 ## API Documentation
 
-All endpoints for uploading, downloading, deleting, and listing files are documented in Postman.
+Interactive API docs are served by the API at **http://localhost:3000/swagger**, and the OpenAPI document is at `/swagger/v1/swagger.json` (it can be imported into Postman or Insomnia).
 
+To try protected endpoints, call `POST /user/login`, then click **Authorize** and paste the returned access token. Endpoints are grouped as:
 
-
-Postman config can be found in `Backend/Postman`. Here's how to import it:
-
-1. Open Postman.
-2. Click **"Import"** (top left).
-3. Select the file `FileVault.postman_collection.json` from the `Backend/postman` folder.
-4. The collection will now appear in your Postman sidebar.
-
-Example endpoints:
-
-- `POST /upload`
-- `GET /download/{id}`
-- `DELETE /delete/{id}`
-- `GET /files`
-
-
-
+- **Account**: register, login, refresh, logout, profile, password, storage usage, delete account
+- **Files**: upload, folders, list, download (single file or zip), rename, move, copy, delete
+- **Health**: `/ping` and `/pingsql`
 
 
 ## License

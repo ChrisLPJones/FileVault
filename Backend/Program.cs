@@ -3,6 +3,7 @@ using Backend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Threading.RateLimiting;
 
@@ -81,6 +82,33 @@ namespace Backend
                     });
                 }
             });
+            // OpenAPI document (/swagger/v1/swagger.json) and interactive docs (/swagger)
+            builder.Services.AddEndpointsApiExplorer();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.SwaggerDoc("v1", new OpenApiInfo
+                {
+                    Title = "FileVault API",
+                    Version = "v1",
+                    Description =
+                        "Encrypted file storage API. Log in with POST /user/login, then click Authorize and " +
+                        "paste the returned access token. The refresh token is an httpOnly cookie, so " +
+                        "/user/refresh and /user/logout only work from a browser on the frontend's origin."
+                });
+
+                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                {
+                    Name = "Authorization",
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "bearer",
+                    BearerFormat = "JWT",
+                    In = ParameterLocation.Header,
+                    Description = "Access token from POST /user/login (valid for 15 minutes)"
+                });
+                options.OperationFilter<BearerAuthOperationFilter>();
+                options.OperationFilter<MultipartUploadOperationFilter>();
+            });
+
             builder.Services.AddSingleton<FileEncryption>();
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<DatabaseServices>();
@@ -132,6 +160,13 @@ namespace Backend
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 await context.Response.WriteAsJsonAsync(new { error = "An internal error has occurred" });
             }));
+
+            app.UseSwagger();
+            app.UseSwaggerUI(options =>
+            {
+                options.SwaggerEndpoint("/swagger/v1/swagger.json", "FileVault API v1");
+                options.DocumentTitle = "FileVault API";
+            });
 
             // Map Routes
             app.UseAuthentication();
