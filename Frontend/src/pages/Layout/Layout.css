@@ -65,27 +65,24 @@ html, body {
     z-index: 20;
 }
 
-/* Equal-width sides keep the middle centred on the whole bar */
 .nav-left,
 .nav-right {
-    flex: 1 1 0;
+    flex: 0 0 auto;
 }
 
-.nav-right {
-    justify-content: flex-end;
-}
-
-/* Middle of the top bar: the dashboard puts the file toolbar here */
+/* Rest of the top bar: the dashboard puts the file toolbar here, spread across it like
+   it was above the files (actions on the left, view and refresh on the right) */
 .nav-center {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     min-width: 0;
     display: flex;
-    justify-content: center;
-    padding: 0 1rem;
+    padding-right: 1rem;
 }
 
 .nav-center .toolbar,
 .nav-center .toolbar.file-selected {
+    flex: 1 1 auto;
+    min-width: 0;
     height: auto;
     min-height: 0;
     max-height: none;
@@ -97,7 +94,7 @@ html, body {
 
 .nav-center .fm-toolbar,
 .nav-center .file-action-container {
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     gap: 0.75rem;
 }
