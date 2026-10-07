@@ -129,7 +129,7 @@ const FileManager = ({
                   >
                     <div
                       className={`navigation-pane ${isNavigationPaneOpen ? "open" : "closed"} ${isNavCompact ? "compact" : ""}`}
-                      style={isNavCompact ? { width: "56px" } : { width: colSizes.col1 + "%" }}
+                      style={isNavCompact ? { width: "44px" } : { width: colSizes.col1 + "%" }}
                     >
                       <NavigationPane
                         onFileOpen={onFileOpen}
