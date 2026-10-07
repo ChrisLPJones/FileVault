@@ -38,10 +38,13 @@
       gap: 0.25rem;
       font-weight: 500;
       min-width: fit-content;
+      padding: 0 6px;
+      border-radius: 5px;
 
+      // Same hover as the rest of the app: background shading, no text colour change
       &:hover {
         cursor: pointer;
-        color: var(--file-manager-primary-color);
+        background-color: $item-hover-color;
       }
     }
 
@@ -52,14 +55,15 @@
     .folder-name-btn {
       background-color: transparent;
       border: none;
-      padding: 0;
+      color: inherit;
+      font: inherit;
+      font-weight: 500;
 
       &:hover,
       &:focus {
         cursor: pointer;
-        color: var(--file-manager-primary-color);
-        background-color: var(--fm-surface-alt);
-        border-radius: 5px;
+        background-color: $item-hover-color;
+        outline: none;
       }
     }
 
