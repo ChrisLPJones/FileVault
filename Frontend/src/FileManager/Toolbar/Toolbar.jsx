@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BsCopy, BsFolderPlus, BsGridFill, BsLayoutSidebarReverse, BsScissors } from "react-icons/bs";
+import { BsCopy, BsFolderPlus, BsGridFill, BsScissors } from "react-icons/bs";
 import { FiRefreshCw } from "react-icons/fi";
 import {
   MdOutlineDelete,
@@ -13,7 +13,6 @@ import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { useSelection } from "../../contexts/SelectionContext";
 import { useClipBoard } from "../../contexts/ClipboardContext";
 import { useLayout } from "../../contexts/LayoutContext";
-import { useDetailsPane } from "../../contexts/DetailsPaneContext";
 import { validateApiCallback } from "../../utils/validateApiCallback";
 import { useTranslation } from "../../contexts/TranslationProvider";
 import "./Toolbar.scss";
@@ -24,7 +23,6 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
   const { selectedFiles, setSelectedFiles, handleDownload } = useSelection();
   const { clipBoard, setClipBoard, handleCutCopy, handlePasting } = useClipBoard();
   const { activeLayout } = useLayout();
-  const { isDetailsOpen, setDetailsOpen } = useDetailsPane();
   const t = useTranslation();
 
   // Toolbar Items
@@ -50,12 +48,6 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
   ];
 
   const toolbarRightItems = [
-    {
-      icon: <BsLayoutSidebarReverse size={16} />,
-      title: isDetailsOpen ? "Hide details" : "Show details",
-      active: isDetailsOpen,
-      onClick: () => setDetailsOpen((open) => !open),
-    },
     {
       icon: activeLayout === "grid" ? <BsGridFill size={16} /> : <FaListUl size={16} />,
       title: t("changeView"),
@@ -88,7 +80,6 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
           <button
             className="item-action icon-only"
             title={item.title}
-            aria-pressed={item.active}
             onClick={item.onClick}
           >
             {item.icon}

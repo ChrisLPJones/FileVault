@@ -56,7 +56,12 @@
     }
 
     .files-progress {
-        width: calc(60% - 18px);
+        width: 100%;
+
+        .upload-close {
+            display: flex;
+            justify-content: flex-end;
+        }
 
         .heading {
             display: flex;
