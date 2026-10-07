@@ -121,7 +121,6 @@ function Dashboard() {
                     layout="grid"
                     enableFilePreview
                     maxFileSize={maxFileSize}
-                    filePreviewPath={API_BASE_URL}
                     acceptedFileTypes=".txt, .png, .jpg, .jpeg, .pdf, .doc, .docx, .exe"
                     height="100%"
                     width="100%"

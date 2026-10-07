@@ -71,7 +71,7 @@ const UploadItem = ({
     };
 
     const fileUpload = (fileData) => {
-        if (!!fileData.error) return;
+        if (fileData.error) return;
 
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -176,7 +176,7 @@ const UploadItem = ({
     };
 
     // File was removed by the user beacuse it was unsupported or exceeds file size limit.
-    if (!!fileData.removed) {
+    if (fileData.removed) {
         return null;
     }
     //
@@ -216,12 +216,12 @@ const UploadItem = ({
                         <div
                             className="rm-file"
                             title={`${
-                                !!fileData.error
+                                fileData.error
                                     ? t("Remove")
                                     : t("abortUpload")
                             }`}
                             onClick={
-                                !!fileData.error
+                                fileData.error
                                     ? () => handleFileRemove(index)
                                     : handleAbortUpload
                             }

@@ -42,7 +42,6 @@ const FileManager = ({
   layout = "grid",
   enableFilePreview = true,
   maxFileSize,
-  filePreviewPath,
   acceptedFileTypes,
   height = "600px",
   width = "100%",
@@ -145,7 +144,6 @@ const FileManager = ({
                     onDelete={onDelete}
                     onRefresh={onRefresh}
                     maxFileSize={maxFileSize}
-                    filePreviewPath={filePreviewPath}
                     filePreviewComponent={filePreviewComponent}
                     acceptedFileTypes={acceptedFileTypes}
                     triggerAction={triggerAction}
@@ -198,7 +196,6 @@ FileManager.propTypes = {
   layout: PropTypes.oneOf(["grid", "list"]),
   maxFileSize: PropTypes.number,
   enableFilePreview: PropTypes.bool,
-  filePreviewPath: urlValidator,
   acceptedFileTypes: PropTypes.string,
   height: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   width: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),

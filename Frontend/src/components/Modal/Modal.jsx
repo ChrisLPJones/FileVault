@@ -32,7 +32,7 @@ const Modal = ({
   return (
     <dialog
       ref={modalRef}
-      className={`fm-modal dialog`}
+      className={`fm-modal dialog ${contentClassName}`}
       style={{ width: dialogWidth }}
       onKeyDown={handleKeyDown}
     >

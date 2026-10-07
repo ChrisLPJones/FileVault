@@ -80,11 +80,9 @@ jobs:
         env:
           VITE_API_BASE_URL: http://localhost:3000
 
-      # Existing lint errors are tracked in docs/CODEBASE_REVIEW.md (Phase 4);
-      # report them without failing the build until they are fixed
+      # Errors fail the build; warnings (see eslint.config.js) are reported only
       - name: Lint
         run: npm run lint
-        continue-on-error: true
 
   docker:
     name: Docker images

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import "./Login.css";
 import { login } from "../../services/Auth";
 import { setToken } from "../../utils/auth";
@@ -11,13 +11,10 @@ function Login() {
     const [errors, setErrors] = useState({});
     const [loginStatus, setLoginStatus] = useState(null);
     const location = useLocation();
-    const [regStatus, setRegStatus] = useState(false);
-    const registrationSuccess = location.state?.registrationSuccess;
     const navigate = useNavigate();
-
-    useEffect(() => {
-        registrationSuccess && setRegStatus(true);
-    }, [registrationSuccess]);
+    // "Registration Successful" shows after arriving from the register page, until the first login attempt
+    const [regMessageDismissed, setRegMessageDismissed] = useState(false);
+    const regStatus = location.state?.registrationSuccess && !regMessageDismissed;
 
     const validateForm = () => {
         const newErrors = {};
@@ -31,7 +28,7 @@ function Login() {
 
     const handleSubmit = async (event) => {
         event.preventDefault();
-        setRegStatus(false);
+        setRegMessageDismissed(true);
         const formErrors = validateForm();
 
         if (Object.keys(formErrors).length > 0) {

@@ -16,7 +16,7 @@ const videoExtensions = ["mp4", "mov", "avi"];
 const audioExtensions = ["mp3", "wav", "m4a"];
 const iFrameExtensions = ["txt", "pdf"];
 
-const PreviewFileAction = ({ filePreviewPath, filePreviewComponent }) => {
+const PreviewFileAction = ({ filePreviewComponent }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [fileURL, setFileURL] = useState(null);

@@ -14,7 +14,6 @@ const Actions = ({
   onDelete,
   onRefresh,
   maxFileSize,
-  filePreviewPath,
   filePreviewComponent,
   acceptedFileTypes,
   triggerAction,
@@ -50,7 +49,6 @@ const Actions = ({
       title: t("preview"),
       component: (
         <PreviewFileAction
-          filePreviewPath={filePreviewPath}
           filePreviewComponent={filePreviewComponent}
         />
       ),
@@ -61,10 +59,12 @@ const Actions = ({
   useEffect(() => {
     if (triggerAction.isActive) {
       const actionType = triggerAction.actionType;
-      if (actionType === "previewFile") {
-        actionTypes[actionType].title = selectedFiles?.name ?? t("preview");
-      }
-      setActiveAction(actionTypes[actionType]);
+      // The preview modal is titled with the file's name (selectedFiles is an array)
+      setActiveAction(
+        actionType === "previewFile"
+          ? { ...actionTypes[actionType], title: selectedFiles?.[0]?.name ?? t("preview") }
+          : actionTypes[actionType]
+      );
     } else {
       setActiveAction(null);
     }
