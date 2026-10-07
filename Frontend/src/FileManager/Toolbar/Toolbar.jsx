@@ -49,12 +49,12 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
 
   const toolbarRightItems = [
     {
-      icon: activeLayout === "grid" ? <BsGridFill size={16} /> : <FaListUl size={16} />,
+      icon: activeLayout === "grid" ? <BsGridFill size={19} /> : <FaListUl size={19} />,
       title: t("changeView"),
       onClick: () => setShowToggleViewMenu((prev) => !prev),
     },
     {
-      icon: <FiRefreshCw size={16} />,
+      icon: <FiRefreshCw size={19} />,
       title: t("refresh"),
       onClick: () => {
         validateApiCallback(onRefresh, "onRefresh");
