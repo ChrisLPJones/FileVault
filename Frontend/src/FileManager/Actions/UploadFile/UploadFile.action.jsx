@@ -39,13 +39,19 @@ const UploadFileAction = ({
       if (extError) return t("fileTypeNotAllowed");
     }
 
-    const fileExists = currentPathFiles.some(
-      (item) => item.name.toLowerCase() === file.name.toLowerCase() && !item.isDirectory
-    );
-    if (fileExists) return t("fileAlreadyExist");
-
     const sizeError = maxFileSize && file.size > maxFileSize;
     if (sizeError) return `${t("maxUploadSize")} ${getDataSize(maxFileSize, 0)}.`;
+  };
+
+  // Windows Explorer style: "name.ext" -> "name (1).ext", "name (2).ext", ...
+  const getUniqueFile = (file, takenNames) => {
+    if (!takenNames.has(file.name.toLowerCase())) return file;
+    const dot = file.name.lastIndexOf(".");
+    const base = dot > 0 ? file.name.slice(0, dot) : file.name;
+    const ext = dot > 0 ? file.name.slice(dot) : "";
+    let n = 1;
+    while (takenNames.has(`${base} (${n})${ext}`.toLowerCase())) n++;
+    return new File([file], `${base} (${n})${ext}`, { type: file.type, lastModified: file.lastModified });
   };
 
   const setSelectedFiles = (selectedFiles) => {
@@ -55,6 +61,15 @@ const UploadFileAction = ({
     );
 
     if (selectedFiles.length > 0) {
+      const takenNames = new Set([
+        ...currentPathFiles.filter((item) => !item.isDirectory).map((item) => item.name.toLowerCase()),
+        ...files.map((fileData) => fileData.file.name.toLowerCase()),
+      ]);
+      selectedFiles = selectedFiles.map((original) => {
+        const file = getUniqueFile(original, takenNames);
+        takenNames.add(file.name.toLowerCase());
+        return file;
+      });
       const newFiles = selectedFiles.map((file) => {
         const appendData = onFileUploading(file, currentFolder);
         const error = checkFileError(file);

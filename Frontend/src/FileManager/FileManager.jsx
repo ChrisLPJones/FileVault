@@ -69,6 +69,7 @@ const FileManager = ({
   formatDate = defaultFormatDate,
   toolbarContainer = null, // optional element to render the toolbar into (e.g. the app header)
 }) => {
+  const [isNavCompact, setNavCompact] = useState(false);
   const [isNavigationPaneOpen, setNavigationPaneOpen] = useState(defaultNavExpanded);
   const triggerAction = useTriggerAction();
   const { containerRef, colSizes, isDragging, handleMouseMove, handleMouseUp, handleMouseDown } =
@@ -127,21 +128,23 @@ const FileManager = ({
                     className="files-container"
                   >
                     <div
-                      className={`navigation-pane ${isNavigationPaneOpen ? "open" : "closed"}`}
-                      style={{
-                        width: colSizes.col1 + "%",
-                      }}
+                      className={`navigation-pane ${isNavigationPaneOpen ? "open" : "closed"} ${isNavCompact ? "compact" : ""}`}
+                      style={isNavCompact ? { width: "56px" } : { width: colSizes.col1 + "%" }}
                     >
-                      <NavigationPane onFileOpen={onFileOpen} />
-                      <div
+                      <NavigationPane
+                        onFileOpen={onFileOpen}
+                        compact={isNavCompact}
+                        onToggleCompact={() => setNavCompact((prev) => !prev)}
+                      />
+                      {!isNavCompact && <div
                         className={`sidebar-resize ${isDragging ? "sidebar-dragging" : ""}`}
                         onMouseDown={handleMouseDown}
-                      />
+                      />}
                     </div>
 
                     <div
                       className="folders-preview"
-                      style={{ width: (isNavigationPaneOpen ? colSizes.col2 : 100) + "%" }}
+                      style={{ width: (isNavigationPaneOpen && !isNavCompact ? colSizes.col2 : 100) + "%" }}
                     >
                       <BreadCrumb
                         collapsibleNav={collapsibleNav}
