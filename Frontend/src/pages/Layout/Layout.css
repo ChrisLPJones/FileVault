@@ -147,3 +147,12 @@ html, body {
     align-items: center;
     gap: 6px;
 }
+
+/* Icon-only toolbar buttons (view, refresh): square, so the hover background is a square */
+.nav-center .toolbar .item-action.icon-only {
+    width: 34px;
+    height: 34px;
+    padding: 0 !important;
+    justify-content: center;
+    border-radius: 6px;
+}
