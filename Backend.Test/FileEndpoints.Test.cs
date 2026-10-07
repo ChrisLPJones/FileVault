@@ -63,10 +63,13 @@ namespace Backend.Test
             return jsonDoc.RootElement.GetProperty("success").GetString()!;
         }
 
-        private static async Task<HttpResponseMessage> UploadAsync(HttpClient client, string fileName, string text, string? parentId = null)
+        private static Task<HttpResponseMessage> UploadAsync(HttpClient client, string fileName, string text, string? parentId = null) =>
+            UploadBytesAsync(client, fileName, Encoding.UTF8.GetBytes(text), "text/plain", parentId);
+
+        private static async Task<HttpResponseMessage> UploadBytesAsync(HttpClient client, string fileName, byte[] bytes, string contentType, string? parentId = null)
         {
-            var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes(text));
-            fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("text/plain");
+            var fileContent = new ByteArrayContent(bytes);
+            fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
 
             var multipartContent = new MultipartFormDataContent();
             if (parentId != null)
@@ -383,7 +386,7 @@ namespace Backend.Test
             var originalId = IdAt(files, "/album/pic.txt");
             var copyId = IdAt(files, "/album (1)/pic.txt");
             copyId.Should().NotBe(originalId);
-            File.ReadAllText(StoredFilePath(copyId)).Should().Be("picture");
+            (await _client.GetStringAsync($"/download/{copyId}")).Should().Be("picture");
 
             // Deleting the copy leaves the original's stored file alone
             (await _client.DeleteAsync($"/delete/{IdAt(files, "/album (1)")}")).StatusCode.Should().Be(HttpStatusCode.OK);
@@ -438,6 +441,74 @@ namespace Backend.Test
 
             using var reader = new StreamReader(zip.GetEntry("zipme/one.txt")!.Open());
             (await reader.ReadToEndAsync()).Should().Be("one");
+        }
+
+        [Fact, TestPriority(18)]
+        public async Task StoredFile_IsEncryptedOnDisk_AndDownloadsAsPlaintext()
+        {
+            await AuthenticateAsync();
+
+            const string secret = "Top secret contents that must not appear on disk";
+            (await UploadAsync(_client, "secret.txt", secret)).StatusCode.Should().Be(HttpStatusCode.OK);
+            var fileId = IdAt(await ListFilesAsync(_client), "/secret.txt");
+
+            var stored = await File.ReadAllBytesAsync(StoredFilePath(fileId));
+            Encoding.ASCII.GetString(stored, 0, 4).Should().Be("FVE1");
+            Encoding.UTF8.GetString(stored).Should().NotContain("Top secret");
+
+            (await _client.GetStringAsync($"/download/{fileId}")).Should().Be(secret);
+        }
+
+        [Theory, TestPriority(19)]
+        [InlineData(1)]
+        [InlineData(65_536)]      // exactly one chunk
+        [InlineData(131_072)]     // exact multiple of the chunk size
+        [InlineData(200_003)]     // several chunks with a partial last one
+        public async Task EncryptedFile_RoundTrips_WithRangesAcrossChunks(int length)
+        {
+            await AuthenticateAsync();
+
+            var data = new byte[length];
+            new Random(length).NextBytes(data);
+            var name = $"blob-{length}.bin";
+
+            (await UploadBytesAsync(_client, name, data, "application/octet-stream")).StatusCode.Should().Be(HttpStatusCode.OK);
+            var fileId = IdAt(await ListFilesAsync(_client), $"/{name}");
+
+            (await _client.GetByteArrayAsync($"/download/{fileId}")).Should().Equal(data);
+
+            // A range that crosses the first chunk boundary when the file is big enough
+            var from = Math.Max(0, Math.Min(65_530, length - 20));
+            var to = Math.Min(length - 1, from + 19);
+            var request = new HttpRequestMessage(HttpMethod.Get, $"/download/{fileId}");
+            request.Headers.Range = new RangeHeaderValue(from, to);
+            var partial = await _client.SendAsync(request);
+
+            var expected = data[from..(to + 1)];
+            (await partial.Content.ReadAsByteArrayAsync()).Should().Equal(expected);
+        }
+
+        [Fact, TestPriority(20)]
+        public async Task TamperedStoredFile_IsNotServed()
+        {
+            await AuthenticateAsync();
+
+            (await UploadAsync(_client, "tamper.txt", "original contents")).StatusCode.Should().Be(HttpStatusCode.OK);
+            var fileId = IdAt(await ListFilesAsync(_client), "/tamper.txt");
+
+            // Flip one ciphertext byte after the 8-byte header
+            var path = StoredFilePath(fileId);
+            var bytes = await File.ReadAllBytesAsync(path);
+            bytes[10] ^= 0xFF;
+            await File.WriteAllBytesAsync(path, bytes);
+
+            var download = async () =>
+            {
+                var response = await _client.GetAsync($"/download/{fileId}");
+                response.EnsureSuccessStatusCode();
+                await response.Content.ReadAsByteArrayAsync();
+            };
+            await download.Should().ThrowAsync<Exception>();
         }
 
         [Fact, TestPriority(30)]

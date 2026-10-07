@@ -46,7 +46,7 @@ Secrets are not committed. Create these two gitignored files from the templates:
 # SQL Server SA password used by Docker
 cp Backend/Docker/.env.example Backend/Docker/.env
 
-# API connection string and JWT signing key
+# API connection string, JWT signing key and file encryption key
 cp Backend/appsettings.Development.example.json Backend/appsettings.Development.json
 ```
 
@@ -55,8 +55,13 @@ Then edit them:
 - Set `MSSQL_SA_PASSWORD` in `Backend/Docker/.env` to a strong password.
 - In `Backend/appsettings.Development.json`, use that same password in the connection string.
 - Set `Jwt:Key` to a random value of at least 32 bytes (e.g. `openssl rand -base64 48`).
+- Set `Encryption:MasterKey` to a base64-encoded 32-byte key (e.g. `openssl rand -base64 32`). **Back this key up.** Every stored file is encrypted with a key that is itself encrypted with this one, so losing it means losing every file.
 
-Outside Development, supply the same settings as environment variables (`ConnectionStrings__DefaultConnection`, `Jwt__Key`). The API refuses to start if either is missing.
+Outside Development, supply the same settings as environment variables (`ConnectionStrings__DefaultConnection`, `Jwt__Key`, `Encryption__MasterKey`). The API refuses to start if any of them is missing.
+
+### How files are stored
+
+Uploaded files are encrypted with AES-256-GCM before they reach disk (`Backend/SecureVaultStorage`, named by GUID). Each file has its own random data key, stored in the database encrypted with the master key. Files are encrypted in 64 KB chunks, so downloads stream without loading the whole file into memory and range requests (e.g. video seeking) still work. A file that has been modified on disk fails to decrypt instead of being served.
 
 ### Run Docker in first terminal. 'make sure docker desktop is running'
 

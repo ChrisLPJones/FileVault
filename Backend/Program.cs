@@ -27,6 +27,12 @@ namespace Backend
                     "ConnectionStrings:DefaultConnection is not set. Copy appsettings.Development.example.json " +
                     "to appsettings.Development.json, or set the ConnectionStrings__DefaultConnection environment variable.");
 
+            if (FileEncryption.ParseMasterKey(builder.Configuration["Encryption:MasterKey"]) == null)
+                throw new InvalidOperationException(
+                    "Encryption:MasterKey must be a base64-encoded 32-byte key (e.g. openssl rand -base64 32). " +
+                    "Set it in appsettings.Development.json or the Encryption__MasterKey environment variable. " +
+                    "Keep it safe: stored files can't be decrypted without it.");
+
             // Inject Services
             builder.Services.AddCors(options => {
                 options.AddPolicy("AllowFrontend", policy =>
@@ -36,6 +42,7 @@ namespace Backend
                     .AllowAnyMethod();
                     });
                     });
+            builder.Services.AddSingleton<FileEncryption>();
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();

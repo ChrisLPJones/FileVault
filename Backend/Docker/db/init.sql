@@ -66,30 +66,30 @@ BEGIN
         CONSTRAINT FK_Files_Users FOREIGN KEY (UserId) REFERENCES Users(Id)
     );
     PRINT 'Table "Files" created.';
-
-    ALTER TABLE Files
-    ADD CONSTRAINT FK_Files_Parent
-    FOREIGN KEY (ParentId) REFERENCES Files(GUID)
-    ON DELETE CASCADE;
-
-    PRINT 'Foreign key FK_Files_Parent added with ON DELETE CASCADE.';
 END
 ELSE
 BEGIN
     PRINT 'Table "Files" already exists.';
-
-    IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_Files_Parent')
-    BEGIN
-        ALTER TABLE Files
-        ADD CONSTRAINT FK_Files_Parent
-        FOREIGN KEY (ParentId) REFERENCES Files(GUID)
-        ON DELETE CASCADE;
-
-        PRINT 'Foreign key FK_Files_Parent added with ON DELETE CASCADE.';
-    END
 END
 GO
 
+-- Note: there is deliberately no self-referencing foreign key on ParentId.
+-- SQL Server rejects ON DELETE CASCADE on a self-reference (error 1785), and a
+-- plain FK would block deleting a folder before its children. The
+-- TR_Files_RecursiveDelete trigger below removes descendants instead.
+
+
+------------------------------------------------------------
+-- ENCRYPTION KEY COLUMN (added to existing databases too)
+------------------------------------------------------------
+-- Per-file data key, encrypted with the API's master key. NULL for folders
+-- and for files stored before encryption was added.
+IF COL_LENGTH('Files', 'WrappedKey') IS NULL
+BEGIN
+    ALTER TABLE Files ADD WrappedKey NVARCHAR(200) NULL;
+    PRINT 'Column "Files.WrappedKey" added.';
+END
+GO
 
 ------------------------------------------------------------
 -- RECURSIVE DELETE TRIGGER (FULL DEPTH CASCADE)

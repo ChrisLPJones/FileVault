@@ -114,12 +114,12 @@ namespace Backend.Routes
             {
                 var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-                var (error, file, fullPath) = await fs.GetDownloadAsync(fileId, db, userId);
+                var (error, file, stream) = await fs.GetDownloadAsync(fileId, db, userId);
                 if (error != null)
                     return Error(error);
 
                 return Results.File(
-                    path: fullPath,
+                    fileStream: stream,
                     contentType: string.IsNullOrEmpty(file.MimeType) ? "application/octet-stream" : file.MimeType,
                     fileDownloadName: file.Name,
                     enableRangeProcessing: true

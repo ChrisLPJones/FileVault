@@ -10,6 +10,9 @@ namespace Backend.Models
         public string ParentId { get; set; }
         public long Size { get; set; }
         public string MimeType { get; set; }
+
+        // Per-file data key encrypted with the master key (null for folders and legacy unencrypted files)
+        public string WrappedKey { get; set; }
     }
 
     public class RenameRequest

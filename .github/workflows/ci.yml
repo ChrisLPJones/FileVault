@@ -45,6 +45,9 @@ jobs:
           JWT_KEY=$(openssl rand -base64 48)
           echo "::add-mask::$JWT_KEY"
           echo "Jwt__Key=$JWT_KEY" >> "$GITHUB_ENV"
+          MASTER_KEY=$(openssl rand -base64 32)
+          echo "::add-mask::$MASTER_KEY"
+          echo "Encryption__MasterKey=$MASTER_KEY" >> "$GITHUB_ENV"
           echo "ConnectionStrings__DefaultConnection=Server=localhost,1433;Database=SecureVaultDb;User Id=sa;Password=$SA_PASSWORD;TrustServerCertificate=True;Connection Timeout=5;" >> "$GITHUB_ENV"
 
       - name: Build

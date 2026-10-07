@@ -49,15 +49,16 @@ public class DatabaseServices
         string userId,
         long size,
         string parentId,
-        string mimeType
+        string mimeType,
+        string wrappedKey
         )
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         string query = @"
-            INSERT INTO Files (FileName, isDirectory, FilePath, guid, UserId, Size, parentId, MimeType)
-            VALUES (@FileName, @isDirectory, @filePath, @guid, @UserId, @size, @parentId, @MimeType);";
+            INSERT INTO Files (FileName, isDirectory, FilePath, guid, UserId, Size, parentId, MimeType, WrappedKey)
+            VALUES (@FileName, @isDirectory, @filePath, @guid, @UserId, @size, @parentId, @MimeType, @WrappedKey);";
 
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@FileName", fileName);
@@ -69,6 +70,7 @@ public class DatabaseServices
         command.Parameters.AddWithValue("@parentId",
             string.IsNullOrEmpty(parentId) ? DBNull.Value : parentId);
         command.Parameters.AddWithValue("@MimeType", (object)mimeType ?? DBNull.Value);
+        command.Parameters.AddWithValue("@WrappedKey", (object)wrappedKey ?? DBNull.Value);
 
         // Let failures propagate so the caller can clean up the stored file
         await command.ExecuteNonQueryAsync();
@@ -177,7 +179,8 @@ public class DatabaseServices
         Path = reader["FilePath"].ToString(),
         ParentId = string.IsNullOrEmpty(reader["ParentId"]?.ToString()) ? null : reader["ParentId"].ToString(),
         Size = Convert.ToInt64(reader["Size"]),
-        MimeType = reader["MimeType"] == DBNull.Value ? null : reader["MimeType"].ToString()
+        MimeType = reader["MimeType"] == DBNull.Value ? null : reader["MimeType"].ToString(),
+        WrappedKey = reader["WrappedKey"] == DBNull.Value ? null : reader["WrappedKey"].ToString()
     };
 
 
@@ -189,7 +192,7 @@ public class DatabaseServices
         await connection.OpenAsync();
 
         const string query = @"
-            SELECT GUID, FileName, isDirectory, FilePath, ParentId, Size, MimeType
+            SELECT GUID, FileName, isDirectory, FilePath, ParentId, Size, MimeType, WrappedKey
             FROM Files WHERE GUID = @GUID AND UserId = @UserId";
 
         await using var command = new SqlCommand(query, connection);
@@ -218,7 +221,7 @@ public class DatabaseServices
                 INNER JOIN Tree t ON f.ParentId = t.GUID
                 WHERE f.UserId = @UserId
             )
-            SELECT f.GUID, f.FileName, f.isDirectory, f.FilePath, f.ParentId, f.Size, f.MimeType
+            SELECT f.GUID, f.FileName, f.isDirectory, f.FilePath, f.ParentId, f.Size, f.MimeType, f.WrappedKey
             FROM Files f INNER JOIN Tree t ON f.GUID = t.GUID
             ORDER BY t.Depth;";
 
@@ -333,8 +336,8 @@ public class DatabaseServices
         try
         {
             const string query = @"
-                INSERT INTO Files (FileName, isDirectory, FilePath, GUID, UserId, Size, ParentId, MimeType)
-                VALUES (@FileName, @isDirectory, @FilePath, @GUID, @UserId, @Size, @ParentId, @MimeType);";
+                INSERT INTO Files (FileName, isDirectory, FilePath, GUID, UserId, Size, ParentId, MimeType, WrappedKey)
+                VALUES (@FileName, @isDirectory, @FilePath, @GUID, @UserId, @Size, @ParentId, @MimeType, @WrappedKey);";
 
             foreach (var item in items)
             {
@@ -347,6 +350,7 @@ public class DatabaseServices
                 command.Parameters.AddWithValue("@Size", item.Size);
                 command.Parameters.AddWithValue("@ParentId", (object)item.ParentId ?? DBNull.Value);
                 command.Parameters.AddWithValue("@MimeType", (object)item.MimeType ?? DBNull.Value);
+                command.Parameters.AddWithValue("@WrappedKey", (object)item.WrappedKey ?? DBNull.Value);
                 await command.ExecuteNonQueryAsync();
             }
 

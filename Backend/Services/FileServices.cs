@@ -1,11 +1,47 @@
 using Backend.Models;
 using System.IO.Compression;
+using System.Security.Cryptography;
 
 namespace Backend.Services;
 
-public class FileServices(IConfiguration config)
+public class FileServices(IConfiguration config, FileEncryption encryption)
 {
     private readonly string _storageRoot = config.GetValue<string>("StorageRoot");
+
+    // Open a stored file as plaintext. Rows without a key predate encryption and are read as-is.
+    private Stream OpenStoredFile(FileRecord file)
+    {
+        var path = StoredPath(file.Guid);
+        if (file.WrappedKey == null)
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
+
+        var dataKey = encryption.UnwrapKey(file.WrappedKey, file.Guid);
+        try
+        {
+            return FileEncryption.OpenDecryptedRead(path, dataKey, file.Size);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
+        }
+    }
+
+    // A copied file reuses the same ciphertext, so re-wrap its data key for the new GUID
+    private string RewrapKey(string wrappedKey, string oldGuid, string newGuid)
+    {
+        if (wrappedKey == null)
+            return null;
+
+        var dataKey = encryption.UnwrapKey(wrappedKey, oldGuid);
+        try
+        {
+            return encryption.WrapKey(dataKey, newGuid);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
+        }
+    }
 
     // Uploads a file, saves it to disk, and stores metadata in the database
     public async Task<HttpReturnResult> UploadFile(IFormFile file, DatabaseServices db, string userId, string parentId, string mimeType)
@@ -24,19 +60,18 @@ public class FileServices(IConfiguration config)
         }
 
         var fullFilePath = Path.Combine(_storageRoot, guid); // Path to save file
+        var (dataKey, wrappedKey) = encryption.CreateDataKey(guid);
 
         try
         {
-            // Save file to disk
-            await using (var stream = new FileStream(fullFilePath, FileMode.Create))
-                await file.CopyToAsync(stream);
+            // Encrypt the upload straight to disk
+            long size;
+            await using (var input = file.OpenReadStream())
+            await using (var output = new FileStream(fullFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous))
+                size = await FileEncryption.EncryptAsync(input, output, dataKey);
 
-            var fileInfo = new FileInfo(fullFilePath);
-
-            long size = fileInfo.Length;
-
-            // Add file metadata to database
-            await db.AddFile(fileName, isDirectory, filePath, guid, userId, size, parentId, mimeType);
+            // Add file metadata (including the wrapped key) to database
+            await db.AddFile(fileName, isDirectory, filePath, guid, userId, size, parentId, mimeType, wrappedKey);
 
             return new HttpReturnResult(true, null, fileName); // Success
         }
@@ -48,6 +83,10 @@ public class FileServices(IConfiguration config)
 
             Console.WriteLine($"Upload error: {ex}");
             return new HttpReturnResult(false, "Error saving file"); // Failure
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
         }
     }
 
@@ -152,22 +191,26 @@ public class FileServices(IConfiguration config)
 
 
 
-    // Get the on-disk path of a file for download
-    public async Task<(HttpReturnResult error, FileRecord file, string fullPath)> GetDownloadAsync(
+    // Open a file for download as a seekable plaintext stream
+    public async Task<(HttpReturnResult error, FileRecord file, Stream stream)> GetDownloadAsync(
         string fileId, DatabaseServices db, string userId)
     {
         if (!Guid.TryParse(fileId, out _))
             return (HttpReturnResult.NotFound("File not found."), null, null);
 
         var file = await db.GetItemAsync(fileId, userId);
-        if (file == null || file.IsDirectory)
+        if (file == null || file.IsDirectory || !File.Exists(StoredPath(file.Guid)))
             return (HttpReturnResult.NotFound("File not found."), null, null);
 
-        var fullPath = StoredPath(file.Guid);
-        if (!File.Exists(fullPath))
-            return (HttpReturnResult.NotFound("File not found."), null, null);
-
-        return (null, file, fullPath);
+        try
+        {
+            return (null, file, OpenStoredFile(file));
+        }
+        catch (CryptographicException ex)
+        {
+            Console.WriteLine($"Decrypt error for {file.Guid}: {ex.Message}");
+            return (new HttpReturnResult(false, "File could not be decrypted") { StatusCode = 500 }, null, null);
+        }
     }
 
 
@@ -214,11 +257,10 @@ public class FileServices(IConfiguration config)
                         }
                         else
                         {
-                            var source = StoredPath(item.Guid);
-                            if (!File.Exists(source))
-                                throw new FileNotFoundException($"Stored file missing for {item.Guid}");
-
-                            zip.CreateEntryFromFile(source, entryName, CompressionLevel.Fastest);
+                            var entry = zip.CreateEntry(entryName, CompressionLevel.Fastest);
+                            await using var source = OpenStoredFile(item);
+                            await using var entryStream = entry.Open();
+                            await source.CopyToAsync(entryStream);
                         }
                     }
                 }
@@ -364,7 +406,8 @@ public class FileServices(IConfiguration config)
                     Path = t == root ? rootPath : rootPath + t.Path[root.Path.Length..],
                     ParentId = t == root ? destId : newGuids[t.ParentId],
                     Size = t.Size,
-                    MimeType = t.MimeType
+                    MimeType = t.MimeType,
+                    WrappedKey = RewrapKey(t.WrappedKey, t.Guid, newGuids[t.Guid])
                 }).ToList();
 
                 foreach (var source in tree.Where(t => !t.IsDirectory))
