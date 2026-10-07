@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { FiLogOut, FiSettings } from "react-icons/fi";
+import { FiFolder, FiLogOut, FiSettings } from "react-icons/fi";
 import { PROFILE_CHANGED_EVENT, getUserInfoAPI } from "../api/accountAPI";
 import Avatar from "./Avatar";
 import "./UserMenu.css";
 
-// Avatar button in the header that opens a menu with the account's name, Settings and Log out
+// Avatar button in the header that opens a menu with the account's name, Files, Settings and Log out
 export default function UserMenu({ onLogout }) {
     const [open, setOpen] = useState(false);
     const [user, setUser] = useState({ username: "", email: "" });
@@ -94,6 +94,15 @@ export default function UserMenu({ onLogout }) {
 
                     <div className="user-menu-separator" role="separator" />
 
+                    <Link
+                        to="/dashboard"
+                        role="menuitem"
+                        className={`user-menu-item ${pathname === "/dashboard" ? "current" : ""}`}
+                        onClick={close}
+                    >
+                        <FiFolder aria-hidden="true" />
+                        Files
+                    </Link>
                     <Link
                         to="/settings"
                         role="menuitem"

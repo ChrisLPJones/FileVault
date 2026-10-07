@@ -26,11 +26,8 @@ const Layout = () => {
             <header className="header-style">
                 <nav className="nav-container">
                     <div className="nav-left">
-                        {loggedIn ? (
-                            <NavLink to="/dashboard" className={navClass}>
-                                Files
-                            </NavLink>
-                        ) : (
+                        {/* Files is in the account menu once logged in */}
+                        {!loggedIn && (
                             <>
                                 <NavLink to="/register" className={navClass}>
                                     Register

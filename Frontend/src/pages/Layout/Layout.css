@@ -65,14 +65,19 @@ html, body {
     z-index: 20;
 }
 
+/* Equal-width sides keep the middle centred on the whole bar */
 .nav-left,
 .nav-right {
-    flex: 0 0 auto;
+    flex: 1 1 0;
+}
+
+.nav-right {
+    justify-content: flex-end;
 }
 
 /* Middle of the top bar: the dashboard puts the file toolbar here */
 .nav-center {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     display: flex;
     justify-content: center;
