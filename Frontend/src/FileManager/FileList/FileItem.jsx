@@ -34,7 +34,7 @@ const FileItem = ({
   const [tooltipPosition, setTooltipPosition] = useState(null);
 
   const { activeLayout } = useLayout();
-  const iconSize = activeLayout === "grid" ? 60 : 22;
+  const iconSize = activeLayout === "grid" ? 50 : 19;
   const { setCurrentPath, currentPathFiles, onFolderChange } = useFileNavigation();
   const { setSelectedFiles } = useSelection();
   const { setDetailsOpen } = useDetailsPane();
