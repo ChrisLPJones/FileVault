@@ -3,6 +3,10 @@
 ###############################################################################
 * text=auto
 
+# Shell scripts run inside Linux containers, so keep LF even on Windows checkouts
+*.sh    text eol=lf
+*.envsh text eol=lf
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #
