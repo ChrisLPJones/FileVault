@@ -113,7 +113,8 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     // Uploads a file, saves it to disk, and stores metadata in the database
     public async Task<HttpReturnResult> UploadFile(IFormFile file, DatabaseServices db, string userId, string parentId, string mimeType)
     {
-        var maxUpload = MaxUploadBytes(config);
+        // The per-request limit, and the file size limit that chunked uploads also enforce
+        var maxUpload = Math.Min(MaxUploadBytes(config), ChunkedUploadService.MaxFileBytes(config));
         if (file.Length > maxUpload)
             return new HttpReturnResult(false, $"File is larger than the {FormatBytes(maxUpload)} upload limit") { StatusCode = 413 };
 

@@ -14,7 +14,7 @@ import VerifyEmailBanner from "../../components/VerifyEmailBanner";
 
 // Matches the API's default Storage:MaxFileBytes until /user/usage responds. Files above 8 MB are
 // uploaded in chunks, so the per-request limit (maxUploadBytes) only applies to smaller ones.
-const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024 * 1024;
+const DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
 
 const fileUploadConfig = {
     url: `${API_BASE_URL}/upload`,

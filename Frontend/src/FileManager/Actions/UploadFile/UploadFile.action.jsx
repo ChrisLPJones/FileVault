@@ -9,6 +9,7 @@ import { getDataSize } from "../../../utils/getDataSize";
 import { useFiles } from "../../../contexts/FilesContext";
 import { useTranslation } from "../../../contexts/TranslationProvider";
 import { createFolderResolver, createLimiter, filesFromFolderInput, readDroppedItems } from "../../../utils/folderUpload";
+import { formatBytes } from "../../../utils/formatBytes";
 import "./UploadFile.action.scss";
 
 const UploadFileAction = ({
@@ -161,6 +162,9 @@ const UploadFileAction = ({
             />
           </Button>
         </div>
+        {maxFileSize > 0 && (
+          <p className="upload-limit-hint">Any file type, up to {formatBytes(maxFileSize, 0)} per file.</p>
+        )}
       </div>
       )}
       {files.length > 0 && (

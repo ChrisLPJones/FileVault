@@ -54,6 +54,14 @@
                 display: none;
             }
         }
+
+        // "Any file type, up to 2 GB per file."
+        .upload-limit-hint {
+            margin: 10px 0 0;
+            color: var(--fm-muted);
+            font-size: 13px;
+            text-align: center;
+        }
     }
 
     .files-progress {

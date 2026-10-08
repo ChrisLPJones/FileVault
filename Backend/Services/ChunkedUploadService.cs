@@ -15,7 +15,7 @@ public class ChunkedUploadService(
     IConfiguration config, FileServices fs, FileEncryption encryption, ILogger<ChunkedUploadService> logger)
 {
     public const int ChunkSize = 8 * 1024 * 1024;
-    public const long DefaultMaxFileBytes = 10L * 1024 * 1024 * 1024; // 10 GB
+    public const long DefaultMaxFileBytes = 2L * 1024 * 1024 * 1024; // 2 GB (Storage:MaxFileBytes)
     public const int MaxPendingUploads = 50;
     public static readonly TimeSpan AbandonedAfter = TimeSpan.FromHours(24);
 

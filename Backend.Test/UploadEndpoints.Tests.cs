@@ -136,6 +136,32 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task MaxFileSize_Is2GBByDefault_AndConfigurable_ForBothUploadPaths()
+        {
+            var client = await NewUserAsync();
+            ChunkedUploadService.DefaultMaxFileBytes.Should().Be(2L * 1024 * 1024 * 1024);
+            var overLimit = await client.PostAsJsonAsync("/uploads", new { name = "big.iso", size = ChunkedUploadService.DefaultMaxFileBytes + 1 });
+            overLimit.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+            (await overLimit.Content.ReadAsStringAsync()).Should().Contain("larger than the 2 GB limit");
+            // Exactly 2 GB passes the size check (it's then refused by the 1 GB default quota instead)
+            (await (await client.PostAsJsonAsync("/uploads", new { name = "ok.iso", size = ChunkedUploadService.DefaultMaxFileBytes }))
+                .Content.ReadAsStringAsync()).Should().Contain("Not enough storage space");
+
+            // A smaller configured limit applies to chunked and single-request uploads alike
+            var small = WithSettings(("Storage:MaxFileBytes", "100"), ("RateLimiting:auth:PermitLimit", "1000"));
+            var limited = await NewUserAsync(small);
+            (await ReadJsonAsync(await limited.GetAsync("/user/usage"))).GetProperty("maxFileBytes").GetInt64().Should().Be(100);
+
+            var tooBig = await limited.PostAsJsonAsync("/uploads", new { name = "a.bin", size = 101 });
+            tooBig.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+            (await tooBig.Content.ReadAsStringAsync()).Should().Contain("100 B");
+            (await limited.PostAsJsonAsync("/uploads", new { name = "a.bin", size = 100 })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            (await UploadAsync(limited, "big.txt", new string('x', 101))).StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+            (await UploadAsync(limited, "fits.txt", new string('x', 100))).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
         public async Task UploadsInProgress_ReserveQuota()
         {
             var limited = WithSettings(("Storage:DefaultQuotaBytes", "1000000"), ("RateLimiting:auth:PermitLimit", "1000"));
