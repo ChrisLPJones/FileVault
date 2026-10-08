@@ -1,5 +1,10 @@
 # FileVault — Codebase Review
 
+> **Status (2026-10-08):** this is the review as written on 2026-10-06, kept for reference. Phases 1–3
+> of the suggested order of work (§7) are done, and so is most of phase 4: Swagger, the README rewrite,
+> the LICENSE file and ESLint at zero errors. The rest (sharing links, search, recycle bin,
+> thumbnails, screenshots) moved to the [roadmap](ROADMAP.md).
+
 **Date:** 2026-10-06
 **Scope:** Every tracked file in `Backend/`, `Backend.Test/`, `Frontend/src/`, Docker, docs and root config.
 

@@ -1,16 +1,35 @@
-# React + Vite
+# FileVault frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 18 single-page app built with Vite. It talks to the FileVault API through one axios client
+(`src/api/api.js`) that attaches the access token and refreshes it from the httpOnly cookie when it
+expires.
 
-Currently, two official plugins are available:
+## Run it
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+```bash
+cp .env.example .env    # VITE_API_BASE_URL: where the API is running
+npm install
+npm run dev             # http://localhost:5173
+```
 
-## React Compiler
+| Script | What it does |
+|---|---|
+| `npm run dev` | Development server with hot reload |
+| `npm run build` | Production build into `dist/` (the Docker image serves this with nginx) |
+| `npm run preview` | Serve the production build locally |
+| `npm run lint` | ESLint (CI fails on errors) |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+`VITE_API_BASE_URL` is compiled into the bundle, so rebuild after changing it.
 
-## Expanding the ESLint configuration
+## Where things are
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+| Path | Contents |
+|---|---|
+| `src/pages/` | Login, Register, Dashboard (the file manager), Settings, and the Layout with the top bar |
+| `src/FileManager/` | File manager UI: toolbar, folder tree, file list, details pane, dialogs. Adapted from @cubone/react-file-manager; see [its README](src/FileManager/README.md) |
+| `src/api/`, `src/services/` | API calls, all through the shared axios client |
+| `src/components/` | Shared pieces: avatar, account menu, file-type icons, buttons, modal |
+| `src/contexts/` | File manager state (files, navigation, selection, clipboard, layout, details pane) |
+| `src/hooks/` | Shared hooks, e.g. `useUserProfile` (one cached load of the user's name and picture) |
+| `src/utils/` | Theme and accent colour, password rules, formatting helpers |
+| `src/styles/theme.css` | Colour variables for light and dark themes |

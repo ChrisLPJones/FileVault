@@ -16,11 +16,17 @@ Copied from the package and then modified for FileVault:
 
 ## FileVault changes
 
-- Uploads send the JWT and refresh it before it expires
-- Previews and downloads load through the authenticated API client, by file ID
+- Uploads send the JWT and refresh it before it expires; upload errors show the server's message
+  (e.g. storage quota exceeded); duplicate names are numbered by the server
+- Downloads and previews load through the authenticated API client, by file ID
 - Rename waits for the API instead of removing the item first
-- Upload errors show the server's message (e.g. storage quota exceeded)
-- The preview dialog is titled with the selected file's name
+- The toolbar renders in the app's top bar (`toolbarContainer` prop), with view and refresh kept
+  on the right while items are selected
+- The preview dialog was replaced by a details pane on the right (`DetailsPane/`): name, type,
+  size, created/modified dates and a preview of the selected file
+- Desktop-style file and folder icons (`components/FileTypeIcon`)
+- Collapsible folder tree with the account menu at the bottom (`NavigationPane/NavUser.jsx`)
+- Colours come from the app's light/dark theme and accent colour (`src/styles/theme.css`)
 - Removed the unused `filePreviewPath` prop
 
 Some of this code still syncs state from props inside effects, which

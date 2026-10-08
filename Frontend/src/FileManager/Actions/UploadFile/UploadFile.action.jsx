@@ -65,7 +65,7 @@ const UploadFileAction = ({
     }
   };
 
-  // Todo: Also validate allowed file extensions on drop
+  // Dropped files go through the same checks as chosen ones (setSelectedFiles)
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
