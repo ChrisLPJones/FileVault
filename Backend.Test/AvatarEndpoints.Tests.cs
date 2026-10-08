@@ -28,6 +28,7 @@ namespace Backend.Test
             (await client.PostAsJsonAsync("/user/register",
                 new UserModel { FirstName = "Avatar", LastName = "User", Email = email, Password = Password }))
                 .EnsureSuccessStatusCode();
+            await TestDatabase.MarkEmailVerifiedAsync(_factory, email);
 
             var login = await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password });
             using var json = JsonDocument.Parse(await login.Content.ReadAsStringAsync());

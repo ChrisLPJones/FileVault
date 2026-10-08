@@ -4,12 +4,16 @@ using System.Security.Claims;
 
 namespace Backend.Routes
 {
-    // Forgot password and email verification. Unverified accounts can still log in; the app shows
-    // a banner asking them to confirm their address.
+    // Forgot password and email verification. A new account can't log in until its address is
+    // confirmed. Someone who changes their address stays logged in (with a banner asking them to
+    // confirm it) but must confirm it before their next login.
     public static class AccountEmailRoutes
     {
         private const string ForgotPasswordReply =
             "If an account uses that email address, a link to reset the password is on its way.";
+
+        private const string ResendReply =
+            "If that address belongs to an account that still needs confirming, a new link is on its way.";
 
         public static void MapAccountEmailRoutes(this IEndpointRouteBuilder app)
         {
@@ -86,6 +90,29 @@ namespace Backend.Routes
                 .Produces<SuccessResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(429).RequireRateLimiting("auth");
+
+            // Sends a new confirmation email from the login page (unverified users can't log in).
+            // Always the same answer, so it can't be used to find accounts or their state.
+            app.MapPost("/user/resend-verification-email", async (
+                ResendVerificationRequest request,
+                DatabaseServices db,
+                AccountEmailService emails) =>
+            {
+                var email = request?.Email?.Trim();
+                if (string.IsNullOrEmpty(email) || email.Length > 100)
+                    return Results.BadRequest(new { error = "Enter your email address" });
+
+                var user = await db.GetUserByEmail(email);
+                if (user != null && !await db.IsEmailVerifiedAsync(user.Id.ToString()))
+                    await emails.SendVerificationAsync(user, db);
+
+                return Results.Ok(new { success = ResendReply });
+            })
+                .WithTags("Account")
+                .WithSummary("Send another email confirmation link to an address (no login; always answers the same)")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(429).RequireRateLimiting("email");
 
             // Sends a new verification email to the logged-in user
             app.MapPost("/user/resend-verification", async (

@@ -88,6 +88,10 @@ namespace Backend.Routes
                 if (userRecord == null)
                     return Results.Json(new { error = "Invalid email or password" }, statusCode: 401);
 
+                // Only after the password matched, so this doesn't reveal anything about other accounts
+                if (!await db.IsEmailVerifiedAsync(userRecord.Id.ToString()))
+                    return Results.Json(new { error = "Please confirm your email address first", emailNotVerified = true }, statusCode: 403);
+
                 await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
 
                 return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
@@ -97,6 +101,7 @@ namespace Backend.Routes
                 .Produces<TokenResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(401)
+                .Produces<ErrorResponse>(403)
                 .Produces<ErrorResponse>(429).RequireRateLimiting("auth");
 
             // Exchanges the refresh token cookie for a new access token (and a new refresh cookie)

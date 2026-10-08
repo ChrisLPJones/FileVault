@@ -38,7 +38,7 @@ function VerifyEmail() {
                             <p className="auth-subtitle">
                                 {loggedIn
                                     ? "You can send a new link from the banner in your files."
-                                    : "Log in to send a new link."}
+                                    : "Try logging in: if your address still needs confirming, you can ask for a new link there."}
                             </p>
                         )}
                         <Link to={loggedIn ? "/dashboard" : "/login"} className="auth-button auth-link-button">

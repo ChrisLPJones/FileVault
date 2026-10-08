@@ -65,15 +65,29 @@ namespace Backend.Test
             (await Anonymous(_app).PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = password })).StatusCode;
 
         [Fact]
-        public async Task NewAccount_IsUnverified_UntilTheEmailedLinkIsOpened()
+        public async Task NewAccount_CantLogIn_UntilTheEmailedLinkIsOpened()
         {
             var email = NewEmail();
-            var client = await NewUserAsync(_app, email);
-            (await IsVerifiedAsync(client)).Should().BeFalse();
+            await RegisterOnlyAsync(_app, email);
+            var anonymous = Anonymous(_app);
+
+            // The right password: told to confirm the address, and no tokens or cookie
+            var blocked = await anonymous.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password });
+            blocked.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            var body = await ReadJsonAsync(blocked);
+            body.GetProperty("emailNotVerified").GetBoolean().Should().BeTrue();
+            body.GetProperty("error").GetString().Should().Be("Please confirm your email address first");
+            body.TryGetProperty("success", out _).Should().BeFalse();
+            blocked.Headers.Contains("Set-Cookie").Should().BeFalse();
+
+            // A wrong password gives the usual answer, revealing nothing about the account
+            var wrong = await anonymous.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = "Wr0ngPassword" });
+            wrong.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            (await wrong.Content.ReadAsStringAsync()).Should().Be("{\"error\":\"Invalid email or password\"}");
 
             var token = await WaitForTokenAsync(email, "verify-email");
-            var anonymous = Anonymous(_app);
             (await anonymous.PostAsJsonAsync("/user/verify-email", new { token })).StatusCode.Should().Be(HttpStatusCode.OK);
+            var client = await LogInAsync(_app, email);
             (await IsVerifiedAsync(client)).Should().BeTrue();
 
             // Single use; malformed or unknown tokens are rejected
@@ -114,11 +128,21 @@ namespace Backend.Test
             var refresh = new HttpRequestMessage(HttpMethod.Post, "/user/refresh");
             refresh.Headers.Add("Cookie", refreshCookie);
             (await anonymous.SendAsync(refresh)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
 
-            // Opening the link from the inbox also confirms the address
-            var session = await anonymous.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = newPassword });
-            var client = Anonymous(_app);
-            client.DefaultRequestHeaders.Authorization = new("Bearer", (await ReadJsonAsync(session)).GetProperty("success").GetString());
+        [Fact]
+        public async Task ResettingThePassword_AlsoConfirmsTheAddress()
+        {
+            var email = NewEmail();
+            await RegisterOnlyAsync(_app, email);
+            var anonymous = Anonymous(_app);
+
+            (await anonymous.PostAsJsonAsync("/user/forgot-password", new { email })).StatusCode.Should().Be(HttpStatusCode.OK);
+            var token = await WaitForTokenAsync(email, "reset-password");
+            (await anonymous.PostAsJsonAsync("/user/reset-password", new { token, newPassword = "N3wPassword!" })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            // The link came from the account's inbox, so the address is confirmed and login works
+            var client = await LogInAsync(_app, email, "N3wPassword!");
             (await IsVerifiedAsync(client)).Should().BeTrue();
         }
 
@@ -148,7 +172,7 @@ namespace Backend.Test
         }
 
         [Fact]
-        public async Task ChangingTheEmail_MarksItUnverified_AndOldLinksDontConfirmTheNewAddress()
+        public async Task ChangingTheEmail_KeepsTheSession_ButTheNewAddressMustBeConfirmedBeforeTheNextLogin()
         {
             var email = NewEmail();
             var client = await NewUserAsync(_app, email);
@@ -159,11 +183,17 @@ namespace Backend.Test
                 .StatusCode.Should().Be(HttpStatusCode.OK);
             var newToken = await WaitForTokenAsync(newEmail, "verify-email");
 
+            // This session carries on; a new login waits for the new address to be confirmed
+            (await client.GetAsync("/files")).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await IsVerifiedAsync(client)).Should().BeFalse();
+            (await LoginStatusAsync(newEmail, Password)).Should().Be(HttpStatusCode.Forbidden);
+
             var anonymous = Anonymous(_app);
             (await anonymous.PostAsJsonAsync("/user/verify-email", new { token = oldToken })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
             (await IsVerifiedAsync(client)).Should().BeFalse();
             (await anonymous.PostAsJsonAsync("/user/verify-email", new { token = newToken })).StatusCode.Should().Be(HttpStatusCode.OK);
             (await IsVerifiedAsync(client)).Should().BeTrue();
+            (await LoginStatusAsync(newEmail, Password)).Should().Be(HttpStatusCode.OK);
 
             // Saving the profile without changing the address keeps it verified and sends nothing
             var sent = EmailsTo(newEmail);
@@ -175,7 +205,7 @@ namespace Backend.Test
         }
 
         [Fact]
-        public async Task ResendVerification_NeedsLogin_AndOnlySendsWhenUnverified()
+        public async Task ResendVerification_WhenLoggedIn_OnlySendsWhenUnverified()
         {
             var email = NewEmail();
             var client = await NewUserAsync(_app, email);
@@ -183,15 +213,63 @@ namespace Backend.Test
 
             (await Anonymous(_app).PostAsync("/user/resend-verification", null)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
+            // Confirmed: nothing to send
+            var sent = EmailsTo(email);
+            (await (await client.PostAsync("/user/resend-verification", null)).Content.ReadAsStringAsync()).Should().Contain("already confirmed");
+
+            // After changing the address (still logged in), a new link goes to the new address
+            var newEmail = NewEmail();
+            (await client.PatchAsJsonAsync("/user/profile", new { firstName = "Core", lastName = "Tester", email = newEmail }))
+                .StatusCode.Should().Be(HttpStatusCode.OK);
+            await WaitForTokenAsync(newEmail, "verify-email");
             (await client.PostAsync("/user/resend-verification", null)).StatusCode.Should().Be(HttpStatusCode.OK);
-            var token = await WaitForTokenAsync(email, "verify-email", alreadySeen: 1);
+            var token = await WaitForTokenAsync(newEmail, "verify-email", alreadySeen: 1);
             (await Anonymous(_app).PostAsJsonAsync("/user/verify-email", new { token })).StatusCode.Should().Be(HttpStatusCode.OK);
 
-            var sent = EmailsTo(email);
-            var again = await client.PostAsync("/user/resend-verification", null);
-            (await again.Content.ReadAsStringAsync()).Should().Contain("already confirmed");
             await Task.Delay(300);
             EmailsTo(email).Should().Be(sent);
+        }
+
+        [Fact]
+        public async Task ResendVerificationByEmail_WorksWithoutLogin_AndAlwaysAnswersTheSame()
+        {
+            var email = NewEmail();
+            await RegisterOnlyAsync(_app, email);
+            await WaitForTokenAsync(email, "verify-email");
+            var verifiedEmail = NewEmail();
+            await NewUserAsync(_app, verifiedEmail);
+            var anonymous = Anonymous(_app);
+
+            async Task<string> Resend(string address)
+            {
+                var response = await anonymous.PostAsJsonAsync("/user/resend-verification-email", new { email = address });
+                response.StatusCode.Should().Be(HttpStatusCode.OK);
+                return await response.Content.ReadAsStringAsync();
+            }
+
+            var unverifiedReply = await Resend(email.ToUpperInvariant());
+            (await Resend(NewEmail())).Should().Be(unverifiedReply);
+            var sentToVerified = EmailsTo(verifiedEmail);
+            (await Resend(verifiedEmail)).Should().Be(unverifiedReply);
+
+            // Only the unverified account got a (new) link, and it works
+            var token = await WaitForTokenAsync(email, "verify-email", alreadySeen: 1);
+            await Task.Delay(300);
+            EmailsTo(verifiedEmail).Should().Be(sentToVerified);
+            (await anonymous.PostAsJsonAsync("/user/verify-email", new { token })).StatusCode.Should().Be(HttpStatusCode.OK);
+            await LogInAsync(_app, email);
+
+            (await anonymous.PostAsJsonAsync("/user/resend-verification-email", new { email = "" })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        [Fact]
+        public async Task ResendVerificationByEmail_IsRateLimited()
+        {
+            var client = Anonymous(WithSettings(("RateLimiting:email:PermitLimit", "2")));
+
+            for (var i = 0; i < 2; i++)
+                (await client.PostAsJsonAsync("/user/resend-verification-email", new { email = NewEmail() })).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await client.PostAsJsonAsync("/user/resend-verification-email", new { email = NewEmail() })).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         }
 
         [Fact]

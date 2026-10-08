@@ -30,7 +30,7 @@ export default function VerifyEmailBanner() {
             <span className="verify-banner-text">
                 {message ?? (
                     <>
-                        Please confirm your email address, <strong>{email}</strong>, using the link we sent you.
+                        Please confirm your email address, <strong>{email}</strong>, using the link we sent you. You'll need to before you next log in.
                     </>
                 )}
             </span>

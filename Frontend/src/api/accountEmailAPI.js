@@ -19,3 +19,7 @@ export const verifyEmailAPI = async (token) => {
 };
 
 export const resendVerificationAPI = async () => (await api.post("/user/resend-verification")).data;
+
+// From the login page (not logged in): always succeeds with the same message
+export const resendVerificationByEmailAPI = async (email) =>
+    (await api.post("/user/resend-verification-email", { email }, publicRequest)).data;

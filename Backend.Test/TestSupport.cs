@@ -13,6 +13,26 @@ using System.Text.Json;
 
 namespace Backend.Test
 {
+    // Direct database access for tests only (the API has no way to skip email verification)
+    public static class TestDatabase
+    {
+        public static async Task ExecuteAsync(WebApplicationFactory<Program> factory, string sql, params (string name, object value)[] parameters)
+        {
+            var connectionString = factory.Services.GetRequiredService<IConfiguration>().GetConnectionString("DefaultConnection");
+            await using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync();
+            await using var command = new SqlCommand(sql, connection);
+            foreach (var (name, value) in parameters)
+                command.Parameters.AddWithValue(name, value);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        // New accounts must confirm their email before logging in; tests that register and log
+        // straight in mark the address confirmed, as if the emailed link had been opened
+        public static Task MarkEmailVerifiedAsync(WebApplicationFactory<Program> factory, string email) =>
+            ExecuteAsync(factory, "UPDATE Users SET EmailVerified = 1 WHERE Email = @Email", ("@Email", email.Trim().ToLowerInvariant()));
+    }
+
     // Shared helpers for the integration tests of the share, recycle bin, email and upload
     // endpoints: throwaway accounts that are deleted afterwards, and common file operations.
     public abstract class IntegrationTestBase : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
@@ -22,6 +42,7 @@ namespace Backend.Test
         private readonly WebApplicationFactory<Program> _baseFactory;
         private readonly List<WebApplicationFactory<Program>> _extraFactories = new();
         private readonly List<HttpClient> _usersToDelete = new();
+        private readonly List<string> _registeredEmails = new();
 
         protected WebApplicationFactory<Program> Factory { get; }
 
@@ -45,24 +66,38 @@ namespace Backend.Test
 
         protected static string NewEmail() => $"core_{Guid.NewGuid():N}@example.test";
 
-        // Register and log in a new account; the returned client sends its access token
-        protected async Task<HttpClient> NewUserAsync(WebApplicationFactory<Program>? factory = null, string? email = null)
+        // Register a new account without confirming its email address (so it can't log in yet).
+        // It is removed afterwards even if it never logs in.
+        protected async Task RegisterOnlyAsync(WebApplicationFactory<Program>? factory, string email)
         {
-            var client = (factory ?? Factory).CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
-            email ??= NewEmail();
-
+            var client = Anonymous(factory);
             var register = await client.PostAsJsonAsync("/user/register",
                 new UserModel { FirstName = "Core", LastName = "Tester", Email = email, Password = Password });
             register.StatusCode.Should().Be(HttpStatusCode.OK, await register.Content.ReadAsStringAsync());
+            _registeredEmails.Add(email);
+        }
 
-            var login = await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password });
-            login.StatusCode.Should().Be(HttpStatusCode.OK);
+        // Log in an account whose address is confirmed; the returned client sends its access token
+        protected async Task<HttpClient> LogInAsync(WebApplicationFactory<Program>? factory, string email, string password = Password)
+        {
+            var client = Anonymous(factory);
+            var login = await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = password });
+            login.StatusCode.Should().Be(HttpStatusCode.OK, await login.Content.ReadAsStringAsync());
             using var json = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
             client.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", json.RootElement.GetProperty("success").GetString());
 
             _usersToDelete.Add(client);
             return client;
+        }
+
+        // Register, confirm the email address and log in
+        protected async Task<HttpClient> NewUserAsync(WebApplicationFactory<Program>? factory = null, string? email = null)
+        {
+            email ??= NewEmail();
+            await RegisterOnlyAsync(factory, email);
+            await TestDatabase.MarkEmailVerifiedAsync(Factory, email);
+            return await LogInAsync(factory, email);
         }
 
         // A client with no access token
@@ -127,16 +162,8 @@ namespace Backend.Test
             Path.Combine(Factory.Services.GetRequiredService<IConfiguration>().GetValue<string>("StorageRoot")!, guid);
 
         // Run SQL against the test database (to simulate time passing, e.g. an expired link)
-        protected async Task ExecuteSqlAsync(string sql, params (string name, object value)[] parameters)
-        {
-            var connectionString = Factory.Services.GetRequiredService<IConfiguration>().GetConnectionString("DefaultConnection");
-            await using var connection = new SqlConnection(connectionString);
-            await connection.OpenAsync();
-            await using var command = new SqlCommand(sql, connection);
-            foreach (var (name, value) in parameters)
-                command.Parameters.AddWithValue(name, value);
-            await command.ExecuteNonQueryAsync();
-        }
+        protected Task ExecuteSqlAsync(string sql, params (string name, object value)[] parameters) =>
+            TestDatabase.ExecuteAsync(Factory, sql, parameters);
 
         public Task InitializeAsync() => Task.CompletedTask;
 
@@ -144,6 +171,12 @@ namespace Backend.Test
         {
             foreach (var client in _usersToDelete)
                 await client.DeleteAsync("/user");
+
+            // Accounts that never logged in (or changed address since): remove them directly
+            foreach (var email in _registeredEmails)
+                await ExecuteSqlAsync(@"
+                    DELETE FROM Files WHERE UserId IN (SELECT Id FROM Users WHERE Email = @Email);
+                    DELETE FROM Users WHERE Email = @Email;", ("@Email", email));
 
             foreach (var factory in _extraFactories)
                 await factory.DisposeAsync();

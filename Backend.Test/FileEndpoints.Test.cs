@@ -43,13 +43,14 @@ namespace Backend.Test
             _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _jwt);
         }
 
-        private static async Task RegisterAsync(HttpClient client, string firstName, string email, string password)
+        private async Task RegisterAsync(HttpClient client, string firstName, string email, string password)
         {
             UserModel user = new() { FirstName = firstName, LastName = "User", Email = email, Password = password };
             StringContent content = new(JsonSerializer.Serialize(user), Encoding.UTF8, "application/json");
 
             var response = await client.PostAsync("/user/register", content);
             response.StatusCode.Should().Be(HttpStatusCode.OK);
+            await TestDatabase.MarkEmailVerifiedAsync(_factory, email);
         }
 
         private static async Task<string> LoginAsync(HttpClient client, string email, string password)
@@ -122,6 +123,9 @@ namespace Backend.Test
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             content.Should().Be($"{{\"success\":\"User {TestFirstName} {TestLastName} registered\"}}");
+
+            // As if the confirmation link had been opened, so the next tests can log in
+            await TestDatabase.MarkEmailVerifiedAsync(_factory, TestEmail);
         }
 
         [Fact, TestPriority(2)]
@@ -141,7 +145,7 @@ namespace Backend.Test
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be($"{{\"firstName\":\"{TestFirstName}\",\"lastName\":\"{TestLastName}\",\"email\":\"{TestEmail}\",\"avatarUpdatedAt\":null,\"emailVerified\":false}}");
+            content.Should().Be($"{{\"firstName\":\"{TestFirstName}\",\"lastName\":\"{TestLastName}\",\"email\":\"{TestEmail}\",\"avatarUpdatedAt\":null,\"emailVerified\":true}}");
         }
 
         [Fact, TestPriority(4)]

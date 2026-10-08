@@ -6,6 +6,12 @@ namespace Backend.Models
         public string? Email { get; set; }
     }
 
+    // POST /user/resend-verification-email body (from the login page, not logged in)
+    public class ResendVerificationRequest
+    {
+        public string? Email { get; set; }
+    }
+
     // POST /user/reset-password body
     public class ResetPasswordRequest
     {
