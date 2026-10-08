@@ -1,28 +1,29 @@
-/* "Please confirm your email address" bar at the top right of the file area (over the
-   usually empty end of the breadcrumb row) */
+/* "Please confirm your email address" bar above the file area. It takes its own row (the
+   dashboard is a column), so it never covers the file manager's controls. */
 .verify-banner {
-    position: absolute;
-    top: 6px;
-    right: 16px;
-    z-index: 9;
+    flex: 0 0 auto;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
-    width: max-content;
-    max-width: calc(100% - 32px);
-    box-sizing: border-box;
-    padding: 8px 10px 8px 14px;
+    gap: 8px 12px;
+    padding: 6px 12px 6px 14px;
     border: 1px solid var(--fv-border);
-    border-radius: 6px;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
     background-color: var(--fv-surface);
     color: var(--fv-text);
-    box-shadow: var(--fv-shadow);
-    font-size: 0.95rem;
+    font-size: 0.9rem;
+}
+
+.verify-banner-text {
+    flex: 1 1 240px;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .verify-banner-resend {
     flex-shrink: 0;
-    padding: 6px 12px;
+    padding: 5px 12px;
     border: none;
     border-radius: 4px;
     background-color: var(--fv-primary);
@@ -47,4 +48,11 @@
     font-size: 1.2rem;
     line-height: 1;
     cursor: pointer;
+}
+
+/* The file area loses its rounded top corners while the bar sits on it */
+.verify-banner + .dashboard-notice + .file-manager-container .file-explorer,
+.verify-banner + .file-manager-container .file-explorer {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }

@@ -27,7 +27,7 @@ export default function VerifyEmailBanner() {
 
     return (
         <div className="verify-banner" role="status">
-            <span>
+            <span className="verify-banner-text">
                 {message ?? (
                     <>
                         Please confirm your email address, <strong>{email}</strong>, using the link we sent you.

@@ -161,7 +161,18 @@
   color: inherit;
   font: inherit;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
   cursor: pointer;
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   &:hover {
     background-color: $item-hover-color;
