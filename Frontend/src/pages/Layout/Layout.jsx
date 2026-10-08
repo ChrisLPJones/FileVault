@@ -4,6 +4,7 @@ import { Outlet, NavLink, useLocation } from "react-router-dom";
 import "./Layout.css";
 import { isAuthenticated } from "../../utils/auth";
 import { HeaderSlotContext } from "../../contexts/HeaderSlotContext";
+import UserMenu from "../../components/UserMenu";
 
 const navClass = ({ isActive }) => `link-style${isActive ? " active" : ""}`;
 
@@ -40,7 +41,11 @@ const Layout = () => {
 
                     <div className="nav-center" ref={setHeaderSlot} />
 
-                    <div className="nav-right" />
+                    {/* On the file list the account menu is at the bottom of the folder tree;
+                        other pages (e.g. Settings) show it here so Log out is always reachable */}
+                    <div className="nav-right">
+                        {loggedIn && pathname !== "/dashboard" && <UserMenu />}
+                    </div>
                 </nav>
             </header>
             <main className="main-style">

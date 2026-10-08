@@ -50,6 +50,7 @@ namespace Backend.Routes
                 if (await db.UserExistsByEmail(user.Email))
                     return Results.BadRequest(new { error = "Email already exists" });
 
+                user.LastName = user.LastName?.Trim() ?? "";
                 await auth.HashAndRegisterUser(user, db);
 
                 // Starter folders (Documents, Pictures, Music, Videos) for the new account
@@ -57,7 +58,7 @@ namespace Backend.Routes
                 if (created != null)
                     await fs.CreateDefaultFoldersAsync(db, created.Id.ToString());
 
-                return Results.Ok(new { success = $"User {user.FirstName.Trim()} {user.LastName.Trim()} registered" });
+                return Results.Ok(new { success = $"User {$"{user.FirstName.Trim()} {user.LastName}".Trim()} registered" });
             })
                 .WithTags("Account")
                 .WithSummary("Create an account")
@@ -153,11 +154,11 @@ namespace Backend.Routes
                 AuthServices auth) =>
             {
                 var firstName = request?.FirstName?.Trim();
-                var lastName = request?.LastName?.Trim();
+                var lastName = request?.LastName?.Trim() ?? "";
                 var email = request?.Email?.Trim().ToLowerInvariant();
 
                 var validationError = AuthServices.ValidateAccount(firstName, lastName, email);
-                if (validationError != null || firstName is null || lastName is null || email is null)
+                if (validationError != null || firstName is null || email is null)
                     return Results.BadRequest(new { error = validationError ?? "Invalid JSON" });
 
                 var userId = user.GetUserId();

@@ -120,18 +120,22 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
         if (quotaError != null)
             return quotaError;
 
-        var fileName = Path.GetFileName(file.FileName); // Get original filename
         var guid = Guid.NewGuid().ToString(); // Generate unique ID for storage
         int isDirectory = 0;
-        var filePath = $"/{fileName}";
+        var folderPath = "";
         if (!string.IsNullOrEmpty(parentId))
         {
             var folder = await db.GetFolderById(parentId, userId);
             if (folder == null)
                 return new HttpReturnResult(false, "Parent folder not found");
 
-            filePath = $"{folder.Path}/{fileName}";
+            folderPath = folder.Path;
         }
+
+        // A name already in the folder gets a number, like paste: "report.pdf" -> "report (1).pdf"
+        var taken = await db.GetNamesInFolderAsync(string.IsNullOrEmpty(parentId) ? null : parentId, userId);
+        var fileName = GetUniqueName(Path.GetFileName(file.FileName), false, taken);
+        var filePath = $"{folderPath}/{fileName}";
 
         var fullFilePath = Path.Combine(_storageRoot, guid); // Path to save file
         var (dataKey, wrappedKey) = encryption.CreateDataKey(guid);

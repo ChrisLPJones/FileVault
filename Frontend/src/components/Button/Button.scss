@@ -10,7 +10,7 @@
 
 .fm-button-primary {
   background-color: var(--file-manager-primary-color);
-  color: white;
+  color: var(--fv-primary-text, white); // dark text on light accent colours
 
   &:hover {
     background-image: linear-gradient(rgba(0, 0, 0, 0.2),

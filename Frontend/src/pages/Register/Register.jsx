@@ -33,8 +33,7 @@ function Register() {
         if (!firstName.trim()) newErrors.firstName = "First name is required";
         else if (firstName.trim().length > 50) newErrors.firstName = "First name must be 50 characters or fewer";
 
-        if (!lastName.trim()) newErrors.lastName = "Last name is required";
-        else if (lastName.trim().length > 50) newErrors.lastName = "Last name must be 50 characters or fewer";
+        if (lastName.trim().length > 50) newErrors.lastName = "Last name must be 50 characters or fewer";
 
         if (!email) newErrors.email = "Email is required";
         else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = "Email is invalid";
@@ -101,7 +100,7 @@ function Register() {
                     </div>
 
                     <div className="auth-field">
-                        <label htmlFor="register-last-name">Last name</label>
+                        <label htmlFor="register-last-name">Last name <span className="auth-optional">(optional)</span></label>
                         <input
                             id="register-last-name"
                             name="lastName"

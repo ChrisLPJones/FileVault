@@ -486,6 +486,23 @@ namespace Backend.Test
             (await partial.Content.ReadAsByteArrayAsync()).Should().Equal(expected);
         }
 
+        [Fact, TestPriority(19)]
+        public async Task UploadFile_WithTakenName_GetsNumberedName()
+        {
+            await AuthenticateAsync();
+            var folderId = await CreateFolderAsync(_client, $"Uploads{RunId}");
+
+            (await UploadAsync(_client, "dup.txt", "first", folderId)).StatusCode.Should().Be(HttpStatusCode.OK);
+            var second = await UploadAsync(_client, "DUP.txt", "second", folderId);
+
+            second.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await second.Content.ReadAsStringAsync()).Should().Be("{\"success\":\"File Uploaded: DUP (1).txt\"}");
+            var names = (await ListFilesAsync(_client))
+                .Where(f => f.GetProperty("path").GetString()!.StartsWith($"/Uploads{RunId}/"))
+                .Select(f => f.GetProperty("name").GetString());
+            names.Should().BeEquivalentTo(new[] { "dup.txt", "DUP (1).txt" });
+        }
+
         [Fact, TestPriority(20)]
         public async Task TamperedStoredFile_IsNotServed()
         {

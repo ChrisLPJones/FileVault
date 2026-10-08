@@ -349,3 +349,8 @@ label.settings-button.disabled {
 :root[data-theme="light"] .settings-card .theme-option input:checked {
     background: radial-gradient(circle, var(--fv-primary) 0 26%, #fff 30% 52%, var(--fv-primary) 56%);
 }
+
+.settings-optional {
+    color: var(--fv-text-muted);
+    font-weight: normal;
+}

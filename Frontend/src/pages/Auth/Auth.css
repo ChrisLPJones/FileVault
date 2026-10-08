@@ -157,3 +157,8 @@
 .auth-alert.auth-alert-top {
     margin: 0 0 16px;
 }
+
+.auth-optional {
+    color: var(--fv-text-muted);
+    font-weight: normal;
+}
