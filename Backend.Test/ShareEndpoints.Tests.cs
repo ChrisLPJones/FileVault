@@ -59,7 +59,10 @@ namespace Backend.Test
             listed.GetProperty("name").GetString().Should().Be("report.txt");
             listed.GetProperty("downloadCount").GetInt32().Should().Be(1);
             listed.GetProperty("hasPassword").GetBoolean().Should().BeFalse();
-            listed.TryGetProperty("token", out _).Should().BeFalse();
+            // The link can be copied again later
+            listed.GetProperty("token").GetString().Should().Be(token);
+            listed.GetProperty("path").GetString().Should().Be($"/s/{token}");
+            listed.GetProperty("passwordViewable").GetBoolean().Should().BeFalse();
         }
 
         [Fact]
@@ -222,6 +225,84 @@ namespace Backend.Test
             (await visitor.GetAsync($"/s/{innerToken}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
             (await visitor.GetAsync($"/s/{keptToken}")).StatusCode.Should().Be(HttpStatusCode.OK);
             (await ListSharesAsync(owner)).Select(s => s.GetProperty("id").GetString()).Should().BeEquivalentTo(keptShareId);
+        }
+
+        [Fact]
+        public async Task Password_IsShownOnlyToTheOwner_AndOnlyWhenAskedFor()
+        {
+            var owner = await NewUserAsync();
+            var other = await NewUserAsync();
+            var fileId = await UploadFileAsync(owner, "locked.txt", "locked");
+            var (withPassword, token) = await CreateShareAsync(owner, new { itemId = fileId, password = "pässwörd 123" });
+            var (withoutPassword, _) = await CreateShareAsync(owner, new { itemId = fileId });
+
+            // The list says it can be shown but doesn't include it
+            var list = await (await owner.GetAsync("/shares")).Content.ReadAsStringAsync();
+            list.Should().NotContain("pässwörd");
+            (await ListSharesAsync(owner)).Single(s => s.GetProperty("id").GetString() == withPassword)
+                .GetProperty("passwordViewable").GetBoolean().Should().BeTrue();
+
+            var shown = await owner.GetAsync($"/shares/{withPassword}/password");
+            shown.StatusCode.Should().Be(HttpStatusCode.OK);
+            shown.Headers.CacheControl!.NoStore.Should().BeTrue();
+            (await ReadJsonAsync(shown)).GetProperty("password").GetString().Should().Be("pässwörd 123");
+
+            (await owner.GetAsync($"/shares/{withoutPassword}/password")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await owner.GetAsync($"/shares/{Guid.NewGuid()}/password")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await owner.GetAsync("/shares/not-a-guid/password")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await other.GetAsync($"/shares/{withPassword}/password")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await Anonymous().GetAsync($"/shares/{withPassword}/password")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+            // The shown password is the one that opens the link
+            (await Anonymous().PostAsJsonAsync($"/s/{token}", new { password = "pässwörd 123" })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            (await owner.DeleteAsync($"/shares/{withPassword}")).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await owner.GetAsync($"/shares/{withPassword}/password")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        [Fact]
+        public async Task TokenAndPassword_AreStoredEncrypted_AndBoundToTheirLink()
+        {
+            var owner = await NewUserAsync();
+            var fileId = await UploadFileAsync(owner, "bound.txt", "bound");
+            var (firstId, firstToken) = await CreateShareAsync(owner, new { itemId = fileId, password = "first-secret" });
+            var (secondId, _) = await CreateShareAsync(owner, new { itemId = fileId, password = "second-secret" });
+
+            // Neither the token nor the password appears in the row
+            var tokenCipher = (string?)await TestDatabase.ScalarAsync(Factory, "SELECT TokenCipher FROM Shares WHERE Id = @Id", ("@Id", Guid.Parse(firstId)));
+            var passwordCipher = (string?)await TestDatabase.ScalarAsync(Factory, "SELECT PasswordCipher FROM Shares WHERE Id = @Id", ("@Id", Guid.Parse(firstId)));
+            tokenCipher.Should().NotBeNullOrEmpty().And.NotContain(firstToken);
+            passwordCipher.Should().NotBeNullOrEmpty().And.NotContain("first-secret");
+
+            // Copied onto another link, the values don't decrypt (they're bound to the first link's Id)
+            await ExecuteSqlAsync(@"UPDATE Shares SET TokenCipher = @Token, PasswordCipher = @Password WHERE Id = @Id",
+                ("@Token", tokenCipher!), ("@Password", passwordCipher!), ("@Id", Guid.Parse(secondId)));
+            var second = (await ListSharesAsync(owner)).Single(s => s.GetProperty("id").GetString() == secondId);
+            second.GetProperty("token").ValueKind.Should().Be(JsonValueKind.Null);
+            (await owner.GetAsync($"/shares/{secondId}/password")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        [Fact]
+        public async Task LinksFromBeforeTheChange_AreListedWithoutTheirLink_AndCanBeRevoked()
+        {
+            var owner = await NewUserAsync();
+            var fileId = await UploadFileAsync(owner, "old.txt", "old");
+            var (shareId, token) = await CreateShareAsync(owner, new { itemId = fileId, password = "old-password" });
+
+            // As stored before tokens and passwords were kept encrypted
+            await ExecuteSqlAsync("UPDATE Shares SET TokenCipher = NULL, PasswordCipher = NULL WHERE Id = @Id", ("@Id", Guid.Parse(shareId)));
+
+            var listed = (await ListSharesAsync(owner)).Single();
+            listed.GetProperty("token").ValueKind.Should().Be(JsonValueKind.Null);
+            listed.GetProperty("path").ValueKind.Should().Be(JsonValueKind.Null);
+            listed.GetProperty("hasPassword").GetBoolean().Should().BeTrue();
+            listed.GetProperty("passwordViewable").GetBoolean().Should().BeFalse();
+            (await owner.GetAsync($"/shares/{shareId}/password")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+            // The link itself still works, and can be revoked
+            (await Anonymous().PostAsJsonAsync($"/s/{token}", new { password = "old-password" })).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await owner.DeleteAsync($"/shares/{shareId}")).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await Anonymous().GetAsync($"/s/{token}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
         }
 
         [Fact]

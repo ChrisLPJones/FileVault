@@ -18,7 +18,9 @@ namespace Backend.Models
         public string? Password { get; set; }
     }
 
-    // One of the user's links, as listed in GET /shares
+    // One of the user's links, as listed in GET /shares. Token is null for links created before
+    // links could be shown again (only their hash was kept). The password itself is only sent by
+    // GET /shares/{id}/password; PasswordViewable says whether that can show it.
     public record ShareSummary(
         Guid Id,
         string ItemId,
@@ -28,7 +30,27 @@ namespace Backend.Models
         DateTime? ExpiresAt,
         bool HasPassword,
         int DownloadCount,
-        bool ItemInBin); // the link doesn't work while its item is in the recycle bin
+        bool ItemInBin, // the link doesn't work while its item is in the recycle bin
+        string? Token,
+        string? Path,
+        bool PasswordViewable);
+
+    // A Shares row for the owner's list, with the encrypted token and password
+    public record ShareListRow(
+        Guid Id,
+        string ItemId,
+        string Name,
+        bool IsDirectory,
+        DateTime CreatedAt,
+        DateTime? ExpiresAt,
+        bool HasPassword,
+        int DownloadCount,
+        bool ItemInBin,
+        string? TokenCipher,
+        string? PasswordCipher);
+
+    // GET /shares/{id}/password response
+    public record SharePassword(string Password);
 
     // POST /shares response. The token is only ever returned here.
     public record CreatedShare(

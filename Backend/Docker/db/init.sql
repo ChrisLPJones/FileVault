@@ -422,3 +422,17 @@ BEGIN
     PRINT 'Table "Uploads" already exists.';
 END
 GO
+
+------------------------------------------------------------
+-- SHARE LINKS: VIEWABLE LATER
+------------------------------------------------------------
+-- The link's token and password, encrypted (AES-256-GCM, a key derived from
+-- the master key, bound to the share's Id) so the owner can copy the link and
+-- see the password again. TokenHash and PasswordHash are still what the
+-- public endpoints check. NULL for links created before these columns.
+IF COL_LENGTH('Shares', 'TokenCipher') IS NULL
+BEGIN
+    ALTER TABLE Shares ADD TokenCipher NVARCHAR(200) NULL, PasswordCipher NVARCHAR(400) NULL;
+    PRINT 'Columns "Shares.TokenCipher/PasswordCipher" added.';
+END
+GO

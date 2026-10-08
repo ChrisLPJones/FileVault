@@ -7,11 +7,13 @@ namespace Backend.Services;
 
 // Public links to a file or folder.
 //
-// A link is "/s/<token>", where the token is 32 random bytes in URL-safe base64. Only a SHA-256
-// hash of the token is stored, like refresh tokens, so a database leak doesn't reveal working
-// links. Anything wrong with a link (unknown, revoked, expired, or its item deleted or in the
+// A link is "/s/<token>", where the token is 32 random bytes in URL-safe base64. Links are looked
+// up by a SHA-256 hash of the token and passwords checked against a BCrypt hash, so the public
+// endpoints never need anything decrypted. So the owner can copy a link or see its password again,
+// both are also kept encrypted (ShareSecrets); without the master key the database alone reveals
+// neither. Anything wrong with a link (unknown, revoked, expired, or its item deleted or in the
 // recycle bin) gives the same "not found" answer, so visitors can't tell which it was.
-public partial class ShareService(FileServices fs)
+public partial class ShareService(FileServices fs, ShareSecrets secrets)
 {
     public const int MinPasswordLength = 6;
     public const int MaxListedEntries = 1000;
@@ -53,10 +55,42 @@ public partial class ShareService(FileServices fs)
         }
 
         var token = NewToken();
-        var (shareId, createdAt) = await db.CreateShareAsync(userId, item.Guid, HashToken(token), expiresAt, passwordHash);
+        var shareId = Guid.NewGuid();
+        var createdAt = await db.CreateShareAsync(shareId, userId, item.Guid, HashToken(token), expiresAt, passwordHash,
+            secrets.Protect(token, shareId, ShareSecrets.TokenPurpose),
+            passwordHash == null ? null : secrets.Protect(request.Password!, shareId, ShareSecrets.PasswordPurpose));
 
         return ServiceResult<CreatedShare>.Success(new CreatedShare(
             shareId, token, $"/s/{token}", item.Guid, item.Name, item.IsDirectory, createdAt, expiresAt, passwordHash != null));
+    }
+
+
+
+    // The user's links, each with its token decrypted so the link can be copied again
+    // (null for links created before tokens were kept encrypted)
+    public async Task<List<ShareSummary>> ListAsync(DatabaseServices db, string userId) =>
+        (await db.GetSharesAsync(userId)).Select(row =>
+        {
+            var token = secrets.Unprotect(row.TokenCipher, row.Id, ShareSecrets.TokenPurpose);
+            return new ShareSummary(row.Id, row.ItemId, row.Name, row.IsDirectory, row.CreatedAt, row.ExpiresAt,
+                row.HasPassword, row.DownloadCount, row.ItemInBin, token, token == null ? null : $"/s/{token}",
+                row.HasPassword && row.PasswordCipher != null);
+        }).ToList();
+
+    // A link's password, for its owner only. Not found for other users' links, links without a
+    // password, and links created before passwords were kept encrypted.
+    public async Task<ServiceResult<SharePassword>> GetPasswordAsync(Guid shareId, DatabaseServices db, string userId)
+    {
+        var row = await db.GetShareAsync(shareId, userId);
+        if (row == null)
+            return HttpReturnResult.NotFound("Link not found");
+        if (!row.HasPassword)
+            return HttpReturnResult.NotFound("This link has no password");
+
+        var password = secrets.Unprotect(row.PasswordCipher, row.Id, ShareSecrets.PasswordPurpose);
+        return password == null
+            ? HttpReturnResult.NotFound("This link was created before passwords could be shown again")
+            : ServiceResult<SharePassword>.Success(new SharePassword(password));
     }
 
 

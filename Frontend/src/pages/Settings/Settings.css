@@ -350,6 +350,12 @@ label.settings-button.disabled {
     background: radial-gradient(circle, var(--fv-primary) 0 26%, #fff 30% 52%, var(--fv-primary) 56%);
 }
 
+/* A link that looks like a button (e.g. "Manage shared links") */
+a.settings-button.settings-link-button {
+    display: inline-block;
+    text-decoration: none;
+}
+
 .settings-optional {
     color: var(--fv-text-muted);
     font-weight: normal;

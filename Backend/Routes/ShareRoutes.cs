@@ -56,16 +56,39 @@ namespace Backend.Routes
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(404).RequireAuthorization();
 
-            // Lists the user's links (not revoked; expired ones included)
+            // Lists the user's links (not revoked; expired ones included), with each link's token
             app.MapGet("/shares", async (
+                HttpContext http,
                 ClaimsPrincipal user,
+                ShareService shares,
                 DatabaseServices db) =>
             {
-                return Results.Ok(await db.GetSharesAsync(user.GetUserId()));
+                http.Response.Headers.CacheControl = "no-store";
+                return Results.Ok(await shares.ListAsync(db, user.GetUserId()));
             })
                 .WithTags("Shares")
-                .WithSummary("List your share links with the names of the shared items")
+                .WithSummary("List your share links with their item names and links (token is null for links made before links were kept)")
                 .Produces<List<ShareSummary>>().RequireAuthorization();
+
+            // One link's password, only when asked for (it isn't part of the list)
+            app.MapGet("/shares/{id}/password", async (
+                HttpContext http,
+                ClaimsPrincipal user,
+                string id,
+                ShareService shares,
+                DatabaseServices db) =>
+            {
+                http.Response.Headers.CacheControl = "no-store";
+                if (!Guid.TryParse(id, out var shareId))
+                    return Results.NotFound(new { error = "Link not found" });
+
+                var result = await shares.GetPasswordAsync(shareId, db, user.GetUserId());
+                return result.Ok ? Results.Ok(result.Value) : Error(result.Error);
+            })
+                .WithTags("Shares")
+                .WithSummary("Show the password of one of your share links")
+                .Produces<SharePassword>()
+                .Produces<ErrorResponse>(404).RequireAuthorization();
 
             // Revokes one of the user's links
             app.MapDelete("/shares/{id}", async (

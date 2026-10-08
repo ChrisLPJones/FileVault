@@ -78,8 +78,7 @@ const ShareAction = ({ triggerAction }) => {
             </button>
           </div>
           <p className="fm-share-hint">
-            Copy it now: for security the full link isn't stored, so it can't be shown again. You can revoke it
-            under Settings, Shared links.
+            You can copy it again, see its password or revoke it on the Shared links page.
           </p>
           <div className="fm-share-actions">
             <button type="button" className="fm-button fm-button-secondary" onClick={() => triggerAction.close()}>

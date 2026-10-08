@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard/Dashboard";
 import Settings from "./pages/Settings/Settings";
 import ErrorPage from "./pages/Error/Errorpage";
 import SharePage from "./pages/Share/SharePage";
+import SharedLinks from "./pages/SharedLinks/SharedLinks";
 import ForgotPassword from "./pages/ForgotPassword/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword/ResetPassword";
 import VerifyEmail from "./pages/VerifyEmail/VerifyEmail";
@@ -75,6 +76,14 @@ const router = createBrowserRouter([
                 // Share links work whether or not the visitor is logged in
                 path: "s/:token",
                 element: <SharePage />,
+            },
+            {
+                path: "shared-links",
+                element: (
+                    <ProtectedRoute>
+                        <SharedLinks />
+                    </ProtectedRoute>
+                ),
             },
             {
                 path: "settings",

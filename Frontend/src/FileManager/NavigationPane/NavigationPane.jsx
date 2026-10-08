@@ -4,7 +4,8 @@ import { getParentPath } from "../../utils/getParentPath";
 import { useFiles } from "../../contexts/FilesContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
 import NavUser from "./NavUser";
-import { MdMenu, MdOutlineDelete } from "react-icons/md";
+import { MdLink, MdMenu, MdOutlineDelete } from "react-icons/md";
+import { useNavigate } from "react-router-dom";
 import { useRecycleBin } from "../../contexts/RecycleBinContext";
 import { useSelection } from "../../contexts/SelectionContext";
 import "./NavigationPane.scss";
@@ -15,6 +16,7 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
   const t = useTranslation();
   const { isBinOpen, openBin } = useRecycleBin();
   const { setSelectedFiles } = useSelection();
+  const navigate = useNavigate();
 
   const createChildRecursive = (path, foldersStruct) => {
     if (!foldersStruct[path]) return []; // No children for this path (folder)
@@ -72,6 +74,16 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
       >
         <MdOutlineDelete size={22} aria-hidden="true" />
         <span>Recycle bin</span>
+      </button>
+      {/* Its own page: every link shared, to copy, check the password of or revoke */}
+      <button
+        type="button"
+        className="sb-recycle-bin sb-shared-links"
+        title="Shared links"
+        onClick={() => navigate("/shared-links")}
+      >
+        <MdLink size={22} aria-hidden="true" />
+        <span>Shared links</span>
       </button>
       <NavUser compact={compact} />
     </div>

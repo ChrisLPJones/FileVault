@@ -27,6 +27,18 @@ namespace Backend.Test
             await command.ExecuteNonQueryAsync();
         }
 
+        public static async Task<object?> ScalarAsync(WebApplicationFactory<Program> factory, string sql, params (string name, object value)[] parameters)
+        {
+            var connectionString = factory.Services.GetRequiredService<IConfiguration>().GetConnectionString("DefaultConnection");
+            await using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync();
+            await using var command = new SqlCommand(sql, connection);
+            foreach (var (name, value) in parameters)
+                command.Parameters.AddWithValue(name, value);
+            var result = await command.ExecuteScalarAsync();
+            return result == DBNull.Value ? null : result;
+        }
+
         // New accounts must confirm their email before logging in; tests that register and log
         // straight in mark the address confirmed, as if the emailed link had been opened
         public static Task MarkEmailVerifiedAsync(WebApplicationFactory<Program> factory, string email) =>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getErrorMessage } from "../../api/api";
 import {
     changePasswordAPI,
@@ -11,7 +11,6 @@ import {
     uploadAvatarAPI,
 } from "../../api/accountAPI";
 import Avatar from "../../components/Avatar";
-import SharedLinksCard from "./SharedLinksCard";
 import { resizeImageToSquare } from "../../utils/avatarImage";
 import { formatBytes } from "../../utils/formatBytes";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
@@ -382,7 +381,13 @@ function Settings() {
                 </form>
             </section>
 
-            <SharedLinksCard />
+            <section className="settings-card" aria-labelledby="shares-heading">
+                <h2 id="shares-heading">Shared links</h2>
+                <p className="settings-hint">See the links you've shared, copy them, show their passwords or revoke them.</p>
+                <Link to="/shared-links" className="settings-button secondary settings-link-button">
+                    Manage shared links
+                </Link>
+            </section>
 
             <section className="settings-card danger-zone" aria-labelledby="delete-heading">
                 <h2 id="delete-heading">Delete account</h2>
