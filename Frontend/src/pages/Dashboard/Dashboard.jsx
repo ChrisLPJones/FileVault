@@ -12,8 +12,9 @@ import FileManager from "../../FileManager/FileManager";
 import { useHeaderSlot } from "../../contexts/HeaderSlotContext";
 import VerifyEmailBanner from "../../components/VerifyEmailBanner";
 
-// Matches the API's default Storage:MaxUploadBytes until /user/usage responds
-const DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+// Matches the API's default Storage:MaxFileBytes until /user/usage responds. Files above 8 MB are
+// uploaded in chunks, so the per-request limit (maxUploadBytes) only applies to smaller ones.
+const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024 * 1024;
 
 const fileUploadConfig = {
     url: `${API_BASE_URL}/upload`,
@@ -26,7 +27,7 @@ function Dashboard() {
     const [files, setFiles] = useState([]);
     const [currentPath, setCurrentPath] = useState("");
     const [error, setError] = useState(null);
-    const [maxFileSize, setMaxFileSize] = useState(DEFAULT_MAX_UPLOAD_BYTES);
+    const [maxFileSize, setMaxFileSize] = useState(DEFAULT_MAX_FILE_BYTES);
     // Short confirmation (e.g. "Moved ... to the recycle bin") that hides itself
     const [notice, setNotice] = useState(null);
 
@@ -47,7 +48,7 @@ function Dashboard() {
 
         // Use the server's upload limit (quota is checked by the server on upload)
         getUsageAPI()
-            .then((usage) => !cancelled && setMaxFileSize(usage.maxUploadBytes))
+            .then((usage) => !cancelled && setMaxFileSize(usage.maxFileBytes ?? usage.maxUploadBytes))
             .catch(() => {});
 
         return () => {

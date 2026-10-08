@@ -216,7 +216,7 @@ function Settings() {
                     {" · "}
                     {formatBytes(usage.quota - usage.used)} free
                 </p>
-                <p className="settings-hint">Files can be up to {formatBytes(usage.maxUploadBytes, 0)} each.</p>
+                <p className="settings-hint">Files can be up to {formatBytes(usage.maxFileBytes ?? usage.maxUploadBytes, 0)} each.</p>
             </section>
 
             <section className="settings-card" aria-labelledby="appearance-heading">

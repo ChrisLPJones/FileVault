@@ -37,6 +37,7 @@
         }
 
         .btn-choose-file {
+            gap: 8px; // "Choose File" and "Choose Folder"
             display: flex;
             justify-content: center;
 

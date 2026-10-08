@@ -22,7 +22,7 @@
   "fileTypeNotAllowed": "File type is not allowed.",
   "fileAlreadyExist": "File already exists.",
   "maxUploadSize": "Maximum upload size is",
-  "dragFileToUpload": "Drag files to upload",
+  "dragFileToUpload": "Drag files or folders to upload",
   "chooseFile": "Choose File",
   "uploadFail": "Upload failed.",
   "uploading": "Uploading",
