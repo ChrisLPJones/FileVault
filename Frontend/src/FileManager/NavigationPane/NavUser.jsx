@@ -1,29 +1,16 @@
 import { useEffect, useState } from "react";
 import UserMenu from "../../components/UserMenu";
-import { PROFILE_CHANGED_EVENT, getUsageAPI, getUserInfoAPI } from "../../api/accountAPI";
+import { getUsageAPI } from "../../api/accountAPI";
+import { useUserProfile } from "../../hooks/useUserProfile";
 import { formatBytes } from "../../utils/formatBytes";
 import { useFiles } from "../../contexts/FilesContext";
 import Avatar from "../../components/Avatar";
 
 // Bottom of the folder tree: avatar, first name and storage used (name and usage hidden when collapsed)
 export default function NavUser({ compact }) {
-  const [firstName, setFirstName] = useState("");
+  const { firstName } = useUserProfile();
   const [usage, setUsage] = useState(null);
   const { files } = useFiles();
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = () =>
-      getUserInfoAPI()
-        .then((info) => !cancelled && setFirstName(info.firstName))
-        .catch(() => {});
-    load();
-    window.addEventListener(PROFILE_CHANGED_EVENT, load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(PROFILE_CHANGED_EVENT, load);
-    };
-  }, []);
 
   // Usage changes whenever the file list is reloaded
   useEffect(() => {

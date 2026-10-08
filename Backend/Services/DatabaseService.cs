@@ -425,7 +425,7 @@ public class DatabaseServices
 
 
 
-    // Register a new user in the database, handling duplicate username or email errors
+    // Insert a new user (the caller has already checked the email is free)
     public async Task RegisterUser(UserModel user)
     {
         using var connection = new SqlConnection(_connectionString);
@@ -446,7 +446,7 @@ public class DatabaseServices
 
 
 
-    // Retrieve a user's information from the database by username
+    // Look up a user by email address
     public async Task<UserModel?> GetUserByEmail(string email)
     {
         using var connection = new SqlConnection(_connectionString);

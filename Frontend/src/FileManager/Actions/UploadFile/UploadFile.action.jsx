@@ -21,7 +21,7 @@ const UploadFileAction = ({
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState({});
-  const { currentFolder, currentPathFiles } = useFileNavigation();
+  const { currentFolder } = useFileNavigation();
   const { onError } = useFiles();
   const fileInputRef = useRef(null);
   const t = useTranslation();
@@ -43,17 +43,6 @@ const UploadFileAction = ({
     if (sizeError) return `${t("maxUploadSize")} ${getDataSize(maxFileSize, 0)}.`;
   };
 
-  // Windows Explorer style: "name.ext" -> "name (1).ext", "name (2).ext", ...
-  const getUniqueFile = (file, takenNames) => {
-    if (!takenNames.has(file.name.toLowerCase())) return file;
-    const dot = file.name.lastIndexOf(".");
-    const base = dot > 0 ? file.name.slice(0, dot) : file.name;
-    const ext = dot > 0 ? file.name.slice(dot) : "";
-    let n = 1;
-    while (takenNames.has(`${base} (${n})${ext}`.toLowerCase())) n++;
-    return new File([file], `${base} (${n})${ext}`, { type: file.type, lastModified: file.lastModified });
-  };
-
   const setSelectedFiles = (selectedFiles) => {
     selectedFiles = selectedFiles.filter(
       (item) =>
@@ -61,15 +50,7 @@ const UploadFileAction = ({
     );
 
     if (selectedFiles.length > 0) {
-      const takenNames = new Set([
-        ...currentPathFiles.filter((item) => !item.isDirectory).map((item) => item.name.toLowerCase()),
-        ...files.map((fileData) => fileData.file.name.toLowerCase()),
-      ]);
-      selectedFiles = selectedFiles.map((original) => {
-        const file = getUniqueFile(original, takenNames);
-        takenNames.add(file.name.toLowerCase());
-        return file;
-      });
+      // A name that is already in the folder is given a number by the server ("report (1).pdf")
       const newFiles = selectedFiles.map((file) => {
         const appendData = onFileUploading(file, currentFolder);
         const error = checkFileError(file);

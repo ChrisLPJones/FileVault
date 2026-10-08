@@ -41,7 +41,7 @@
       z-Index: -1;
       border-radius: 4px;
       position: relative;
-      color: white;
+      color: var(--fv-primary-text, white);
       background-color: var(--file-manager-primary-color);
       padding: 3px 8px;
     }
@@ -118,7 +118,7 @@
 
   .file-selected {
     background-color: var(--file-manager-primary-color);
-    color: white;
+    color: var(--fv-primary-text, white); // dark text on light accent colours
 
     &:hover {
       background-color: var(--file-manager-primary-color);

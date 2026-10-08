@@ -2,17 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FiLogOut, FiSettings } from "react-icons/fi";
-import { PROFILE_CHANGED_EVENT, getUserInfoAPI } from "../api/accountAPI";
 import { logout } from "../api/api";
 import Avatar from "./Avatar";
+import { useUserProfile } from "../hooks/useUserProfile";
 import "./UserMenu.css";
 
 // Button that opens a menu with the account's name, Settings and Log out.
-// `children` is the button's content (default: the avatar). The menu is drawn in a portal
-// opening upwards from the button, so it isn't clipped by the folder tree it sits in.
+// `children` is the button's content (default: the avatar). The menu is drawn in a portal so it
+// isn't clipped by the folder tree; it opens upwards from a button low on the screen and
+// downwards (right-aligned) from one near the top, like the header.
 export default function UserMenu({ children, className = "", title }) {
     const [open, setOpen] = useState(false);
-    const [user, setUser] = useState({ name: "", email: "" });
+    const user = useUserProfile();
     const containerRef = useRef(null);
     const buttonRef = useRef(null);
     const menuRef = useRef(null);
@@ -25,29 +26,34 @@ export default function UserMenu({ children, className = "", title }) {
         navigate("/login", { replace: true });
     };
 
+    // Where the menu goes, next to the button
+    const place = () => {
+        const rect = buttonRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        setPosition(
+            rect.top < window.innerHeight / 2
+                ? { top: rect.bottom + 8, right: window.innerWidth - rect.right }
+                : { left: rect.left, bottom: window.innerHeight - rect.top + 8 }
+        );
+    };
+
     const toggle = () => {
-        if (!open && buttonRef.current) {
-            const rect = buttonRef.current.getBoundingClientRect();
-            setPosition({ left: rect.left, bottom: window.innerHeight - rect.top + 8 });
-        }
+        if (!open) place();
         setOpen((value) => !value);
     };
 
-    // Name and email for the menu header; refreshed when the profile changes
+    // Stay attached to the button if the window is resized or the button moves (e.g. the
+    // folder tree collapsing) while the menu is open
     useEffect(() => {
-        let cancelled = false;
-        const load = () =>
-            getUserInfoAPI()
-                .then((info) => !cancelled && setUser({ name: `${info.firstName} ${info.lastName}`.trim(), email: info.email }))
-                .catch(() => {});
-
-        load();
-        window.addEventListener(PROFILE_CHANGED_EVENT, load);
+        if (!open) return undefined;
+        window.addEventListener("resize", place);
+        const observer = new ResizeObserver(place);
+        if (buttonRef.current) observer.observe(buttonRef.current);
         return () => {
-            cancelled = true;
-            window.removeEventListener(PROFILE_CHANGED_EVENT, load);
+            window.removeEventListener("resize", place);
+            observer.disconnect();
         };
-    }, []);
+    }, [open]);
 
     // Close on a click outside the menu or on Escape (returning focus to the button)
     useEffect(() => {
@@ -110,7 +116,7 @@ export default function UserMenu({ children, className = "", title }) {
                 <div
                     ref={menuRef}
                     className="user-menu-dropdown"
-                    style={{ left: position.left, bottom: position.bottom }}
+                    style={position}
                     role="menu"
                     aria-label="Account"
                     onKeyDown={onMenuKeyDown}

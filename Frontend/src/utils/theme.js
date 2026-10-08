@@ -8,7 +8,12 @@ export const THEME_OPTIONS = ["system", "light", "dark"];
 
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
+// The choice made in this page load. It wins over storage, so a choice still applies when
+// storage is unavailable (e.g. private mode) and the write fails.
+let chosenTheme = null;
+
 export const getThemePreference = () => {
+    if (chosenTheme) return chosenTheme;
     try {
         const stored = localStorage.getItem(STORAGE_KEY);
         return THEME_OPTIONS.includes(stored) ? stored : "system";
@@ -25,6 +30,7 @@ const applyTheme = () => {
 };
 
 export const setThemePreference = (preference) => {
+    chosenTheme = THEME_OPTIONS.includes(preference) ? preference : "system";
     try {
         localStorage.setItem(STORAGE_KEY, preference);
     } catch {
@@ -41,6 +47,7 @@ darkQuery.addEventListener("change", () => {
 });
 window.addEventListener("storage", (event) => {
     if (event.key !== STORAGE_KEY) return;
+    chosenTheme = null; // another tab changed it: follow storage again
     applyTheme();
     window.dispatchEvent(new Event(CHANGE_EVENT));
 });
@@ -64,7 +71,11 @@ export const ACCENT_PRESETS = ["#007bff", "#6155b4", "#0d9488", "#16a34a", "#e11
 
 const isHex = (value) => /^#[0-9a-f]{6}$/i.test(value || "");
 
+// As with the theme: the choice made in this page load wins over storage (undefined = none yet)
+let chosenAccent;
+
 export const getAccent = () => {
+    if (chosenAccent !== undefined) return chosenAccent;
     try {
         const stored = localStorage.getItem(ACCENT_KEY);
         return isHex(stored) ? stored.toLowerCase() : null;
@@ -96,6 +107,7 @@ const applyAccent = () => {
 };
 
 export const setAccent = (color) => {
+    chosenAccent = isHex(color) ? color.toLowerCase() : null;
     try {
         if (isHex(color)) localStorage.setItem(ACCENT_KEY, color.toLowerCase());
         else localStorage.removeItem(ACCENT_KEY);
