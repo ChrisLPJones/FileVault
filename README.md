@@ -21,7 +21,7 @@
 - Light, dark and system themes, and a choice of accent colour
 
 **Tooling**
-- Interactive API docs (Swagger) at `/swagger`
+- Interactive API docs (Swagger) at `/swagger` in development, or with `SWAGGER_ENABLED=true`
 - Desktop app (Electron) for Windows, macOS and Linux
 - Runs with one command using Docker Compose
 - CI on every push: backend build and tests, frontend build and lint, Docker images
@@ -55,6 +55,8 @@ Data lives in two named volumes, `filevault_sql_data` and `filevault_file_storag
 To open the database in a GUI tool (SSMS, Azure Data Studio, VS Code SQLTools), copy `docker-compose.override.example.yml` to `docker-compose.override.yml` and restart with `docker compose up -d`. SQL Server is then reachable from this machine only at `127.0.0.1,1434`, user `sa`, with `MSSQL_SA_PASSWORD` from `.env`. Use `127.0.0.1` rather than `localhost`, which some tools resolve to IPv6 and then time out. To look at the stored files, run `docker compose exec api ls -l /data/storage`. They are encrypted, so download them through the app to read them.
 
 The frontend bundle has the API URL compiled in. If the browser reaches the API somewhere other than `http://localhost:3000`, set `API_URL` (and `FRONTEND_URL` for CORS) in `.env` and rebuild.
+
+Hosting it for real (HTTPS reverse proxy, secrets, backups, key rotation, security headers): see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Local development
 
@@ -135,7 +137,7 @@ See [Desktop/README.md](Desktop/README.md) for details.
 
 ## API Documentation
 
-Interactive API docs are served by the API at **http://localhost:3000/swagger**, and the OpenAPI document is at `/swagger/v1/swagger.json` (it can be imported into Postman or Insomnia).
+Interactive API docs are served at `/swagger` on the API, and the OpenAPI document is at `/swagger/v1/swagger.json` (it can be imported into Postman or Insomnia). They're on when the API runs in Development (`dotnet run`). The Docker stack runs in Production, where they're off unless you add `SWAGGER_ENABLED=true` to `.env` (then **http://localhost:3000/swagger**); see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#5-api-docs-swagger).
 
 To try protected endpoints, call `POST /user/login`, then click **Authorize** and paste the returned access token (it lasts 15 minutes). Endpoints are grouped as:
 
