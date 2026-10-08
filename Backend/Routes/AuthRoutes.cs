@@ -70,7 +70,8 @@ namespace Backend.Routes
             app.MapPost("/user/login", async (
                 HttpContext http,
                 AuthServices auth,
-                DatabaseServices db) =>
+                DatabaseServices db,
+                TwoFactorService twoFactor) =>
             {
                 var login = await ReadJsonAsync<LoginModel>(http.Request);
 
@@ -83,12 +84,18 @@ namespace Backend.Routes
                 if (userRecord == null)
                     return Results.Json(new { error = "Invalid email or password" }, statusCode: 401);
 
+                // With two-factor on, the password only earns a short-lived challenge for POST /user/login/2fa
+                if ((await db.GetTwoFactorStateAsync(userRecord.Id.ToString()))?.Enabled == true)
+                    return Results.Ok(new TwoFactorChallengeResponse(true,
+                        await twoFactor.CreateLoginChallengeAsync(userRecord.Id.ToString())));
+
                 await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
 
                 return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
             })
                 .WithTags("Account")
-                .WithSummary("Log in with email and password: returns an access token and sets the refresh-token cookie")
+                .WithSummary("Log in with email and password: returns an access token and sets the refresh-token cookie " +
+                    "(with two-factor authentication on, returns { twoFactorRequired, challengeToken } for POST /user/login/2fa instead)")
                 .Produces<TokenResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(401)

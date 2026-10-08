@@ -243,3 +243,63 @@ END
 GO
 
 PRINT 'Recursive delete trigger created.';
+GO
+
+------------------------------------------------------------
+-- TWO-FACTOR AUTHENTICATION
+------------------------------------------------------------
+-- TotpSecret is the authenticator secret, encrypted with a key derived from the
+-- API's master key. It is set when setup starts and only takes effect once
+-- TotpEnabled is 1 (after the user confirms a code). TotpLastStep is the last
+-- accepted 30-second time step, so a code can't be used twice.
+IF COL_LENGTH('Users', 'TotpSecret') IS NULL
+BEGIN
+    ALTER TABLE Users ADD
+        TotpSecret NVARCHAR(200) NULL,
+        TotpEnabled BIT NOT NULL CONSTRAINT DF_Users_TotpEnabled DEFAULT 0,
+        TotpLastStep BIGINT NULL;
+    PRINT 'Two-factor columns added to "Users".';
+END
+GO
+
+-- Single-use recovery codes; only a keyed hash of each is stored
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'TotpRecoveryCodes')
+BEGIN
+    CREATE TABLE TotpRecoveryCodes
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        UserId UNIQUEIDENTIFIER NOT NULL,
+        CodeHash CHAR(64) NOT NULL,
+        UsedAt DATETIME2 NULL,
+        CONSTRAINT PK_TotpRecoveryCodes PRIMARY KEY CLUSTERED (Id ASC),
+        CONSTRAINT FK_TotpRecoveryCodes_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_TotpRecoveryCodes_UserId ON TotpRecoveryCodes (UserId);
+    PRINT 'Table "TotpRecoveryCodes" created.';
+END
+GO
+
+-- The second login step: issued after a correct password when 2FA is on.
+-- Short-lived, single-use, limited attempts; only a SHA-256 hash is stored.
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'LoginChallenges')
+BEGIN
+    CREATE TABLE LoginChallenges
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        UserId UNIQUEIDENTIFIER NOT NULL,
+        TokenHash CHAR(64) NOT NULL,
+        ExpiresAt DATETIME2 NOT NULL,
+        Attempts INT NOT NULL CONSTRAINT DF_LoginChallenges_Attempts DEFAULT 0,
+        UsedAt DATETIME2 NULL,
+        CONSTRAINT PK_LoginChallenges PRIMARY KEY CLUSTERED (Id ASC),
+        CONSTRAINT UQ_LoginChallenges_TokenHash UNIQUE NONCLUSTERED (TokenHash),
+        CONSTRAINT FK_LoginChallenges_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_LoginChallenges_UserId ON LoginChallenges (UserId);
+    PRINT 'Table "LoginChallenges" created.';
+END
+GO

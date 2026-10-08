@@ -16,6 +16,7 @@ import { formatBytes } from "../../utils/formatBytes";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
 import { MdColorize } from "react-icons/md";
 import { ACCENT_PRESETS, THEME_OPTIONS, setAccent, setThemePreference, useAccent, useTheme } from "../../utils/theme";
+import TwoFactorCard from "./TwoFactorCard";
 import "./Settings.css";
 
 const DELETE_CONFIRMATION = "DELETE";
@@ -370,6 +371,8 @@ function Settings() {
                     <Status status={passwordStatus} />
                 </form>
             </section>
+
+            <TwoFactorCard />
 
             <section className="settings-card danger-zone" aria-labelledby="delete-heading">
                 <h2 id="delete-heading">Delete account</h2>

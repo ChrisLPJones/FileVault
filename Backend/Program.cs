@@ -68,7 +68,7 @@ namespace Backend
                         new { error = "Too many attempts. Please wait a minute and try again." }, ct);
                 };
 
-                foreach (var (policy, defaultLimit) in new[] { ("auth", 10), ("refresh", 30) })
+                foreach (var (policy, defaultLimit) in new[] { ("auth", 10), ("refresh", 30), ("two-factor", 10) })
                 {
                     options.AddPolicy(policy, http =>
                     {
@@ -114,6 +114,9 @@ namespace Backend
             builder.Services.AddScoped<AvatarService>();
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();
+            builder.Services.AddSingleton<SecretProtector>();
+            builder.Services.AddSingleton(TimeProvider.System);
+            builder.Services.AddScoped<TwoFactorService>();
             builder.Services.AddAuthorization();
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(option =>
@@ -176,6 +179,7 @@ namespace Backend
             app.MapFileRoutes();
             app.MapHealthCheckRoutes();
             app.MapAuthRoutes();
+            app.MapTwoFactorRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");
