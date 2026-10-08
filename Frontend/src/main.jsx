@@ -7,6 +7,7 @@ import Register from "./pages/Register/Register";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import Settings from "./pages/Settings/Settings";
 import ErrorPage from "./pages/Error/Errorpage";
+import SharePage from "./pages/Share/SharePage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import PublicRoute from "./components/PublicRoute";
@@ -49,6 +50,11 @@ const router = createBrowserRouter([
                         <Dashboard />
                     </ProtectedRoute>
                 ),
+            },
+            {
+                // Share links work whether or not the visitor is logged in
+                path: "s/:token",
+                element: <SharePage />,
             },
             {
                 path: "settings",

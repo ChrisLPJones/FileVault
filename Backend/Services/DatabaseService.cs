@@ -3,7 +3,7 @@ using Microsoft.Data.SqlClient;
 
 namespace Backend.Services;
 
-public class DatabaseServices
+public partial class DatabaseServices
 {
     // Store database connection string from configuration
     private readonly string _connectionString;

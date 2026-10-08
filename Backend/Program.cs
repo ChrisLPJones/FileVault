@@ -82,6 +82,8 @@ namespace Backend
                     });
                 }
             });
+            // Public share links: viewing, and password attempts/downloads
+            builder.Services.AddFixedWindowRateLimits(("share", 60), ("share-download", 20));
             // OpenAPI document (/swagger/v1/swagger.json) and interactive docs (/swagger)
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(options =>
@@ -114,6 +116,7 @@ namespace Backend
             builder.Services.AddScoped<AvatarService>();
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();
+            builder.Services.AddScoped<ShareService>();
             builder.Services.AddAuthorization();
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(option =>
@@ -176,6 +179,7 @@ namespace Backend
             app.MapFileRoutes();
             app.MapHealthCheckRoutes();
             app.MapAuthRoutes();
+            app.MapShareRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");

@@ -2,7 +2,7 @@ import { BiRename, BiSelectMultiple } from "react-icons/bi";
 import { BsCopy, BsFolderPlus, BsGrid, BsScissors } from "react-icons/bs";
 import { FaListUl, FaRegFile, FaRegPaste } from "react-icons/fa6";
 import { FiRefreshCw } from "react-icons/fi";
-import { MdOutlineDelete, MdOutlineFileDownload, MdOutlineFileUpload } from "react-icons/md";
+import { MdOutlineDelete, MdOutlineFileDownload, MdOutlineFileUpload, MdOutlineShare } from "react-icons/md";
 import { PiFolderOpen } from "react-icons/pi";
 import { useClipBoard } from "../../contexts/ClipboardContext";
 import { useEffect, useState } from "react";
@@ -67,6 +67,11 @@ const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, o
   const handleDelete = () => {
     setVisible(false);
     triggerAction.show("delete");
+  };
+
+  const handleShare = () => {
+    setVisible(false);
+    triggerAction.show("share");
   };
 
   const handleRefresh = () => {
@@ -177,6 +182,12 @@ const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, o
       icon: <BiRename size={19} />,
       onClick: handleRenaming,
       hidden: selectedFiles.length > 1 || !permissions.rename,
+    },
+    {
+      title: t("share"),
+      icon: <MdOutlineShare size={18} />,
+      onClick: handleShare,
+      hidden: selectedFiles.length > 1 || !permissions.share,
     },
     {
       title: t("download"),

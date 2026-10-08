@@ -5,6 +5,7 @@ import {
   MdOutlineDelete,
   MdOutlineFileDownload,
   MdOutlineFileUpload,
+  MdOutlineShare,
 } from "react-icons/md";
 import { BiRename } from "react-icons/bi";
 import { FaListUl, FaRegPaste } from "react-icons/fa6";
@@ -133,6 +134,16 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
               >
                 <BiRename size={19} />
                 <span>{t("rename")}</span>
+              </button>
+            )}
+            {selectedFiles.length === 1 && permissions.share && (
+              <button
+                className="item-action file-action"
+                title={t("share")}
+                onClick={() => triggerAction.show("share")}
+              >
+                <MdOutlineShare size={18} />
+                <span>{t("share")}</span>
               </button>
             )}
             {permissions.download && (

@@ -243,3 +243,59 @@ END
 GO
 
 PRINT 'Recursive delete trigger created.';
+
+------------------------------------------------------------
+-- SHARE LINKS
+------------------------------------------------------------
+-- A public link to one file or folder. Only a SHA-256 hash of the link's
+-- token is stored, so the link itself is shown once, when it is created.
+-- Optional expiry and BCrypt-hashed password; revoked links keep their row.
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'Shares')
+BEGIN
+    CREATE TABLE Shares
+    (
+        Id UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_Shares_Id DEFAULT NEWID(),
+        TokenHash CHAR(64) NOT NULL,
+        ItemId NVARCHAR(100) NOT NULL,
+        UserId UNIQUEIDENTIFIER NOT NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Shares_CreatedAt DEFAULT SYSUTCDATETIME(),
+        ExpiresAt DATETIME2 NULL,
+        RevokedAt DATETIME2 NULL,
+        PasswordHash NVARCHAR(255) NULL,
+        DownloadCount INT NOT NULL CONSTRAINT DF_Shares_DownloadCount DEFAULT 0,
+        CONSTRAINT PK_Shares PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT UQ_Shares_TokenHash UNIQUE NONCLUSTERED (TokenHash),
+        CONSTRAINT FK_Shares_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_Shares_UserId ON Shares (UserId);
+    CREATE INDEX IX_Shares_ItemId ON Shares (ItemId);
+    PRINT 'Table "Shares" created.';
+END
+ELSE
+BEGIN
+    PRINT 'Table "Shares" already exists.';
+END
+GO
+
+-- Removing a file or folder removes the links to it and to anything inside it.
+-- Runs last, after TR_Files_RecursiveDelete has removed the descendants, and
+-- clears every link whose item no longer exists for the affected users.
+CREATE OR ALTER TRIGGER TR_Files_DeleteShares
+ON Files
+AFTER DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE s FROM Shares s
+    WHERE s.UserId IN (SELECT DISTINCT UserId FROM deleted)
+      AND NOT EXISTS (SELECT 1 FROM Files f WHERE f.GUID = s.ItemId AND f.UserId = s.UserId);
+END
+GO
+
+EXEC sp_settriggerorder @triggername = 'TR_Files_DeleteShares', @order = 'Last', @stmttype = 'DELETE';
+GO
+
+PRINT 'Share cleanup trigger created.';

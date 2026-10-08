@@ -1,0 +1,73 @@
+/* The public share page (/s/:token). Builds on the auth page card in Auth.css. */
+.auth-card.share-card {
+    max-width: 480px;
+}
+
+.share-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.share-item-text {
+    min-width: 0;
+}
+
+.share-name {
+    margin: 0 0 4px;
+    font-size: 1.3rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.share-meta {
+    margin: 0;
+    color: var(--fv-text-muted);
+    font-size: 0.95rem;
+}
+
+.share-entries {
+    max-height: 240px;
+    overflow-y: auto;
+    margin: 0 0 18px;
+    padding: 4px 0;
+    list-style: none;
+    border: 1px solid var(--fv-border);
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.share-entries li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+}
+
+.share-entry-path {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.share-entry-size,
+.share-entries-more {
+    color: var(--fv-text-muted);
+    white-space: nowrap;
+}
+
+.share-expiry {
+    margin: 14px 0 0;
+    color: var(--fv-text-muted);
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+/* Receives the download form's response; downloads don't need it to be visible */
+.share-download-frame {
+    display: none;
+}
