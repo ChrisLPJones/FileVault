@@ -249,6 +249,33 @@
   }
 }
 
+// Favourites: star badge on grid tiles, star toggle in list rows (shown on hover, or always
+// once starred or on touch screens)
+.files .file-item .grid-favourite {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  color: var(--fv-favourite);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.35));
+}
+
+.files.list .file-item .list-favourite {
+  margin: -6px 0 -6px 6px;
+  visibility: hidden;
+}
+
+.files.list .file-item-container:hover .list-favourite,
+.files.list .file-item .list-favourite.is-favourite,
+.files.list .file-item .list-favourite:focus-visible {
+  visibility: visible;
+}
+
+@media (hover: none) {
+  .files.list .file-item .list-favourite {
+    visibility: visible;
+  }
+}
+
 .empty-folder {
   display: flex;
   justify-content: center;

@@ -273,3 +273,21 @@ BEGIN
     PRINT 'Table "FileThumbnails" already exists.';
 END
 GO
+
+------------------------------------------------------------
+-- FAVOURITES AND RECENT FILES (added to existing databases too)
+------------------------------------------------------------
+-- Starred items, and when a file was last previewed or downloaded (UTC)
+IF COL_LENGTH('Files', 'Favourite') IS NULL
+BEGIN
+    ALTER TABLE Files ADD Favourite BIT NOT NULL CONSTRAINT DF_Files_Favourite DEFAULT 0;
+    PRINT 'Column "Files.Favourite" added.';
+END
+GO
+
+IF COL_LENGTH('Files', 'LastOpenedAt') IS NULL
+BEGIN
+    ALTER TABLE Files ADD LastOpenedAt DATETIME2 NULL;
+    PRINT 'Column "Files.LastOpenedAt" added.';
+END
+GO

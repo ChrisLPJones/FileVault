@@ -4,6 +4,7 @@ import { getParentPath } from "../../utils/getParentPath";
 import { useFiles } from "../../contexts/FilesContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
 import NavUser from "./NavUser";
+import QuickAccess from "./QuickAccess";
 import { MdMenu } from "react-icons/md";
 import "./NavigationPane.scss";
 
@@ -46,6 +47,7 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
         <MdMenu size={20} />
       </button>
       <div className="sb-folders-scroll">
+        <QuickAccess compact={compact} onExpand={onToggleCompact} onFileOpen={onFileOpen} />
         {foldersTree?.length > 0 ? (
           <>
             {foldersTree?.map((folder, index) => {

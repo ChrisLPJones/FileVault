@@ -394,7 +394,7 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, FileName, FilePath, UpdatedAt, ISNULL(CreatedAt, UpdatedAt) AS CreatedAt, GUID, isDirectory, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
+        string query = "SELECT Id, FileName, FilePath, UpdatedAt, ISNULL(CreatedAt, UpdatedAt) AS CreatedAt, GUID, isDirectory, Size, Favourite, LastOpenedAt FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -411,7 +411,9 @@ public partial class DatabaseServices
                 UpdatedAt = Convert.ToDateTime(reader["UpdatedAt"]),
                 CreatedAt = Convert.ToDateTime(reader["CreatedAt"]),
                 Size = Convert.ToInt64(reader["Size"]),
-                IsDirectory = Convert.ToBoolean(reader["isDirectory"])
+                IsDirectory = Convert.ToBoolean(reader["isDirectory"]),
+                IsFavourite = Convert.ToBoolean(reader["Favourite"]),
+                LastOpenedAt = reader["LastOpenedAt"] is DateTime opened ? DateTime.SpecifyKind(opened, DateTimeKind.Utc) : null
             });
         }
 

@@ -1,0 +1,33 @@
+.favourite-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 3px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit; /* also readable on a selected (accent-coloured) row */
+    opacity: 0.6;
+    cursor: pointer;
+}
+
+.favourite-toggle:hover,
+.favourite-toggle.is-favourite {
+    opacity: 1;
+}
+
+.favourite-toggle:hover {
+    background-color: rgba(var(--fm-shade), 0.1);
+}
+
+.favourite-toggle:focus-visible {
+    outline: 2px solid var(--fv-focus-ring);
+    outline-offset: 1px;
+}
+
+/* Gold star, readable on light and dark backgrounds */
+.favourite-toggle.is-favourite,
+.favourite-toggle.is-favourite:hover {
+    color: var(--fv-favourite);
+}

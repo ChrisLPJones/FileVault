@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
 import FileThumbnail from "../../components/FileThumbnail/FileThumbnail";
+import FavouriteToggle from "../../components/FavouriteToggle/FavouriteToggle";
+import { MdStar } from "react-icons/md";
 import CreateFolderAction from "../Actions/CreateFolder/CreateFolder.action";
 import RenameAction from "../Actions/Rename/Rename.action";
 import { getDataSize } from "../../utils/getDataSize";
@@ -246,6 +248,13 @@ const FileItem = ({
         ) : (
           <span className="text-truncate file-name">{file.name}</span>
         )}
+
+        {/* Favourites: a star toggle in list rows, a small star on grid tiles */}
+        {!file.isEditing && file._id && (activeLayout === "list" ? (
+          <FavouriteToggle file={file} size={16} className="list-favourite" />
+        ) : (
+          file.isFavourite && <MdStar className="grid-favourite" size={16} aria-label="Favourite" />
+        ))}
       </div>
 
       {activeLayout === "list" && (

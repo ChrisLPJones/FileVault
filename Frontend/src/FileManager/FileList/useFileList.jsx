@@ -2,7 +2,7 @@ import { BiRename, BiSelectMultiple } from "react-icons/bi";
 import { BsCopy, BsFolderPlus, BsGrid, BsScissors } from "react-icons/bs";
 import { FaListUl, FaRegFile, FaRegPaste } from "react-icons/fa6";
 import { FiRefreshCw } from "react-icons/fi";
-import { MdOutlineDelete, MdOutlineFileDownload, MdOutlineFileUpload } from "react-icons/md";
+import { MdOutlineDelete, MdOutlineFileDownload, MdOutlineFileUpload, MdStar, MdStarBorder } from "react-icons/md";
 import { PiFolderOpen } from "react-icons/pi";
 import { useClipBoard } from "../../contexts/ClipboardContext";
 import { useEffect, useState } from "react";
@@ -12,6 +12,8 @@ import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { duplicateNameHandler } from "../../utils/duplicateNameHandler";
 import { validateApiCallback } from "../../utils/validateApiCallback";
 import { useDetailsPane } from "../../contexts/DetailsPaneContext";
+import { useFileActions } from "../../contexts/FileActionsContext";
+import { useFiles } from "../../contexts/FilesContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
 
 const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, onFileOpen) => {
@@ -28,6 +30,8 @@ const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, o
   const { activeLayout, setActiveLayout } = useLayout();
   const t = useTranslation();
   const { setDetailsOpen } = useDetailsPane();
+  const { setFavourite } = useFileActions();
+  const { files } = useFiles();
 
   // Context Menu
   const handleFileOpen = () => {
@@ -83,6 +87,15 @@ const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, o
   const handleUpload = () => {
     setVisible(false);
     triggerAction.show("uploadFile");
+  };
+
+  // The selection holds copies made when it was selected, so read the star from the file list
+  const isFavourite = (file) => !!(files?.find((f) => f._id === file._id) ?? file).isFavourite;
+  const allFavourites = selectedFiles.length > 0 && selectedFiles.every(isFavourite);
+
+  const handleFavourite = () => {
+    setFavourite(selectedFiles, !allFavourites);
+    setVisible(false);
   };
 
   const handleselectAllFiles = () => {
@@ -170,6 +183,13 @@ const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, o
       onClick: handleFilePasting,
       className: `${clipBoard ? "" : "disable-paste"}`,
       hidden: !lastSelectedFile?.isDirectory || (!permissions.move && !permissions.copy),
+      divider: true,
+    },
+    {
+      // Star the selection, or unstar it when everything selected is already starred
+      title: allFavourites ? "Remove from favourites" : "Add to favourites",
+      icon: allFavourites ? <MdStar size={19} /> : <MdStarBorder size={19} />,
+      onClick: handleFavourite,
       divider: true,
     },
     {

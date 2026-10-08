@@ -10,5 +10,7 @@ namespace Backend.Models
         public DateTime UpdatedAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public long Size { get; set; }
+        public bool IsFavourite { get; set; }
+        public DateTime? LastOpenedAt { get; set; } // UTC; null if never opened
     }
 }

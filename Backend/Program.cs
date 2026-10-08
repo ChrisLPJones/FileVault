@@ -178,6 +178,7 @@ namespace Backend
             app.MapHealthCheckRoutes();
             app.MapAuthRoutes();
             app.MapThumbnailRoutes();
+            app.MapFavouriteRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");
