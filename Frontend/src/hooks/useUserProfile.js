@@ -1,11 +1,12 @@
 import { useSyncExternalStore } from "react";
 import { PROFILE_CHANGED_EVENT, getAvatarBlobAPI, getUserInfoAPI } from "../api/accountAPI";
+import { getAdminStatusAPI } from "../api/adminAPI";
 
-// The logged-in user's name, email and picture, fetched once and shared by everything that
+// The logged-in user's name, email, picture and whether they're an admin, fetched once and shared by everything that
 // shows them (avatars, the account menu, the folder tree footer). Reloaded when the profile
 // changes (see notifyProfileChanged) and dropped once nothing shows it, e.g. after logging out,
 // so the next account never sees the previous one's details.
-const EMPTY = { firstName: "", lastName: "", name: "", email: "", imageUrl: null };
+const EMPTY = { firstName: "", lastName: "", name: "", email: "", imageUrl: null, isAdmin: false };
 
 let profile = EMPTY;
 let loadId = 0;
@@ -16,7 +17,11 @@ const emit = () => listeners.forEach((listener) => listener());
 const load = async () => {
     const id = ++loadId;
     try {
-        const info = await getUserInfoAPI();
+        const [info, admin] = await Promise.all([
+            getUserInfoAPI(),
+            // Only decides whether the Admin link shows; the admin pages check again on the server
+            getAdminStatusAPI().catch(() => ({ isAdmin: false })),
+        ]);
         const imageUrl = info.avatarUpdatedAt ? URL.createObjectURL(await getAvatarBlobAPI()) : null;
         if (id !== loadId) {
             // A newer load started (or everyone unsubscribed) while this one was running
@@ -30,6 +35,7 @@ const load = async () => {
             name: `${info.firstName} ${info.lastName}`.trim(),
             email: info.email,
             imageUrl,
+            isAdmin: !!admin?.isAdmin,
         };
         emit();
     } catch {

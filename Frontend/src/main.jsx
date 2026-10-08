@@ -6,6 +6,7 @@ import Login from "./pages/Login/Login";
 import Register from "./pages/Register/Register";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import Settings from "./pages/Settings/Settings";
+import Admin from "./pages/Admin/Admin";
 import ErrorPage from "./pages/Error/Errorpage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
@@ -55,6 +56,14 @@ const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <Settings />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: "admin",
+                element: (
+                    <ProtectedRoute>
+                        <Admin />
                     </ProtectedRoute>
                 ),
             },

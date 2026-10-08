@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { useUserProfile } from "./useUserProfile";
 import { getAvatarBlobAPI, getUserInfoAPI, notifyProfileChanged } from "../api/accountAPI";
+import { getAdminStatusAPI } from "../api/adminAPI";
+
+vi.mock("../api/adminAPI", () => ({ getAdminStatusAPI: vi.fn(async () => ({ isAdmin: false })) }));
 
 vi.mock("../api/accountAPI", async (importOriginal) => ({
     ...(await importOriginal()),
@@ -103,6 +106,20 @@ describe("useUserProfile", () => {
         render(<Name label="b" />);
         expect(screen.getByTestId("b")).toHaveTextContent("(none)");
         await waitFor(() => expect(screen.getByTestId("b")).toHaveTextContent("Fresh"));
+    });
+
+    it("says whether the user is an admin, and treats a failed check as not", async () => {
+        getAdminStatusAPI.mockResolvedValueOnce({ isAdmin: true });
+        const { result, unmount } = renderHook(() => useUserProfile());
+        await waitFor(() => expect(result.current.isAdmin).toBe(true));
+        unmount();
+
+        getAdminStatusAPI.mockImplementationOnce(async () => {
+            throw new Error("offline");
+        });
+        const next = renderHook(() => useUserProfile());
+        await waitFor(() => expect(next.result.current.name).toBe("Alex Morgan"));
+        expect(next.result.current.isAdmin).toBe(false);
     });
 
     it("keeps showing the last profile if a reload fails", async () => {
