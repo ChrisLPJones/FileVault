@@ -300,3 +300,15 @@ BEGIN
     PRINT 'Column "Files.LastOpenedAt" added.';
 END
 GO
+
+------------------------------------------------------------
+-- ADMINISTRATORS (added to existing databases too)
+------------------------------------------------------------
+-- Can use the admin page (/admin). Set from the API's Admin:Emails setting
+-- when it starts and when a user logs in (see AdminService).
+IF COL_LENGTH('Users', 'IsAdmin') IS NULL
+BEGIN
+    ALTER TABLE Users ADD IsAdmin BIT NOT NULL CONSTRAINT DF_Users_IsAdmin DEFAULT 0;
+    PRINT 'Column "Users.IsAdmin" added.';
+END
+GO

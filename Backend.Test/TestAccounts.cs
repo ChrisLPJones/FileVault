@@ -23,20 +23,28 @@ namespace Backend.Test
             factory.WithWebHostBuilder(builder => builder.UseSetting("RateLimiting:auth:PermitLimit", "1000"));
 
         // Register and log in a new user; the client sends their access token
-        public static async Task<Account> CreateAsync(HttpClient client, string prefix)
+        public static async Task<Account> CreateAsync(HttpClient client, string prefix, string? email = null)
         {
-            var email = $"{prefix}_{Guid.NewGuid():N}@example.test";
+            email ??= $"{prefix}_{Guid.NewGuid():N}@example.test";
             (await client.PostAsJsonAsync("/user/register",
                 new UserModel { FirstName = prefix, LastName = "User", Email = email, Password = Password }))
                 .EnsureSuccessStatusCode();
 
+            await LoginAsync(client, email);
+            var token = client.DefaultRequestHeaders.Authorization!.Parameter!;
+            return new Account(client, new JwtSecurityTokenHandler().ReadJwtToken(token).Subject, email);
+        }
+
+        // Log an existing test account in; the client then sends its access token
+        public static async Task<HttpClient> LoginAsync(HttpClient client, string email)
+        {
             var login = await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password });
             login.EnsureSuccessStatusCode();
             using var json = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
             var token = json.RootElement.GetProperty("success").GetString()!;
 
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            return new Account(client, new JwtSecurityTokenHandler().ReadJwtToken(token).Subject, email);
+            return client;
         }
 
         // Upload a file and return its ID

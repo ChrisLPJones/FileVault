@@ -70,7 +70,8 @@ namespace Backend.Routes
             app.MapPost("/user/login", async (
                 HttpContext http,
                 AuthServices auth,
-                DatabaseServices db) =>
+                DatabaseServices db,
+                AdminService admins) =>
             {
                 var login = await ReadJsonAsync<LoginModel>(http.Request);
 
@@ -82,6 +83,9 @@ namespace Backend.Routes
                 var userRecord = await auth.ValidateUser(login, db);
                 if (userRecord == null)
                     return Results.Json(new { error = "Invalid email or password" }, statusCode: 401);
+
+                // Admin:Emails decides who is an administrator (see AdminService)
+                await admins.SyncAsync(db, userRecord.Id.ToString());
 
                 await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
 

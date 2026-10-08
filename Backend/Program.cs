@@ -113,6 +113,8 @@ namespace Backend
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<AvatarService>();
             builder.Services.AddSingleton<ThumbnailService>();
+            builder.Services.AddSingleton<AdminService>();
+            builder.Services.AddHostedService<AdminSyncOnStartup>();
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();
             builder.Services.AddAuthorization();
@@ -179,6 +181,7 @@ namespace Backend
             app.MapAuthRoutes();
             app.MapThumbnailRoutes();
             app.MapFavouriteRoutes();
+            app.MapAdminRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");
