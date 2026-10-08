@@ -84,6 +84,10 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Vitest + Testing Library (unit and component tests, no server needed)
+      - name: Test
+        run: npm test
+
   docker:
     name: Docker images
     runs-on: ubuntu-latest
