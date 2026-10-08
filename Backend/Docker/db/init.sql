@@ -232,16 +232,20 @@ BEGIN
     -- update locks on each other's rows and deadlock.
     DECLARE @descendants TABLE (Id INT PRIMARY KEY);
 
+    -- FORCESEEK keeps the plan on that index even when the table is small enough for the
+    -- optimiser to prefer a scan, which would read (and wait on) other users' rows.
     ;WITH RecursiveChildren AS (
         SELECT f.Id, f.GUID, f.UserId
-        FROM Files f
-        INNER JOIN deleted d ON f.UserId = d.UserId AND f.ParentId = d.GUID
+        FROM deleted d
+        INNER JOIN Files f WITH (FORCESEEK, INDEX (IX_Files_UserId_ParentId))
+            ON f.UserId = d.UserId AND f.ParentId = d.GUID
 
         UNION ALL
 
         SELECT f2.Id, f2.GUID, f2.UserId
-        FROM Files f2
-        INNER JOIN RecursiveChildren rc ON f2.UserId = rc.UserId AND f2.ParentId = rc.GUID
+        FROM RecursiveChildren rc
+        INNER JOIN Files f2 WITH (FORCESEEK, INDEX (IX_Files_UserId_ParentId))
+            ON f2.UserId = rc.UserId AND f2.ParentId = rc.GUID
     )
     INSERT INTO @descendants (Id)
     SELECT DISTINCT Id FROM RecursiveChildren;
