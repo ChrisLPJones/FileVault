@@ -3,13 +3,16 @@ import Collapse from "../../components/Collapse/Collapse";
 import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
 import { MdKeyboardArrowRight } from "react-icons/md";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
+import { useSearch } from "../../contexts/SearchContext";
 
 const FolderTree = ({ folder, onFileOpen }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isActive, setIsActive] = useState(false);
   const { currentPath, setCurrentPath, onFolderChange } = useFileNavigation();
+  const { clearSearch } = useSearch();
 
   const handleFolderSwitch = () => {
+    clearSearch(); // opening a folder from the tree ends a search
     setIsActive(true);
     onFileOpen(folder);
     setCurrentPath(folder.path);

@@ -10,6 +10,7 @@ import {
 import { BiRename } from "react-icons/bi";
 import { FaListUl, FaRegPaste } from "react-icons/fa6";
 import LayoutToggler from "./LayoutToggler";
+import SearchBox from "./SearchBox";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { useSelection } from "../../contexts/SelectionContext";
 import { useClipBoard } from "../../contexts/ClipboardContext";
@@ -73,9 +74,10 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
     setSelectedFiles([]);
   };
 
-  // Details, view and refresh: on the right in both toolbars
+  // Search, view and refresh: on the right in both toolbars
   const rightGroup = (
     <div>
+      <SearchBox />
       {toolbarRightItems.map((item, index) => (
         <div key={index} className="toolbar-left-items">
           <button
