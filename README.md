@@ -26,6 +26,37 @@
 - Runs with one command using Docker Compose
 - CI on every push: backend build and tests, frontend build and lint, Docker images
 
+## Screenshots
+
+The file manager, with Favourites and Recent above the folder tree and thumbnails for images:
+
+![File manager in grid view, light theme](docs/screenshots/files-grid-light.png)
+
+The same view in the dark theme:
+
+![File manager in grid view, dark theme](docs/screenshots/files-grid-dark.png)
+
+Selecting a file shows its details and a preview on the right:
+
+![Details pane with an image preview](docs/screenshots/details-pane.png)
+
+List view, with sortable columns and a star to add items to Favourites:
+
+![File manager in list view](docs/screenshots/files-list.png)
+
+Logging in, and the Settings page (storage, theme and accent colour, profile):
+
+![Login page](docs/screenshots/login.png)
+
+![Settings page](docs/screenshots/settings.png)
+
+On a phone, the folder tree opens as a drawer and the less-used toolbar actions move into a menu:
+
+<p>
+  <img src="docs/screenshots/phone-grid.png" alt="File manager on a phone" width="300">
+  <img src="docs/screenshots/phone-drawer.png" alt="Folder drawer on a phone" width="300">
+</p>
+
 ## Technologies Used
 
 - **Backend**: C# (.NET 8 Minimal APIs), ADO.NET
