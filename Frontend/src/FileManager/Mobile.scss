@@ -192,8 +192,17 @@
   }
 }
 
-// Phones: the list view drops the Modified column so names have room
+// Phones: slightly narrower grid tiles (three across at 390px), and the list view drops the
+// Modified column so names have room
 @media (max-width: 600px) {
+  .files:not(.list) .file-item {
+    width: 108px;
+
+    .file-name {
+      max-width: 96px;
+    }
+  }
+
   .files.list {
     .files-header .file-date,
     .modified-date {
