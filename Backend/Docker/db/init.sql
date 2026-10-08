@@ -226,19 +226,28 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Children always belong to the same user, so the search stays within the users whose
+    -- rows were deleted (an index seek on UserId, ParentId). The descendants are collected
+    -- first and then deleted by Id, so concurrent deletes by different users don't take
+    -- update locks on each other's rows and deadlock.
+    DECLARE @descendants TABLE (Id INT PRIMARY KEY);
+
     ;WITH RecursiveChildren AS (
-        SELECT f.Id, f.GUID, f.ParentId
+        SELECT f.Id, f.GUID, f.UserId
         FROM Files f
-        INNER JOIN deleted d ON f.ParentId = d.GUID
+        INNER JOIN deleted d ON f.UserId = d.UserId AND f.ParentId = d.GUID
 
         UNION ALL
 
-        SELECT f2.Id, f2.GUID, f2.ParentId
+        SELECT f2.Id, f2.GUID, f2.UserId
         FROM Files f2
-        INNER JOIN RecursiveChildren rc ON f2.ParentId = rc.GUID
+        INNER JOIN RecursiveChildren rc ON f2.UserId = rc.UserId AND f2.ParentId = rc.GUID
     )
-    DELETE FROM Files
-    WHERE Id IN (SELECT Id FROM RecursiveChildren);
+    INSERT INTO @descendants (Id)
+    SELECT DISTINCT Id FROM RecursiveChildren;
+
+    IF EXISTS (SELECT 1 FROM @descendants)
+        DELETE FROM Files WHERE Id IN (SELECT Id FROM @descendants);
 END
 GO
 
@@ -289,9 +298,17 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DELETE s FROM Shares s
+    -- Find the links first (an index seek on the affected users' rows only), then delete them
+    -- by ID, so concurrent deletes by other users never lock each other's links (deadlocks)
+    DECLARE @orphans TABLE (Id UNIQUEIDENTIFIER PRIMARY KEY);
+
+    INSERT INTO @orphans (Id)
+    SELECT s.Id FROM Shares s WITH (FORCESEEK, INDEX (IX_Shares_UserId))
     WHERE s.UserId IN (SELECT DISTINCT UserId FROM deleted)
       AND NOT EXISTS (SELECT 1 FROM Files f WHERE f.GUID = s.ItemId AND f.UserId = s.UserId);
+
+    IF EXISTS (SELECT 1 FROM @orphans)
+        DELETE FROM Shares WHERE Id IN (SELECT Id FROM @orphans);
 END
 GO
 

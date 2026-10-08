@@ -161,7 +161,9 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = "SELECT GUID, UserId FROM Files WHERE TrashRootId = GUID AND DeletedAt < @Cutoff";
+        // READPAST: rows locked by someone else's delete are skipped (and picked up next run)
+        // instead of the scan blocking on, or deadlocking with, that delete
+        const string query = "SELECT GUID, UserId FROM Files WITH (READPAST) WHERE TrashRootId = GUID AND DeletedAt < @Cutoff";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@Cutoff", cutoffUtc);
