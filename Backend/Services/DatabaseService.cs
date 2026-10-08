@@ -158,7 +158,7 @@ public partial class DatabaseServices
         command.Parameters.AddWithValue("@GUID", fileId);
         command.Parameters.AddWithValue("@UserId", userId);
 
-        await command.ExecuteNonQueryAsync();
+        await RetryOnDeadlockAsync(() => command.ExecuteNonQueryAsync());
     }
 
 
@@ -550,7 +550,10 @@ public partial class DatabaseServices
 
 
     // Remove user and all file metadata from database and delete files from storage
-    public async Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs)
+    public Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs) =>
+        RetryOnDeadlockAsync(() => DeleteUserAndFilesOnceAsync(userId, fs));
+
+    private async Task<HttpReturnResult> DeleteUserAndFilesOnceAsync(string userId, FileServices fs)
     {
         var files = new List<string>();
 
@@ -584,7 +587,7 @@ public partial class DatabaseServices
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not SqlException { Number: DeadlockErrorNumber }) // retried by the caller
         {
             await transaction.RollbackAsync();
             _logger.LogError(ex, "Failed to delete user {UserId} and their files", userId);
@@ -592,6 +595,7 @@ public partial class DatabaseServices
         }
 
         // Remove all user's files from storage after successful DB transaction
+        await DeleteThumbnailRecordsAsync(files);
         await fs.DeleteAllFilesFromUser(files);
 
         return new HttpReturnResult(true, "User's files and account deleted");

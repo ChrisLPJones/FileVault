@@ -251,7 +251,11 @@ GO
 -- One row per image file that has been thumbnailed. The thumbnail itself is
 -- stored encrypted on disk (StorageRoot/thumbnails/<file GUID>) and doesn't
 -- count towards the quota. WrappedKey NULL means the image couldn't be
--- thumbnailed, so it isn't retried on every request. Rows go with the file.
+-- thumbnailed, so it isn't retried on every request. The API removes a file's
+-- row after deleting the file. There's deliberately no ON DELETE CASCADE
+-- foreign key or trigger: both deadlocked with concurrent deletes and the
+-- recursive delete trigger. A row left behind is harmless (lookups join Files,
+-- and GUIDs aren't reused).
 IF NOT EXISTS (SELECT *
 FROM INFORMATION_SCHEMA.TABLES
 WHERE TABLE_NAME = 'FileThumbnails')
@@ -263,8 +267,7 @@ BEGIN
         Size BIGINT NULL,
         MimeType NVARCHAR(50) NULL,
         CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT PK_FileThumbnails PRIMARY KEY CLUSTERED (FileGuid),
-        CONSTRAINT FK_FileThumbnails_Files FOREIGN KEY (FileGuid) REFERENCES Files(GUID) ON DELETE CASCADE
+        CONSTRAINT PK_FileThumbnails PRIMARY KEY CLUSTERED (FileGuid)
     );
     PRINT 'Table "FileThumbnails" created.';
 END
@@ -272,6 +275,12 @@ ELSE
 BEGIN
     PRINT 'Table "FileThumbnails" already exists.';
 END
+GO
+
+-- Earlier development versions of this table had a cascading foreign key and a trigger
+IF EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_FileThumbnails_Files')
+    ALTER TABLE FileThumbnails DROP CONSTRAINT FK_FileThumbnails_Files;
+DROP TRIGGER IF EXISTS TR_Files_DeleteThumbnails;
 GO
 
 ------------------------------------------------------------

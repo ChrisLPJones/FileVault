@@ -20,7 +20,7 @@ public class ThumbnailService(IConfiguration config, FileEncryption encryption, 
         new(["jpg", "jpeg", "png", "gif", "webp", "bmp"], StringComparer.OrdinalIgnoreCase);
 
     // One generation per file at a time, and only a few at once (decoding is CPU and memory heavy)
-    private static readonly ConcurrentDictionary<string, Task> InFlight = new();
+    private static readonly ConcurrentDictionary<string, Lazy<Task>> InFlight = new();
     private static readonly SemaphoreSlim Gate = new(Math.Max(1, Environment.ProcessorCount / 2));
 
     private readonly string _storageRoot = config.GetValue<string>("StorageRoot")
@@ -58,14 +58,15 @@ public class ThumbnailService(IConfiguration config, FileEncryption encryption, 
             if (file == null || file.IsDirectory || !IsSupported(file.Name) || file.Size > MaxSourceBytes)
                 return null;
 
-            var task = InFlight.GetOrAdd(file.Guid, _ => CreateAsync(file, fs, db));
+            // Lazy, because GetOrAdd may run the factory for several racing callers
+            var creation = InFlight.GetOrAdd(file.Guid, _ => new Lazy<Task>(() => CreateAsync(file, fs, db)));
             try
             {
-                await task;
+                await creation.Value;
             }
             finally
             {
-                InFlight.TryRemove(new KeyValuePair<string, Task>(file.Guid, task));
+                InFlight.TryRemove(new KeyValuePair<string, Lazy<Task>>(file.Guid, creation));
             }
 
             record = await db.GetThumbnailAsync(fileId, userId);
@@ -93,9 +94,14 @@ public class ThumbnailService(IConfiguration config, FileEncryption encryption, 
     {
         await Gate.WaitAsync();
         var path = StoredPath(_storageRoot, file.Guid);
-        var tempPath = path + ".creating";
+        var tempPath = $"{path}.{Guid.NewGuid():N}.creating";
         try
         {
+            // Another request may have made it while this one was waiting; a thumbnail is
+            // never replaced, since requests may be reading it
+            if (await db.HasThumbnailRecordAsync(file.Guid))
+                return;
+
             // Decrypt into memory first: the decrypting stream returns at most one 64 KB chunk per
             // read, and some decoders (PNG) treat a short read as the end of the file
             using var plain = new MemoryStream((int)Math.Min(file.Size, int.MaxValue));
@@ -120,7 +126,7 @@ public class ThumbnailService(IConfiguration config, FileEncryption encryption, 
                 await using (var output = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous))
                     size = await FileEncryption.EncryptAsync(input, output, dataKey);
 
-                File.Move(tempPath, path, overwrite: true);
+                File.Move(tempPath, path, overwrite: true); // replaces a leftover from a failed attempt
                 if (!await db.SaveThumbnailAsync(file.Guid, wrappedKey, size, MimeType))
                     File.Delete(path); // the file was deleted while its thumbnail was being made
             }

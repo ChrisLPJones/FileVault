@@ -1,6 +1,7 @@
 using Backend.Services;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
@@ -74,6 +75,18 @@ namespace Backend.Test
 
         private string ThumbnailPath(string fileId) =>
             ThumbnailService.StoredPath(_factory.Services.GetRequiredService<IConfiguration>().GetValue<string>("StorageRoot")!, fileId);
+
+        // How many of these files still have a FileThumbnails row
+        private async Task<int> ThumbnailRowsAsync(params string[] fileGuids)
+        {
+            var connectionString = _factory.Services.GetRequiredService<IConfiguration>().GetConnectionString("DefaultConnection");
+            await using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync();
+            await using var command = new SqlCommand(
+                "SELECT COUNT(*) FROM FileThumbnails WHERE FileGuid IN (SELECT value FROM OPENJSON(@Guids))", connection);
+            command.Parameters.AddWithValue("@Guids", JsonSerializer.Serialize(fileGuids));
+            return (int)(await command.ExecuteScalarAsync())!;
+        }
 
         [Fact]
         public async Task Thumbnail_IsMadeOnFirstRequest_Scaled_Encrypted_AndCacheable()
@@ -262,9 +275,11 @@ namespace Backend.Test
             File.Exists(ThumbnailPath(single)).Should().BeFalse();
             File.Exists(ThumbnailPath(inFolder)).Should().BeFalse();
             File.Exists(ThumbnailPath(kept)).Should().BeTrue();
+            (await ThumbnailRowsAsync(single, inFolder, kept)).Should().Be(1);
 
             (await client.DeleteAsync("/user")).StatusCode.Should().Be(HttpStatusCode.OK);
             File.Exists(ThumbnailPath(kept)).Should().BeFalse();
+            (await ThumbnailRowsAsync(kept)).Should().Be(0);
         }
 
         [Fact]

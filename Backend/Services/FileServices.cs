@@ -534,6 +534,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
             var storedFiles = await db.GetFileGuidsInTreeAsync(fileId, userId);
 
             await db.DeleteFileMetadata(fileId, userId);
+            await db.DeleteThumbnailRecordsAsync(storedFiles);
 
             // Metadata is gone, so remove the stored files (missing ones are ignored)
             await DeleteAllFilesFromUser(storedFiles);
