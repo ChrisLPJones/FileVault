@@ -299,3 +299,27 @@ EXEC sp_settriggerorder @triggername = 'TR_Files_DeleteShares', @order = 'Last',
 GO
 
 PRINT 'Share cleanup trigger created.';
+
+------------------------------------------------------------
+-- RECYCLE BIN
+------------------------------------------------------------
+-- Deleting a file or folder only marks it (and everything inside it) as
+-- deleted. TrashRootId is the GUID of the item the user deleted, shared by
+-- everything that went into the bin with it; the bin lists the rows where
+-- TrashRootId = GUID. ParentId and FilePath are kept so items can go back
+-- where they came from. Emptying the bin deletes the rows for real (the
+-- recursive delete trigger above still removes descendants).
+IF COL_LENGTH('Files', 'DeletedAt') IS NULL
+BEGIN
+    ALTER TABLE Files ADD DeletedAt DATETIME2 NULL, TrashRootId NVARCHAR(100) NULL;
+    PRINT 'Columns "Files.DeletedAt/TrashRootId" added.';
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Files_UserId_TrashRootId' AND object_id = OBJECT_ID('Files'))
+BEGIN
+    -- Not a filtered index: sqlcmd runs this script with QUOTED_IDENTIFIER off, which filtered indexes need on
+    CREATE INDEX IX_Files_UserId_TrashRootId ON Files (UserId, TrashRootId);
+    PRINT 'Index "IX_Files_UserId_TrashRootId" created.';
+END
+GO

@@ -3,6 +3,7 @@ import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
 import { useFiles } from "../../contexts/FilesContext";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { useSearch } from "../../contexts/SearchContext";
+import { useRecycleBin } from "../../contexts/RecycleBinContext";
 import { getParentPath } from "../../utils/getParentPath";
 import { formatBytes } from "../../utils/formatBytes";
 import "./SearchResults.scss";
@@ -28,6 +29,7 @@ const SearchResults = () => {
   const { files } = useFiles();
   const { term, clearSearch, setRevealPath } = useSearch();
   const { setCurrentPath, onFolderChange } = useFileNavigation();
+  const { closeBin } = useRecycleBin();
 
   const matches = useMemo(() => {
     const needle = term.toLocaleLowerCase();
@@ -37,6 +39,7 @@ const SearchResults = () => {
   }, [files, term]);
 
   const open = (file) => {
+    closeBin();
     const folder = getParentPath(file.path);
     setCurrentPath(folder);
     onFolderChange?.(folder);

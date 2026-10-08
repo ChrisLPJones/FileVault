@@ -117,6 +117,8 @@ namespace Backend
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();
             builder.Services.AddScoped<ShareService>();
+            builder.Services.AddScoped<TrashService>();
+            builder.Services.AddHostedService<StorageCleanupService>();
             builder.Services.AddAuthorization();
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(option =>
@@ -180,6 +182,7 @@ namespace Backend
             app.MapHealthCheckRoutes();
             app.MapAuthRoutes();
             app.MapShareRoutes();
+            app.MapTrashRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");

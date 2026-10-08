@@ -205,7 +205,19 @@ namespace Backend.Test
 
             (await owner.DeleteAsync($"/delete/{folderId}")).StatusCode.Should().Be(HttpStatusCode.OK);
 
+            // In the bin: the links stop working but are kept, and work again after a restore
             var visitor = Anonymous();
+            (await visitor.GetAsync($"/s/{folderToken}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await visitor.PostAsJsonAsync($"/s/{innerToken}/download", new { })).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await ListSharesAsync(owner)).Count(s => s.GetProperty("itemInBin").GetBoolean()).Should().Be(2);
+
+            (await owner.PostAsJsonAsync("/trash/restore", new { ids = new[] { folderId } })).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await visitor.GetAsync($"/s/{innerToken}")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            // Deleted for good: the links go too
+            (await owner.DeleteAsync($"/delete/{folderId}")).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await owner.DeleteAsync("/trash")).StatusCode.Should().Be(HttpStatusCode.OK);
+
             (await visitor.GetAsync($"/s/{folderToken}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
             (await visitor.GetAsync($"/s/{innerToken}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
             (await visitor.GetAsync($"/s/{keptToken}")).StatusCode.Should().Be(HttpStatusCode.OK);

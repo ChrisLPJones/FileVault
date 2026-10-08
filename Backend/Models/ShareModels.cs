@@ -27,7 +27,8 @@ namespace Backend.Models
         DateTime CreatedAt,
         DateTime? ExpiresAt,
         bool HasPassword,
-        int DownloadCount);
+        int DownloadCount,
+        bool ItemInBin); // the link doesn't work while its item is in the recycle bin
 
     // POST /shares response. The token is only ever returned here.
     public record CreatedShare(

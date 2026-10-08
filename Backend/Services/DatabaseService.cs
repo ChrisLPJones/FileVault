@@ -176,7 +176,7 @@ public partial class DatabaseServices
 
 
 
-    // Get a single file or folder owned by the user, or null if it doesn't exist
+    // Get a single file or folder owned by the user, or null if it doesn't exist or is in the recycle bin
     public async Task<FileRecord?> GetItemAsync(string guid, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
@@ -184,7 +184,7 @@ public partial class DatabaseServices
 
         const string query = @"
             SELECT GUID, FileName, isDirectory, FilePath, ParentId, Size, MimeType, WrappedKey
-            FROM Files WHERE GUID = @GUID AND UserId = @UserId";
+            FROM Files WHERE GUID = @GUID AND UserId = @UserId AND DeletedAt IS NULL";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@GUID", guid);
@@ -196,7 +196,7 @@ public partial class DatabaseServices
 
 
 
-    // Get an item and everything below it, parents before children
+    // Get an item and everything below it, parents before children (skipping anything in the recycle bin)
     public async Task<List<FileRecord>> GetTreeAsync(string guid, string userId)
     {
         var items = new List<FileRecord>();
@@ -206,11 +206,11 @@ public partial class DatabaseServices
 
         const string query = @"
             WITH Tree AS (
-                SELECT GUID, 0 AS Depth FROM Files WHERE GUID = @GUID AND UserId = @UserId
+                SELECT GUID, 0 AS Depth FROM Files WHERE GUID = @GUID AND UserId = @UserId AND DeletedAt IS NULL
                 UNION ALL
                 SELECT f.GUID, t.Depth + 1 FROM Files f
                 INNER JOIN Tree t ON f.ParentId = t.GUID
-                WHERE f.UserId = @UserId
+                WHERE f.UserId = @UserId AND f.DeletedAt IS NULL
             )
             SELECT f.GUID, f.FileName, f.isDirectory, f.FilePath, f.ParentId, f.Size, f.MimeType, f.WrappedKey
             FROM Files f INNER JOIN Tree t ON f.GUID = t.GUID
@@ -240,7 +240,7 @@ public partial class DatabaseServices
         // Older rows may store root as '' instead of NULL
         const string query = @"
             SELECT FileName FROM Files
-            WHERE UserId = @UserId
+            WHERE UserId = @UserId AND DeletedAt IS NULL
               AND ((@ParentId IS NULL AND (ParentId IS NULL OR ParentId = '')) OR ParentId = @ParentId)
               AND (@ExcludeGuid IS NULL OR GUID <> @ExcludeGuid)";
 
@@ -362,7 +362,7 @@ public partial class DatabaseServices
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, FileName, FilePath, GUID, UserId, isDirectory FROM Files WHERE GUID = @GUID AND UserId = @UserId AND isDirectory = 1";
+        string query = "SELECT Id, FileName, FilePath, GUID, UserId, isDirectory FROM Files WHERE GUID = @GUID AND UserId = @UserId AND isDirectory = 1 AND DeletedAt IS NULL";
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@GUID", folderId);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -386,7 +386,7 @@ public partial class DatabaseServices
 
 
 
-    // Retrieve all filenames that belong to a specific user
+    // Retrieve all files and folders that belong to a specific user (not those in the recycle bin)
     public async Task<List<FileModel>> GetFilesFromDb(string userId)
     {
         var filesList = new List<FileModel>();
@@ -394,7 +394,7 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, FileName, FilePath, UpdatedAt, ISNULL(CreatedAt, UpdatedAt) AS CreatedAt, GUID, isDirectory, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
+        string query = "SELECT Id, FileName, FilePath, UpdatedAt, ISNULL(CreatedAt, UpdatedAt) AS CreatedAt, GUID, isDirectory, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId AND DeletedAt IS NULL";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);

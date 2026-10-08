@@ -13,6 +13,7 @@ const describe = (share, now) => {
     else if (new Date(share.expiresAt) <= now) parts.push("expired");
     else parts.push(`expires ${new Date(share.expiresAt).toLocaleString()}`);
     if (share.hasPassword) parts.push("password");
+    if (share.itemInBin) parts.push("not working while the item is in the recycle bin");
     parts.push(`${share.downloadCount} ${share.downloadCount === 1 ? "download" : "downloads"}`);
     return parts.join(" · ");
 };

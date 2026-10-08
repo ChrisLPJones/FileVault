@@ -26,6 +26,14 @@ function Dashboard() {
     const [currentPath, setCurrentPath] = useState("");
     const [error, setError] = useState(null);
     const [maxFileSize, setMaxFileSize] = useState(DEFAULT_MAX_UPLOAD_BYTES);
+    // Short confirmation (e.g. "Moved ... to the recycle bin") that hides itself
+    const [notice, setNotice] = useState(null);
+
+    useEffect(() => {
+        if (!notice) return;
+        const timer = setTimeout(() => setNotice(null), 6000);
+        return () => clearTimeout(timer);
+    }, [notice]);
 
     // Initial load
     useEffect(() => {
@@ -74,7 +82,11 @@ function Dashboard() {
         runAction(() => renameAPI(file._id, newName), "Could not rename item");
 
     const handleDelete = (filesToDelete) =>
-        runAction(() => deleteAPI(filesToDelete.map((file) => file._id)), "Could not delete items");
+        runAction(async () => {
+            await deleteAPI(filesToDelete.map((file) => file._id));
+            const what = filesToDelete.length === 1 ? `"${filesToDelete[0].name}"` : `${filesToDelete.length} items`;
+            setNotice(`Moved ${what} to the recycle bin`);
+        }, "Could not delete items");
 
     const handlePaste = (copiedItems, destinationFolder, operationType) => {
         const ids = copiedItems.map((item) => item._id);
@@ -103,6 +115,14 @@ function Dashboard() {
                 <div className="dashboard-error" role="alert">
                     <span>{error}</span>
                     <button type="button" onClick={() => setError(null)} aria-label="Dismiss error">
+                        ×
+                    </button>
+                </div>
+            )}
+            {notice && !error && (
+                <div className="dashboard-notice" role="status">
+                    <span>{notice}</span>
+                    <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss">
                         ×
                     </button>
                 </div>

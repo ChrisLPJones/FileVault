@@ -4,13 +4,17 @@ import { getParentPath } from "../../utils/getParentPath";
 import { useFiles } from "../../contexts/FilesContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
 import NavUser from "./NavUser";
-import { MdMenu } from "react-icons/md";
+import { MdMenu, MdOutlineDelete } from "react-icons/md";
+import { useRecycleBin } from "../../contexts/RecycleBinContext";
+import { useSelection } from "../../contexts/SelectionContext";
 import "./NavigationPane.scss";
 
 const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
   const [foldersTree, setFoldersTree] = useState([]);
   const { files } = useFiles();
   const t = useTranslation();
+  const { isBinOpen, openBin } = useRecycleBin();
+  const { setSelectedFiles } = useSelection();
 
   const createChildRecursive = (path, foldersStruct) => {
     if (!foldersStruct[path]) return []; // No children for this path (folder)
@@ -56,6 +60,19 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
           <div className="empty-nav-pane">{t("nothingHereYet")}</div>
         )}
       </div>
+      <button
+        type="button"
+        className={`sb-recycle-bin ${isBinOpen ? "active" : ""}`}
+        title="Recycle bin"
+        aria-pressed={isBinOpen}
+        onClick={() => {
+          setSelectedFiles([]); // the toolbar's actions don't apply in the bin
+          openBin();
+        }}
+      >
+        <MdOutlineDelete size={22} aria-hidden="true" />
+        <span>Recycle bin</span>
+      </button>
       <NavUser compact={compact} />
     </div>
   );

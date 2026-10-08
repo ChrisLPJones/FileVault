@@ -50,7 +50,8 @@ public partial class DatabaseServices
 
         const string query = @"
             SELECT s.Id, s.ItemId, f.FileName, f.isDirectory, s.CreatedAt, s.ExpiresAt,
-                   CAST(CASE WHEN s.PasswordHash IS NULL THEN 0 ELSE 1 END AS BIT), s.DownloadCount
+                   CAST(CASE WHEN s.PasswordHash IS NULL THEN 0 ELSE 1 END AS BIT), s.DownloadCount,
+                   CAST(CASE WHEN f.DeletedAt IS NULL THEN 0 ELSE 1 END AS BIT)
             FROM Shares s
             INNER JOIN Files f ON f.GUID = s.ItemId AND f.UserId = s.UserId
             WHERE s.UserId = @UserId AND s.RevokedAt IS NULL
@@ -70,7 +71,8 @@ public partial class DatabaseServices
                 AsUtc(reader.GetDateTime(4)),
                 AsUtc(reader, 5),
                 reader.GetBoolean(6),
-                reader.GetInt32(7)));
+                reader.GetInt32(7),
+                reader.GetBoolean(8)));
         }
 
         return shares;

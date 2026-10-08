@@ -11,6 +11,7 @@ import { BiRename } from "react-icons/bi";
 import { FaListUl, FaRegPaste } from "react-icons/fa6";
 import LayoutToggler from "./LayoutToggler";
 import SearchBox from "./SearchBox";
+import { useRecycleBin } from "../../contexts/RecycleBinContext";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { useSelection } from "../../contexts/SelectionContext";
 import { useClipBoard } from "../../contexts/ClipboardContext";
@@ -25,6 +26,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
   const { selectedFiles, setSelectedFiles, handleDownload } = useSelection();
   const { clipBoard, setClipBoard, handleCutCopy, handlePasting } = useClipBoard();
   const { activeLayout } = useLayout();
+  const { isBinOpen } = useRecycleBin();
   const t = useTranslation();
 
   // Toolbar Items
@@ -98,6 +100,18 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
       )}
     </div>
   );
+
+  // The recycle bin has its own buttons; only search, view and refresh apply
+  if (isBinOpen) {
+    return (
+      <div className="toolbar">
+        <div className="fm-toolbar">
+          <div />
+          {rightGroup}
+        </div>
+      </div>
+    );
+  }
 
   // Selected File/Folder Actions
   if (selectedFiles.length > 0) {

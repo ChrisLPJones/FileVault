@@ -193,25 +193,25 @@ namespace Backend.Routes
                 .Produces<ErrorResponse>(404)
                 .Produces<ErrorResponse>(413).RequireAuthorization();
 
-            // Deletes a file or folder (and everything inside it) for the authenticated user
+            // Moves a file or folder (and everything inside it) to the recycle bin
             app.MapDelete("/delete/{fileId}", async (
                 ClaimsPrincipal user,
                 string fileId,
-                FileServices fs,
+                TrashService trash,
                 DatabaseServices db) =>
             {
-                return Success(await fs.DeleteFile(fileId, db, user.GetUserId()));
+                return Success(await trash.MoveToTrashAsync(fileId, db, user.GetUserId()));
             })
                 .WithTags("Files")
-                .WithSummary("Delete a file or folder and everything inside it")
+                .WithSummary("Move a file or folder and everything inside it to the recycle bin")
                 .Produces<SuccessResponse>()
-                .Produces<ErrorResponse>(400).RequireAuthorization();
+                .Produces<ErrorResponse>(404).RequireAuthorization();
 
-            // Deletes several files/folders for the authenticated user
+            // Moves several files/folders to the recycle bin
             app.MapDelete("/delete", async (
                 ClaimsPrincipal user,
                 [FromBody] DeleteRequest request,
-                FileServices fs,
+                TrashService trash,
                 DatabaseServices db) =>
             {
                 var userId = user.GetUserId();
@@ -240,11 +240,11 @@ namespace Backend.Routes
                 var failed = new List<string>();
                 foreach (var fileId in ids.Distinct())
                 {
-                    // Skip items already removed, e.g. a child of a folder deleted earlier in this request
-                    if (await db.IsFileAsync(fileId, userId) == null)
+                    // Skip items already gone or in the bin, e.g. a child of a folder deleted earlier in this request
+                    if (await db.GetItemAsync(fileId, userId) == null)
                         continue;
 
-                    var result = await fs.DeleteFile(fileId, db, userId);
+                    var result = await trash.MoveToTrashAsync(fileId, db, userId);
                     if (!result.Success)
                         failed.Add(fileId);
                 }
@@ -252,10 +252,10 @@ namespace Backend.Routes
                 if (failed.Count > 0)
                     return Results.Json(new { error = "Some items could not be deleted", failed }, statusCode: 500);
 
-                return Results.Ok(new { success = "Deleted Successfully" });
+                return Results.Ok(new { success = "Moved to the recycle bin" });
             })
                 .WithTags("Files")
-                .WithSummary("Delete several files/folders (body: { ids: [...] })")
+                .WithSummary("Move several files/folders to the recycle bin (body: { ids: [...] })")
                 .Produces<SuccessResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(500).RequireAuthorization();

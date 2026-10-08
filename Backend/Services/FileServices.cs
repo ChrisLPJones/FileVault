@@ -250,7 +250,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     }
 
     // "report.pdf" -> "report (1).pdf" until the name is free
-    private static string GetUniqueName(string name, bool isDirectory, HashSet<string> taken)
+    public static string GetUniqueName(string name, bool isDirectory, HashSet<string> taken)
     {
         if (!taken.Contains(name))
             return name;

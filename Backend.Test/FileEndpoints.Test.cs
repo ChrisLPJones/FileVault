@@ -206,7 +206,11 @@ namespace Backend.Test
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be($"{{\"success\":\"File deleted: {_fileId}\"}}");
+            content.Should().Be("{\"success\":\"Moved to the recycle bin\"}");
+
+            // The stored file stays until the item is deleted from the bin
+            File.Exists(StoredFilePath(_fileId!)).Should().BeTrue();
+            (await _client.DeleteAsync($"/trash/{_fileId}")).StatusCode.Should().Be(HttpStatusCode.OK);
             File.Exists(StoredFilePath(_fileId!)).Should().BeFalse();
         }
 
@@ -251,6 +255,8 @@ namespace Backend.Test
             var response = await _client.SendAsync(request);
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
+            // Deleting moves to the recycle bin; emptying it removes the stored files
+            (await _client.DeleteAsync("/trash")).StatusCode.Should().Be(HttpStatusCode.OK);
             File.Exists(StoredFilePath(innerId)).Should().BeFalse();
             File.Exists(StoredFilePath(nestedId)).Should().BeFalse();
 
@@ -388,6 +394,7 @@ namespace Backend.Test
 
             // Deleting the copy leaves the original's stored file alone
             (await _client.DeleteAsync($"/delete/{IdAt(files, "/album (1)")}")).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await _client.DeleteAsync($"/trash/{IdAt(files, "/album (1)")}")).StatusCode.Should().Be(HttpStatusCode.OK);
             File.Exists(StoredFilePath(copyId)).Should().BeFalse();
             File.Exists(StoredFilePath(originalId)).Should().BeTrue();
 
