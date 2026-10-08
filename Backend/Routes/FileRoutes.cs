@@ -104,11 +104,15 @@ namespace Backend.Routes
 
             // Streams a file belonging to the authenticated user (supports range requests)
             app.MapGet("/download/{fileId}", async (
+                HttpContext http,
                 ClaimsPrincipal user,
                 string fileId,
                 FileServices fs,
                 DatabaseServices db) =>
             {
+                // Any file type can be stored, so downloads are always attachments (fileDownloadName)
+                // and the browser must not guess a different type than the one sent
+                http.Response.Headers["X-Content-Type-Options"] = "nosniff";
                 var download = await fs.GetDownloadAsync(fileId, db, user.GetUserId());
                 if (!download.Ok)
                     return Error(download.Error);
@@ -128,11 +132,13 @@ namespace Backend.Routes
 
             // Downloads several files and/or folders as a single zip
             app.MapPost("/download/zip", async (
+                HttpContext http,
                 ClaimsPrincipal user,
                 [FromBody] ZipDownloadRequest request,
                 FileServices fs,
                 DatabaseServices db) =>
             {
+                http.Response.Headers["X-Content-Type-Options"] = "nosniff";
                 var zip = await fs.CreateZipAsync(request?.Ids, db, user.GetUserId());
                 if (!zip.Ok)
                     return Error(zip.Error);
