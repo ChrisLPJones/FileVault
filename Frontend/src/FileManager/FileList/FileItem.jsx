@@ -3,6 +3,7 @@ import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
 import FileThumbnail from "../../components/FileThumbnail/FileThumbnail";
 import FavouriteToggle from "../../components/FavouriteToggle/FavouriteToggle";
 import { MdStar } from "react-icons/md";
+import { useLongPress } from "../../hooks/useLongPress";
 import CreateFolderAction from "../Actions/CreateFolder/CreateFolder.action";
 import RenameAction from "../Actions/Rename/Rename.action";
 import { getDataSize } from "../../utils/getDataSize";
@@ -92,7 +93,7 @@ const FileItem = ({
 
   const handleFileSelection = (e) => {
     e.stopPropagation();
-    if (file.isEditing) return;
+    if (file.isEditing || longPress.wasLongPress()) return;
 
     handleFileRangeSelection(e.shiftKey, e.ctrlKey);
     // Clicking a file shows it in the details pane (folders don't open it)
@@ -127,6 +128,11 @@ const FileItem = ({
     setLastSelectedFile(file);
     handleContextMenu(e, true);
   };
+
+  // Touch and hold opens the context menu (iOS doesn't fire contextmenu for a long press)
+  const longPress = useLongPress(({ clientX, clientY }) =>
+    handleItemContextMenu({ clientX, clientY, preventDefault() {}, stopPropagation() {} })
+  );
 
   // Selection Checkbox Functions
   const handleMouseOver = () => {
@@ -199,6 +205,7 @@ const FileItem = ({
       onClick={handleFileSelection}
       onKeyDown={handleOnKeyDown}
       onContextMenu={handleItemContextMenu}
+      {...longPress.handlers}
       onMouseOver={handleMouseOver}
       onMouseLeave={handleMouseLeave}
       draggable={fileSelected && draggable}
