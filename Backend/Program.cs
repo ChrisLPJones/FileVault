@@ -180,6 +180,7 @@ namespace Backend
             app.MapHealthCheckRoutes();
             app.MapAuthRoutes();
             app.MapTwoFactorRoutes();
+            app.MapSessionRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");

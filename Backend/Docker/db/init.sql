@@ -303,3 +303,46 @@ BEGIN
     PRINT 'Table "LoginChallenges" created.';
 END
 GO
+
+------------------------------------------------------------
+-- ACTIVE SESSIONS
+------------------------------------------------------------
+-- One row per signed-in device. Every refresh token in a rotation chain belongs
+-- to the same session; a session is active while it has an unrevoked, unexpired
+-- token, so revoking its tokens signs it out.
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'Sessions')
+BEGIN
+    CREATE TABLE Sessions
+    (
+        Id UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_Sessions_Id DEFAULT NEWID(),
+        UserId UNIQUEIDENTIFIER NOT NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Sessions_CreatedAt DEFAULT SYSUTCDATETIME(),
+        LastUsedAt DATETIME2 NOT NULL CONSTRAINT DF_Sessions_LastUsedAt DEFAULT SYSUTCDATETIME(),
+        Device NVARCHAR(100) NOT NULL,
+        IpAddress NVARCHAR(45) NULL,
+        CONSTRAINT PK_Sessions PRIMARY KEY CLUSTERED (Id ASC),
+        CONSTRAINT FK_Sessions_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_Sessions_UserId ON Sessions (UserId);
+    PRINT 'Table "Sessions" created.';
+END
+GO
+
+-- The session a refresh token belongs to. NULL for tokens issued before sessions
+-- existed; those start a session the next time they're used. (No foreign key:
+-- Users already cascades to both tables, and SQL Server allows only one cascade path.)
+IF COL_LENGTH('RefreshTokens', 'SessionId') IS NULL
+BEGIN
+    ALTER TABLE RefreshTokens ADD SessionId UNIQUEIDENTIFIER NULL;
+    PRINT 'Column "RefreshTokens.SessionId" added.';
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_RefreshTokens_SessionId' AND object_id = OBJECT_ID('RefreshTokens'))
+BEGIN
+    CREATE INDEX IX_RefreshTokens_SessionId ON RefreshTokens (SessionId);
+    PRINT 'Index "IX_RefreshTokens_SessionId" created.';
+END
+GO

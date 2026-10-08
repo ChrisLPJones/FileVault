@@ -17,3 +17,12 @@ export const disableTwoFactorAPI = async (password, { code, recoveryCode }) =>
 
 export const regenerateRecoveryCodesAPI = async (code) =>
     (await api.post("/user/2fa/recovery-codes", { code })).data.recoveryCodes;
+
+// Active sessions
+
+// [{ id, device, ipAddress, createdAt, lastActiveAt, isCurrent }], this device first
+export const getSessionsAPI = async () => (await api.get("/user/sessions")).data;
+
+export const revokeSessionAPI = async (id) => (await api.delete(`/user/sessions/${encodeURIComponent(id)}`)).data;
+
+export const revokeOtherSessionsAPI = async () => (await api.post("/user/sessions/revoke-others")).data;
