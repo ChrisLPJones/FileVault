@@ -36,9 +36,9 @@ namespace Backend.Test
             WithHost(builder => builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(settings.ToDictionary(s => s.key, s => (string?)s.value))));
 
-        protected WebApplicationFactory<Program> WithHost(Action<IWebHostBuilder> configure)
+        protected WebApplicationFactory<Program> WithHost(Action<IWebHostBuilder> configure, WebApplicationFactory<Program>? from = null)
         {
-            var factory = _baseFactory.WithWebHostBuilder(configure);
+            var factory = (from ?? _baseFactory).WithWebHostBuilder(configure);
             _extraFactories.Add(factory);
             return factory;
         }

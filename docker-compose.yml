@@ -52,6 +52,14 @@ services:
       Jwt__Key: ${JWT_KEY:?Set JWT_KEY in .env (see .env.example)}
       Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:?Set ENCRYPTION_MASTER_KEY in .env (see .env.example)}
       Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:5173}
+      # Links in emails point here
+      App__FrontendUrl: ${FRONTEND_URL:-http://localhost:5173}
+      # Optional SMTP for password reset / email confirmation (otherwise logged)
+      Email__Smtp__Host: ${SMTP_HOST:-}
+      Email__Smtp__Port: ${SMTP_PORT:-587}
+      Email__Smtp__User: ${SMTP_USER:-}
+      Email__Smtp__Password: ${SMTP_PASSWORD:-}
+      Email__Smtp__From: ${SMTP_FROM:-}
     ports:
       - "3000:8080"
     volumes:

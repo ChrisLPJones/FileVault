@@ -32,7 +32,8 @@ namespace Backend.Routes
                 HttpRequest request,
                 DatabaseServices db,
                 AuthServices auth,
-                FileServices fs) =>
+                FileServices fs,
+                AccountEmailService emails) =>
             {
                 var user = await ReadJsonAsync<UserModel>(request);
 
@@ -56,7 +57,11 @@ namespace Backend.Routes
                 // Starter folders (Documents, Pictures, Music, Videos) for the new account
                 var created = await db.GetUserByEmail(user.Email.Trim());
                 if (created != null)
+                {
                     await fs.CreateDefaultFoldersAsync(db, created.Id.ToString());
+                    // Ask them to confirm the address (they can use the app meanwhile)
+                    await emails.SendVerificationAsync(created, db);
+                }
 
                 return Results.Ok(new { success = $"User {$"{user.FirstName.Trim()} {user.LastName}".Trim()} registered" });
             })
@@ -139,10 +144,11 @@ namespace Backend.Routes
                     return Results.NotFound(new { error = "User not found" });
 
                 var avatar = await db.GetAvatarAsync(userId);
-                return Results.Ok(new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt));
+                return Results.Ok(new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt,
+                    await db.IsEmailVerifiedAsync(userId)));
             })
                 .WithTags("Account")
-                .WithSummary("Get the current user's name, email and when their profile picture last changed")
+                .WithSummary("Get the current user's name, email, whether it's confirmed and when their profile picture last changed")
                 .Produces<UserInfoResponse>()
                 .Produces<ErrorResponse>(404).RequireAuthorization();
 
@@ -151,7 +157,8 @@ namespace Backend.Routes
                 ClaimsPrincipal user,
                 ProfileUpdateRequest request,
                 DatabaseServices db,
-                AuthServices auth) =>
+                AuthServices auth,
+                AccountEmailService emails) =>
             {
                 var firstName = request?.FirstName?.Trim();
                 var lastName = request?.LastName?.Trim() ?? "";
@@ -171,11 +178,20 @@ namespace Backend.Routes
                     return Results.Conflict(new { error = conflict });
 
                 await db.UpdateProfileAsync(userId, firstName, lastName, email);
+                var emailChanged = !string.Equals(account.Email, email, StringComparison.OrdinalIgnoreCase);
 
                 // New access token so the email claim is current
                 account.FirstName = firstName;
                 account.LastName = lastName;
                 account.Email = email;
+
+                // A new address needs confirming
+                if (emailChanged)
+                {
+                    await db.SetEmailVerifiedAsync(userId, false);
+                    await emails.SendVerificationAsync(account, db);
+                }
+
                 return Results.Ok(new { Success = "Profile updated", Token = auth.GetJWTToken(account) });
             })
                 .WithTags("Account")

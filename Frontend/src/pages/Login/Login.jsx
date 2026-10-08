@@ -100,6 +100,7 @@ function Login() {
                             aria-describedby={errors.password ? "login-password-error" : undefined}
                         />
                         {errors.password && <div id="login-password-error" className="auth-field-error">{errors.password}</div>}
+                        <Link to="/forgot-password" className="auth-forgot">Forgot password?</Link>
                     </div>
 
                     <button type="submit" className="auth-button" disabled={submitting}>

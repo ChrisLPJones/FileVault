@@ -84,6 +84,8 @@ namespace Backend
             });
             // Public share links: viewing, and password attempts/downloads
             builder.Services.AddFixedWindowRateLimits(("share", 60), ("share-download", 20));
+            // Endpoints that send email (forgot password, resend verification)
+            builder.Services.AddFixedWindowRateLimits(("email", 5));
             // OpenAPI document (/swagger/v1/swagger.json) and interactive docs (/swagger)
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(options =>
@@ -119,6 +121,7 @@ namespace Backend
             builder.Services.AddScoped<ShareService>();
             builder.Services.AddScoped<TrashService>();
             builder.Services.AddHostedService<StorageCleanupService>();
+            builder.Services.AddEmail(builder.Configuration);
             builder.Services.AddAuthorization();
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(option =>
@@ -183,6 +186,7 @@ namespace Backend
             app.MapAuthRoutes();
             app.MapShareRoutes();
             app.MapTrashRoutes();
+            app.MapAccountEmailRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");

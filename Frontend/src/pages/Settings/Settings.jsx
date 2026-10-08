@@ -51,6 +51,7 @@ function Settings() {
 
     const [profile, setProfile] = useState({ firstName: "", lastName: "", email: "" });
     const [profileStatus, setProfileStatus] = useState(null);
+    const [savedEmail, setSavedEmail] = useState("");
     const [hasAvatar, setHasAvatar] = useState(false);
     const [savingAvatar, setSavingAvatar] = useState(false);
     const [avatarStatus, setAvatarStatus] = useState(null);
@@ -71,6 +72,7 @@ function Settings() {
             .then(([info, usageData]) => {
                 if (cancelled) return;
                 setProfile({ firstName: info.firstName, lastName: info.lastName, email: info.email });
+                setSavedEmail(info.email);
                 setHasAvatar(!!info.avatarUpdatedAt);
                 setUsage(usageData);
             })
@@ -120,7 +122,15 @@ function Settings() {
         setSavingProfile(true);
         try {
             await updateProfileAPI(profile.firstName.trim(), profile.lastName.trim(), profile.email.trim());
-            setProfileStatus({ type: "success", message: "Profile updated" });
+            // A new address has to be confirmed; the server emails a link to it
+            const emailChanged = profile.email.trim().toLowerCase() !== savedEmail.toLowerCase();
+            setSavedEmail(profile.email.trim());
+            setProfileStatus({
+                type: "success",
+                message: emailChanged
+                    ? `Profile updated. We've sent a link to ${profile.email.trim()} to confirm the new address.`
+                    : "Profile updated",
+            });
         } catch (err) {
             setProfileStatus({ type: "danger", message: getErrorMessage(err, "Could not update profile") });
         } finally {

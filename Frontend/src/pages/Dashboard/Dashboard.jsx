@@ -10,6 +10,7 @@ import { renameAPI } from "../../api/renameAPI";
 import "./Dashboard.scss";
 import FileManager from "../../FileManager/FileManager";
 import { useHeaderSlot } from "../../contexts/HeaderSlotContext";
+import VerifyEmailBanner from "../../components/VerifyEmailBanner";
 
 // Matches the API's default Storage:MaxUploadBytes until /user/usage responds
 const DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -119,6 +120,7 @@ function Dashboard() {
                     </button>
                 </div>
             )}
+            {!error && <VerifyEmailBanner />}
             {notice && !error && (
                 <div className="dashboard-notice" role="status">
                     <span>{notice}</span>

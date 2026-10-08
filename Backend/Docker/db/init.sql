@@ -340,3 +340,46 @@ BEGIN
     PRINT 'Index "IX_Files_UserId_TrashRootId" created.';
 END
 GO
+
+------------------------------------------------------------
+-- EMAIL VERIFICATION AND PASSWORD RESET
+------------------------------------------------------------
+-- New accounts start unverified; accounts that existed before this column
+-- are treated as verified.
+IF COL_LENGTH('Users', 'EmailVerified') IS NULL
+BEGIN
+    ALTER TABLE Users ADD EmailVerified BIT NOT NULL CONSTRAINT DF_Users_EmailVerified DEFAULT 0;
+    EXEC('UPDATE Users SET EmailVerified = 1');
+    PRINT 'Column "Users.EmailVerified" added (existing accounts marked verified).';
+END
+GO
+
+-- Single-use links sent by email. Purpose is 'verify-email' (Email is the
+-- address being confirmed) or 'reset-password'. Only a SHA-256 hash of each
+-- token is stored.
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'AccountTokens')
+BEGIN
+    CREATE TABLE AccountTokens
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        UserId UNIQUEIDENTIFIER NOT NULL,
+        Purpose NVARCHAR(20) NOT NULL,
+        TokenHash CHAR(64) NOT NULL,
+        Email NVARCHAR(100) NULL,
+        ExpiresAt DATETIME2 NOT NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_AccountTokens_CreatedAt DEFAULT SYSUTCDATETIME(),
+        UsedAt DATETIME2 NULL,
+        CONSTRAINT PK_AccountTokens PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT UQ_AccountTokens_TokenHash UNIQUE NONCLUSTERED (TokenHash),
+        CONSTRAINT FK_AccountTokens_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_AccountTokens_UserId ON AccountTokens (UserId);
+    PRINT 'Table "AccountTokens" created.';
+END
+ELSE
+BEGIN
+    PRINT 'Table "AccountTokens" already exists.';
+END
+GO
