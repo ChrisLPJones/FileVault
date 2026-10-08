@@ -294,13 +294,12 @@ function Settings() {
                         />
                     </div>
                     <div className="form-group">
-                        <label htmlFor="settings-last-name">Last name</label>
+                        <label htmlFor="settings-last-name">Last name <span className="settings-optional">(optional)</span></label>
                         <input
                             id="settings-last-name"
                             type="text"
                             value={profile.lastName}
                             maxLength={50}
-                            required
                             onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
                         />
                     </div>

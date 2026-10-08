@@ -124,6 +124,30 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task Login_WithOldLoginField_StillWorks()
+        {
+            // A tab opened before the email-only change still posts { login, password }
+            var client = NewClient(_factory);
+            var email = NewEmail();
+            await RegisterAsync(client, email);
+
+            var response = await client.PostAsJsonAsync("/user/login", new { login = email, password = Password });
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            _usersToDelete.Add((client, await ReadTokenAsync(response)));
+        }
+
+        [Fact]
+        public async Task Login_WithNullEmail_IsBadRequest()
+        {
+            var client = NewClient(_factory);
+
+            var response = await client.PostAsJsonAsync("/user/login", new { email = (string?)null, password = "x" });
+
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        [Fact]
         public async Task RefreshToken_ReusedAfterGrace_RevokesEverySession()
         {
             var factory = WithSettings(
@@ -196,7 +220,7 @@ namespace Backend.Test
 
         [Theory]
         [InlineData("", "Smith", "valid@example.test", "First name")]
-        [InlineData("Ann", "", "valid@example.test", "Last name")]
+        [InlineData("Ann", "Smithsonianwilliamsonbartholomewfitzgeraldhamiltons", "valid@example.test", "Last name must be 50 characters or fewer")]
         [InlineData("Ann", "Smith", "not-an-email", "Email is invalid")]
         public async Task Register_RejectsInvalidNameOrEmail(string firstName, string lastName, string email, string expectedMessage)
         {

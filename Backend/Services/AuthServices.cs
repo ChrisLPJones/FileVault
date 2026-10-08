@@ -39,8 +39,9 @@ namespace Backend.Services
 
             if (string.IsNullOrEmpty(firstName) || firstName.Length > 50)
                 return "First name is required (50 characters or fewer)";
-            if (string.IsNullOrEmpty(lastName) || lastName.Length > 50)
-                return "Last name is required (50 characters or fewer)";
+            // Last name is optional (some people have one name, and accounts from before names existed have none)
+            if (lastName?.Length > 50)
+                return "Last name must be 50 characters or fewer";
             if (string.IsNullOrEmpty(email) || email.Length > 100)
                 return "Email must be 100 characters or fewer";
 
@@ -94,7 +95,6 @@ namespace Backend.Services
             return handler.WriteToken(token);
         }
 
-        // Validates user credentials; returns the user, or null if the email/password is wrong
         // Validates credentials by email address.
         // Returns the user, or null if the email/password is wrong.
         public async Task<UserModel?> ValidateUser(LoginModel user, DatabaseServices db)
