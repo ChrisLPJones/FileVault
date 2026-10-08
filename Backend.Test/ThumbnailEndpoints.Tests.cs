@@ -146,6 +146,38 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task Thumbnail_OfALargePng_IsComplete()
+        {
+            var (client, _, _) = await NewUserAsync();
+            try
+            {
+                // Noise doesn't compress, so the file spans many 64 KB encryption chunks;
+                // the bottom half is solid red and must still be there in the thumbnail
+                using var bitmap = new SKBitmap(800, 800);
+                var random = new Random(7);
+                for (var y = 0; y < 800; y++)
+                    for (var x = 0; x < 800; x++)
+                        bitmap.SetPixel(x, y, y < 400 ? new SKColor((byte)random.Next(256), (byte)random.Next(256), (byte)random.Next(256)) : SKColors.Red);
+                using var image = SKImage.FromBitmap(bitmap);
+                var png = image.Encode(SKEncodedImageFormat.Png, 100).ToArray();
+                png.Length.Should().BeGreaterThan(5 * FileEncryption.ChunkSize);
+
+                var id = await TestAccounts.UploadAsync(client, "noise.png", png, "image/png");
+                var thumbnail = await client.GetByteArrayAsync($"/files/{id}/thumbnail");
+
+                using var decoded = SKBitmap.Decode(thumbnail);
+                decoded.Width.Should().Be(256);
+                var bottom = decoded.GetPixel(128, 250);
+                bottom.Red.Should().BeGreaterThan(200);
+                bottom.Green.Should().BeLessThan(60);
+            }
+            finally
+            {
+                await client.DeleteAsync("/user");
+            }
+        }
+
+        [Fact]
         public async Task Thumbnail_FollowsExifOrientation()
         {
             var (client, _, _) = await NewUserAsync();

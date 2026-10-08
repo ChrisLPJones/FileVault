@@ -96,9 +96,14 @@ public class ThumbnailService(IConfiguration config, FileEncryption encryption, 
         var tempPath = path + ".creating";
         try
         {
-            byte[]? thumbnail;
+            // Decrypt into memory first: the decrypting stream returns at most one 64 KB chunk per
+            // read, and some decoders (PNG) treat a short read as the end of the file
+            using var plain = new MemoryStream((int)Math.Min(file.Size, int.MaxValue));
             await using (var source = fs.OpenStoredFile(file))
-                thumbnail = await Task.Run(() => Render(source, MaxDimension));
+                await source.CopyToAsync(plain);
+            plain.Position = 0;
+
+            var thumbnail = await Task.Run(() => Render(plain, MaxDimension));
 
             if (thumbnail == null)
             {
