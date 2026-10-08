@@ -163,11 +163,14 @@ namespace Backend.Services
         public static void ClearRefreshCookie(HttpContext http) =>
             http.Response.Cookies.Delete(RefreshCookieName, RefreshCookieOptions(http, null));
 
-        // httpOnly so scripts can't read it; scoped to /user so it's only sent to refresh/logout
+        // httpOnly so scripts can't read it; scoped to /user so it's only sent to account endpoints.
+        // Secure on HTTPS requests (behind a proxy, see ForwardedHeaders:Enabled), or always with
+        // Jwt:SecureRefreshCookie.
         private static CookieOptions RefreshCookieOptions(HttpContext http, DateTime? expiresAt) => new()
         {
             HttpOnly = true,
-            Secure = http.Request.IsHttps,
+            Secure = http.Request.IsHttps ||
+                http.RequestServices.GetRequiredService<IConfiguration>().GetValue("Jwt:SecureRefreshCookie", false),
             SameSite = SameSiteMode.Strict,
             Path = "/user",
             Expires = expiresAt

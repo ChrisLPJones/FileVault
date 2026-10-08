@@ -2,6 +2,7 @@ using Backend.Routes;
 using Backend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
@@ -152,6 +153,24 @@ namespace Backend
 
             var app = builder.Build();
 
+            // Behind an HTTPS reverse proxy: take the client's IP and the original scheme from the
+            // X-Forwarded-* headers (for rate limits, the sessions list and the Secure cookie flag).
+            // Only turn this on when the API can't be reached except through the proxy. See docs/DEPLOYMENT.md.
+            if (app.Configuration.GetValue("ForwardedHeaders:Enabled", false))
+            {
+                var forwarded = new ForwardedHeadersOptions
+                {
+                    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+                };
+                // By default only loopback proxies are trusted; the proxy is usually another container
+                forwarded.KnownNetworks.Clear();
+                forwarded.KnownProxies.Clear();
+                foreach (var proxy in app.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+                    forwarded.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));
+                app.UseForwardedHeaders(forwarded);
+            }
+
+            app.UseSecurityHeaders();
             app.UseCors("AllowFrontend");
 
             // Unexpected errors: log them and return a JSON 500 instead of an HTML page or stack trace.
@@ -165,12 +184,16 @@ namespace Backend
                 await context.Response.WriteAsJsonAsync(new { error = "An internal error has occurred" });
             }));
 
-            app.UseSwagger();
-            app.UseSwaggerUI(options =>
+            // API docs only in Development, or when Swagger:Enabled is true (off by default in Docker)
+            if (app.Environment.IsDevelopment() || app.Configuration.GetValue("Swagger:Enabled", false))
             {
-                options.SwaggerEndpoint("/swagger/v1/swagger.json", "FileVault API v1");
-                options.DocumentTitle = "FileVault API";
-            });
+                app.UseSwagger();
+                app.UseSwaggerUI(options =>
+                {
+                    options.SwaggerEndpoint("/swagger/v1/swagger.json", "FileVault API v1");
+                    options.DocumentTitle = "FileVault API";
+                });
+            }
 
             // Map Routes
             app.UseAuthentication();
