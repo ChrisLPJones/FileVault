@@ -120,6 +120,7 @@ namespace Backend
             builder.Services.AddScoped<AuthServices>();
             builder.Services.AddScoped<ShareService>();
             builder.Services.AddScoped<TrashService>();
+            builder.Services.AddScoped<ChunkedUploadService>();
             builder.Services.AddHostedService<StorageCleanupService>();
             builder.Services.AddEmail(builder.Configuration);
             builder.Services.AddAuthorization();
@@ -187,6 +188,7 @@ namespace Backend
             app.MapShareRoutes();
             app.MapTrashRoutes();
             app.MapAccountEmailRoutes();
+            app.MapUploadRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");

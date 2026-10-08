@@ -383,3 +383,38 @@ BEGIN
     PRINT 'Table "AccountTokens" already exists.';
 END
 GO
+
+------------------------------------------------------------
+-- CHUNKED UPLOADS
+------------------------------------------------------------
+-- An upload in progress. Its chunks are kept (encrypted with WrappedKey)
+-- under StorageRoot/tmp/<UserId>/<Id>/ until the upload is completed,
+-- cancelled, or abandoned for 24 hours. CompletingAt is set while it is
+-- being assembled so it can't be completed twice.
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'Uploads')
+BEGIN
+    CREATE TABLE Uploads
+    (
+        Id UNIQUEIDENTIFIER NOT NULL,
+        UserId UNIQUEIDENTIFIER NOT NULL,
+        FileName NVARCHAR(255) NOT NULL,
+        Size BIGINT NOT NULL,
+        ParentId NVARCHAR(100) NULL,
+        MimeType NVARCHAR(255) NULL,
+        ChunkSize INT NOT NULL,
+        WrappedKey NVARCHAR(200) NOT NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Uploads_CreatedAt DEFAULT SYSUTCDATETIME(),
+        CompletingAt DATETIME2 NULL,
+        CONSTRAINT PK_Uploads PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT FK_Uploads_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_Uploads_UserId ON Uploads (UserId);
+    PRINT 'Table "Uploads" created.';
+END
+ELSE
+BEGIN
+    PRINT 'Table "Uploads" already exists.';
+END
+GO

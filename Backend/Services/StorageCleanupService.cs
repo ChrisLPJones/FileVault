@@ -2,7 +2,8 @@ namespace Backend.Services;
 
 // Housekeeping that runs in the background: shortly after start-up, then every
 // Storage:CleanupIntervalMinutes (default 60). Empties recycle bin entries older than
-// Storage:TrashRetentionDays. Failures are logged and retried on the next run.
+// Storage:TrashRetentionDays and removes chunked uploads abandoned for 24 hours.
+// Failures are logged and retried on the next run.
 public class StorageCleanupService(IServiceScopeFactory scopes, IConfiguration config, ILogger<StorageCleanupService> logger)
     : BackgroundService
 {
@@ -41,6 +42,17 @@ public class StorageCleanupService(IServiceScopeFactory scopes, IConfiguration c
         catch (Exception ex)
         {
             logger.LogError(ex, "Emptying expired recycle bin entries failed");
+        }
+
+        try
+        {
+            var removed = await scope.ServiceProvider.GetRequiredService<ChunkedUploadService>().CleanupAbandonedAsync(db);
+            if (removed > 0)
+                logger.LogInformation("Removed {Count} abandoned uploads", removed);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Removing abandoned uploads failed");
         }
     }
 }

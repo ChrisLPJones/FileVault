@@ -20,7 +20,8 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     public async Task<StorageUsage> GetUsageAsync(DatabaseServices db, string userId)
     {
         var (used, quota) = await db.GetStorageUsageAsync(userId);
-        return new StorageUsage(used, quota ?? config.GetValue("Storage:DefaultQuotaBytes", DefaultQuotaBytes), MaxUploadBytes(config));
+        return new StorageUsage(used, quota ?? config.GetValue("Storage:DefaultQuotaBytes", DefaultQuotaBytes), MaxUploadBytes(config),
+            ChunkedUploadService.MaxFileBytes(config));
     }
 
     public static readonly string[] DefaultFolderNames = ["Documents", "Pictures", "Music", "Videos"];
@@ -61,7 +62,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
         { StatusCode = 413 };
     }
 
-    private static string FormatBytes(long bytes)
+    public static string FormatBytes(long bytes)
     {
         string[] units = ["B", "KB", "MB", "GB", "TB"];
         double value = Math.Max(0, bytes);
