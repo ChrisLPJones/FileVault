@@ -1,0 +1,18 @@
+.file-thumbnail {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* A photo print look: thin border and the same soft shadow as the file icons */
+.file-thumbnail img {
+    display: block;
+    width: auto;
+    height: auto;
+    border-radius: 3px;
+    border: 1px solid var(--fv-file-page-edge);
+    background-color: var(--fm-surface-alt);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    object-fit: contain;
+}

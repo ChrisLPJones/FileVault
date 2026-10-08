@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
+import FileThumbnail from "../../components/FileThumbnail/FileThumbnail";
 import CreateFolderAction from "../Actions/CreateFolder/CreateFolder.action";
 import RenameAction from "../Actions/Rename/Rename.action";
 import { getDataSize } from "../../utils/getDataSize";
@@ -217,7 +218,12 @@ const FileItem = ({
             onClick={(e) => e.stopPropagation()}
           />
         )}
-        <FileTypeIcon name={file.name} path={file.path} isDirectory={file.isDirectory} size={iconSize} />
+        {/* Grid tiles show a thumbnail for images */}
+        {activeLayout === "grid" ? (
+          <FileThumbnail key={file._id ?? file.name} file={file} size={iconSize} />
+        ) : (
+          <FileTypeIcon name={file.name} path={file.path} isDirectory={file.isDirectory} size={iconSize} />
+        )}
 
         {file.isEditing ? (
           <div className={`rename-file-container ${activeLayout}`}>

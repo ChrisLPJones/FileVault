@@ -243,3 +243,33 @@ END
 GO
 
 PRINT 'Recursive delete trigger created.';
+GO
+
+------------------------------------------------------------
+-- IMAGE THUMBNAILS
+------------------------------------------------------------
+-- One row per image file that has been thumbnailed. The thumbnail itself is
+-- stored encrypted on disk (StorageRoot/thumbnails/<file GUID>) and doesn't
+-- count towards the quota. WrappedKey NULL means the image couldn't be
+-- thumbnailed, so it isn't retried on every request. Rows go with the file.
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'FileThumbnails')
+BEGIN
+    CREATE TABLE FileThumbnails
+    (
+        FileGuid NVARCHAR(100) NOT NULL,
+        WrappedKey NVARCHAR(200) NULL,
+        Size BIGINT NULL,
+        MimeType NVARCHAR(50) NULL,
+        CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT PK_FileThumbnails PRIMARY KEY CLUSTERED (FileGuid),
+        CONSTRAINT FK_FileThumbnails_Files FOREIGN KEY (FileGuid) REFERENCES Files(GUID) ON DELETE CASCADE
+    );
+    PRINT 'Table "FileThumbnails" created.';
+END
+ELSE
+BEGIN
+    PRINT 'Table "FileThumbnails" already exists.';
+END
+GO

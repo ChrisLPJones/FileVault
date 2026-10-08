@@ -75,7 +75,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     }
 
     // Open a stored file as plaintext. Rows without a key predate encryption and are read as-is.
-    private Stream OpenStoredFile(FileRecord file)
+    public Stream OpenStoredFile(FileRecord file)
     {
         var path = StoredPath(file.Guid);
         if (file.WrappedKey == null)
@@ -558,6 +558,11 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
 
                 if (File.Exists(fullPath))
                     await Task.Run(() => File.Delete(fullPath));
+
+                // Its thumbnail, if one was made
+                var thumbnailPath = ThumbnailService.StoredPath(_storageRoot, file);
+                if (File.Exists(thumbnailPath))
+                    File.Delete(thumbnailPath);
             }
             catch (Exception ex)
             {
