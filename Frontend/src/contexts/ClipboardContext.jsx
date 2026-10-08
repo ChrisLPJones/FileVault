@@ -21,7 +21,7 @@ export const ClipBoardProvider = ({ children, onPaste, onCut, onCopy }) => {
     }
   };
 
-  // Todo: Show error if destination folder already has file(s) with the same name
+  // Name clashes in the destination are numbered by the server ("report (1).pdf")
   const handlePasting = (destinationFolder) => {
     if (destinationFolder && !destinationFolder.isDirectory) return;
 

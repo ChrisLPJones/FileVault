@@ -1,56 +1,54 @@
 # FileVault
 
-**FileVault** is a secure file-sharing web application. It allows users to upload, download, manage, and delete files securely through a user-friendly interface. Designed as a portfolio project to showcase full-stack development skills.
+**FileVault** is a secure, self-hosted file storage web application. Upload, organise, preview and download your files through a desktop-style interface, with every file encrypted on disk. Designed as a portfolio project to showcase full-stack development skills.
 
 ## Features
 
-- Secure authentication: short-lived access tokens, rotating refresh-token cookie, password rules and rate limiting
+**Files**
 - Upload, download (single files or zips), rename, move, copy and delete files and folders
-- Files encrypted at rest with AES-256-GCM (per-file keys)
-- Per-user storage quotas and an account settings page
-- Profile pictures
-- Light, dark and system themes
+- Desktop-style file and folder icons, grid and list views, sortable columns
+- Details pane with name, type, size, created/modified dates and a preview (images, video, audio, PDF and text)
+- A name that's already taken gets a number, like Windows Explorer: `report (1).pdf`
+- New accounts start with Documents, Pictures, Music and Videos folders
+
+**Security**
+- Files encrypted at rest with AES-256-GCM, each with its own key
+- Short-lived access tokens with a rotating, httpOnly refresh-token cookie
+- Password rules, rate limiting and per-user storage quotas
+
+**Account and appearance**
+- Log in with email; first and last name, profile picture, password change, account deletion
+- Light, dark and system themes, and a choice of accent colour
+
+**Tooling**
 - Interactive API docs (Swagger) at `/swagger`
 - Desktop app (Electron) for Windows, macOS and Linux
 - Runs with one command using Docker Compose
+- CI on every push: backend build and tests, frontend build and lint, Docker images
 
 ## Technologies Used
 
-- **Backend**: C# (.NET 8 Minimal APIs)
+- **Backend**: C# (.NET 8 Minimal APIs), ADO.NET
 - **Database**: SQL Server
-- **Frontend**: React (Vite)
+- **Frontend**: React 18 (Vite)
 - **Desktop**: Electron
 - **Storage**: Filesystem-based storage, encrypted
 - **Containerization**: Docker + Docker Compose
 
-## Getting Started
+## Run everything with Docker
 
-### Prerequisites
-
-- [.NET 8 SDK](https://dotnet.microsoft.com/)
-- [Docker](https://www.docker.com/)
-- Node.js & npm
- (for React frontend)
-- React 18+
- (installed via create-react-app or Vite)
-
-### Clone the Repository
+Only [Docker](https://www.docker.com/) is needed for this option.
 
 ```bash
 git clone https://github.com/ChrisLPJones/FileVault.git
 cd FileVault
-```
-
-## Run everything with Docker
-
-Only Docker is needed for this option.
-
-```bash
 cp .env.example .env      # fill in MSSQL_SA_PASSWORD, JWT_KEY and ENCRYPTION_MASTER_KEY
 docker compose up --build
 ```
 
 Then open http://localhost:5173 (the API is on http://localhost:3000). Compose starts SQL Server, waits for it to be healthy, applies `Backend/Docker/db/init.sql`, then starts the API and the nginx-served frontend. The database isn't exposed outside the Docker network.
+
+`init.sql` runs on every start and only adds what's missing, so pulling new code and running `docker compose up --build -d` also upgrades an existing database.
 
 Data lives in two named volumes, `filevault_sql_data` and `filevault_file_storage` (the encrypted files). Back both up together with `ENCRYPTION_MASTER_KEY`. `docker compose down` keeps them; `docker compose down -v` deletes them.
 
@@ -60,9 +58,15 @@ The frontend bundle has the API URL compiled in. If the browser reaches the API 
 
 ## Local development
 
+### Prerequisites
+
+- [.NET 8 SDK](https://dotnet.microsoft.com/)
+- [Docker](https://www.docker.com/) (for SQL Server)
+- [Node.js](https://nodejs.org/) 20 or later
+
 ### Configure secrets
 
-Secrets are not committed. Create these two gitignored files from the templates:
+Secrets are not committed. Create these gitignored files from the templates:
 
 ```bash
 # SQL Server SA password used by Docker
@@ -70,6 +74,9 @@ cp Backend/Docker/.env.example Backend/Docker/.env
 
 # API connection string, JWT signing key and file encryption key
 cp Backend/appsettings.Development.example.json Backend/appsettings.Development.json
+
+# Where the frontend finds the API
+cp Frontend/.env.example Frontend/.env
 ```
 
 Then edit them:
@@ -78,42 +85,39 @@ Then edit them:
 - In `Backend/appsettings.Development.json`, use that same password in the connection string.
 - Set `Jwt:Key` to a random value of at least 32 bytes (e.g. `openssl rand -base64 48`).
 - Set `Encryption:MasterKey` to a base64-encoded 32-byte key (e.g. `openssl rand -base64 32`). **Back this key up.** Every stored file is encrypted with a key that is itself encrypted with this one, so losing it means losing every file.
+- Point `VITE_API_BASE_URL` in `Frontend/.env` at the API (the port `dotnet run` prints).
 
 Outside Development, supply the same settings as environment variables (`ConnectionStrings__DefaultConnection`, `Jwt__Key`, `Encryption__MasterKey`). The API refuses to start if any of them is missing.
 
-### How files are stored
-
-Uploaded files are encrypted with AES-256-GCM before they reach disk (`Backend/SecureVaultStorage`, named by GUID). Each file has its own random data key, stored in the database encrypted with the master key. Files are encrypted in 64 KB chunks, so downloads stream without loading the whole file into memory and range requests (e.g. video seeking) still work. A file that has been modified on disk fails to decrypt instead of being served.
-
-### Run Docker in first terminal. 'make sure docker desktop is running'
+### Start it (three terminals)
 
 ```bash
+# 1. SQL Server (Docker Desktop must be running). Also applies init.sql.
+cd Backend/Docker
+docker compose up -d
+
+# 2. API
 cd Backend
-cd Docker
-docker compose up --build
-```
-
-This will start the backend SQL Server container using the password from `Backend/Docker/.env`.
-
-
-
-### Run C# API Backend in a second terminal
-
-```bash
-cd Backend
-dotnet restore
 dotnet run
-```
-This will start the backend api server. 
 
-
-### Run React in third terminal
-
-```bash 
+# 3. Frontend
 cd Frontend
 npm install
 npm run dev
 ```
+
+### Tests
+
+```bash
+dotnet test                     # backend integration tests (needs the SQL Server from step 1)
+cd Frontend && npm run lint     # frontend lint
+```
+
+The integration tests create their own throwaway accounts and delete them afterwards. If tests fail with server errors after pulling new code, re-run `docker compose up -d` in `Backend/Docker` to apply any new database changes.
+
+### How files are stored
+
+Uploaded files are encrypted with AES-256-GCM before they reach disk (`Backend/SecureVaultStorage`, named by GUID). Each file has its own random data key, stored in the database encrypted with the master key. Files are encrypted in 64 KB chunks, so downloads stream without loading the whole file into memory and range requests (e.g. video seeking) still work. A file that has been modified on disk fails to decrypt instead of being served.
 
 ## Desktop app
 
@@ -133,18 +137,32 @@ See [Desktop/README.md](Desktop/README.md) for details.
 
 Interactive API docs are served by the API at **http://localhost:3000/swagger**, and the OpenAPI document is at `/swagger/v1/swagger.json` (it can be imported into Postman or Insomnia).
 
-To try protected endpoints, call `POST /user/login`, then click **Authorize** and paste the returned access token. Endpoints are grouped as:
+To try protected endpoints, call `POST /user/login`, then click **Authorize** and paste the returned access token (it lasts 15 minutes). Endpoints are grouped as:
 
-- **Account**: register, login, refresh, logout, profile, password, storage usage, delete account
+- **Account**: register, login, refresh, logout, profile, password, avatar, storage usage, delete account
 - **Files**: upload, folders, list, download (single file or zip), rename, move, copy, delete
 - **Health**: `/ping` and `/pingsql`
 
+## Project layout
+
+| Folder | Contents |
+|---|---|
+| `Backend/` | .NET 8 API: routes, services, models, `Docker/` (dev SQL Server and `init.sql`) |
+| `Backend.Test/` | xUnit integration tests |
+| `Frontend/` | React app; the file manager UI is in `src/FileManager` ([credits](Frontend/src/FileManager/README.md)) |
+| `Desktop/` | Electron desktop app |
+| `docs/` | [Roadmap](docs/ROADMAP.md) and the original [codebase review](docs/CODEBASE_REVIEW.md) |
+
+## Roadmap
+
+Planned features are listed in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](LICENSE). The file manager UI is adapted from
+[@cubone/react-file-manager](https://github.com/Saifullah-dev/react-file-manager), also MIT licensed.
 
 ## Author
 
-Christian Jones  
+Christian Jones
 [GitHub](https://github.com/ChrisLPJones)
