@@ -31,7 +31,7 @@ BEGIN
         LastName NVARCHAR(50) NOT NULL,
         Email NVARCHAR(100) UNIQUE NOT NULL,
         PasswordHash NVARCHAR(255) NOT NULL,
-        CreatedAt DATETIME DEFAULT GETDATE(),
+        CreatedAt DATETIME DEFAULT GETUTCDATE(),
         LastLogin DATETIME,
         Role NVARCHAR(20) DEFAULT 'user'
     );
@@ -56,8 +56,8 @@ BEGIN
         FileName NVARCHAR(255) NOT NULL,
         IsDirectory BIT NOT NULL,
         FilePath NVARCHAR(MAX) NULL,
-        UpdatedAt DATETIME DEFAULT GETDATE(),
-        CreatedAt DATETIME NULL CONSTRAINT DF_Files_CreatedAt DEFAULT GETDATE(),
+        UpdatedAt DATETIME DEFAULT GETUTCDATE(),
+        CreatedAt DATETIME NULL CONSTRAINT DF_Files_CreatedAt DEFAULT GETUTCDATE(),
         GUID NVARCHAR(100) NOT NULL,
         UserId UNIQUEIDENTIFIER NOT NULL,
         Size BIGINT NOT NULL,
@@ -177,13 +177,45 @@ GO
 ------------------------------------------------------------
 IF COL_LENGTH('Files', 'CreatedAt') IS NULL
 BEGIN
-    ALTER TABLE Files ADD CreatedAt DATETIME NULL CONSTRAINT DF_Files_CreatedAt DEFAULT GETDATE();
+    ALTER TABLE Files ADD CreatedAt DATETIME NULL CONSTRAINT DF_Files_CreatedAt DEFAULT GETUTCDATE();
     PRINT 'CreatedAt column added to "Files".';
 END
 GO
 
 -- Items from before the column existed: the closest known date is when they last changed
 UPDATE Files SET CreatedAt = UpdatedAt WHERE CreatedAt IS NULL;
+GO
+
+------------------------------------------------------------
+-- TIMESTAMPS IN UTC (existing databases too)
+------------------------------------------------------------
+-- The API treats every stored time as UTC. These columns used to default to GETDATE(), the
+-- database server's local time (UTC in the Docker image, so values already stored there are
+-- right). Switch any that still do to GETUTCDATE().
+DECLARE @fixes TABLE (TableName SYSNAME, ColumnName SYSNAME);
+INSERT INTO @fixes VALUES ('Users', 'CreatedAt'), ('Files', 'UpdatedAt'), ('Files', 'CreatedAt');
+
+DECLARE @table SYSNAME, @column SYSNAME, @constraint SYSNAME, @sql NVARCHAR(MAX);
+DECLARE localDefaults CURSOR LOCAL FAST_FORWARD FOR
+    SELECT f.TableName, f.ColumnName, dc.name
+    FROM @fixes f
+    INNER JOIN sys.columns c ON c.object_id = OBJECT_ID(f.TableName) AND c.name = f.ColumnName
+    INNER JOIN sys.default_constraints dc ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id
+    WHERE dc.definition = '(getdate())';
+
+OPEN localDefaults;
+FETCH NEXT FROM localDefaults INTO @table, @column, @constraint;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @sql = N'ALTER TABLE ' + QUOTENAME(@table) + N' DROP CONSTRAINT ' + QUOTENAME(@constraint) + N'; '
+        + N'ALTER TABLE ' + QUOTENAME(@table) + N' ADD CONSTRAINT ' + QUOTENAME(@constraint)
+        + N' DEFAULT GETUTCDATE() FOR ' + QUOTENAME(@column) + N';';
+    EXEC sp_executesql @sql;
+    PRINT 'Default of "' + @table + '.' + @column + '" set to UTC.';
+    FETCH NEXT FROM localDefaults INTO @table, @column, @constraint;
+END
+CLOSE localDefaults;
+DEALLOCATE localDefaults;
 GO
 
 ------------------------------------------------------------
