@@ -32,7 +32,7 @@
 **Account and appearance**
 - Log in with email; first and last name, profile picture, password change, account deletion
 - Light, dark and system themes, and a choice of accent colour
-- An admin page for the server owner: every account's storage use and quota, and server totals
+- An admin page for the server owner: every account's avatar, storage use and quota, and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark accounts permanent, and delete accounts (type the email to confirm; the last admin can't be deleted)
 
 **Tooling**
 - Interactive API docs (Swagger) at `/swagger` in development, or with `SWAGGER_ENABLED=true`
@@ -217,7 +217,7 @@ To try protected endpoints, call `POST /user/login`, then click **Authorize** an
 - **Uploads**: chunked, resumable uploads for big files
 - **Recycle bin**: list, restore, delete for good, empty
 - **Shares**: create, list and revoke share links, and the public endpoints a link uses
-- **Admin**: every account's usage and quota, change quotas, grant or remove admin rights, server totals
+- **Admin**: every account's usage and quota, change quotas, grant or remove admin rights, create and delete accounts, set a user's password, mark accounts permanent, server totals
 - **Health**: `/ping` and `/pingsql`
 
 ## Project layout
