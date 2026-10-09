@@ -52,7 +52,9 @@ services:
       Jwt__Key: ${JWT_KEY:?Set JWT_KEY in .env (see .env.example)}
       Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:?Set ENCRYPTION_MASTER_KEY in .env (see .env.example)}
       Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:5173}
-      # Comma-separated emails of the accounts that can use the admin page
+      # Optional: the one email that becomes the first administrator, once confirmed
+      Admin__InitialEmail: ${INITIAL_ADMIN_EMAIL:-}
+      # Only read so the API can warn that ADMIN_EMAILS is no longer used (empty value doesn't warn)
       Admin__Emails: ${ADMIN_EMAILS:-}
       # Links in emails point here
       App__FrontendUrl: ${FRONTEND_URL:-http://localhost:5173}

@@ -349,12 +349,21 @@ GO
 ------------------------------------------------------------
 -- ADMINISTRATORS (added to existing databases too)
 ------------------------------------------------------------
--- Can use the admin page (/admin). Set from the API's Admin:Emails setting
--- when it starts and when a user logs in (see AdminService).
+-- Can use the admin page (/admin). Managed in the app (see the migration at the end
+-- of this file).
 IF COL_LENGTH('Users', 'IsAdmin') IS NULL
 BEGIN
     ALTER TABLE Users ADD IsAdmin BIT NOT NULL CONSTRAINT DF_Users_IsAdmin DEFAULT 0;
     PRINT 'Column "Users.IsAdmin" added.';
+END
+GO
+
+-- Set when the account's email address is changed after sign-up. Opening the confirmation link for a
+-- changed address never makes an account the INITIAL_ADMIN_EMAIL administrator (see ConfirmEmailAsync).
+IF COL_LENGTH('Users', 'EmailChanged') IS NULL
+BEGIN
+    ALTER TABLE Users ADD EmailChanged BIT NOT NULL CONSTRAINT DF_Users_EmailChanged DEFAULT 0;
+    PRINT 'Column "Users.EmailChanged" added.';
 END
 GO
 
@@ -639,3 +648,12 @@ BEGIN
     PRINT 'Index "IX_RefreshTokens_SessionId" created.';
 END
 GO
+
+------------------------------------------------------------
+-- ADMINISTRATOR MIGRATION: done by the API at startup, not here
+------------------------------------------------------------
+-- An install that has accounts but no administrator (it predates in-app admin management)
+-- gets one when the API starts: the INITIAL_ADMIN_EMAIL account if that setting is set,
+-- otherwise the oldest account with a confirmed email. It lives in the API (see
+-- AdminBootstrapOnStartup) because this script can't read app settings, and must not hand
+-- admin to someone else before the setting is applied.

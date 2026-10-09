@@ -71,6 +71,37 @@ namespace Backend.Routes
                 .Produces<ErrorResponse>(403)
                 .Produces<ErrorResponse>(404);
 
+            // Make a user an administrator or take it away (never from the last one)
+            admin.MapPut("/users/{userId}/admin", async (string userId, HttpRequest http, DatabaseServices db) =>
+            {
+                AdminUpdateRequest? request;
+                try
+                {
+                    request = await JsonSerializer.DeserializeAsync<AdminUpdateRequest>(http.Body, JsonOptions);
+                }
+                catch (JsonException)
+                {
+                    request = null;
+                }
+
+                if (request?.IsAdmin == null)
+                    return Results.BadRequest(new { error = "Invalid JSON" });
+                if (!Guid.TryParse(userId, out _))
+                    return Results.NotFound(new { error = "User not found" });
+
+                var result = await db.SetAdminAsync(userId, request.IsAdmin.Value);
+                return result.Success
+                    ? Results.Ok(new { success = result.Message })
+                    : Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
+            })
+                .WithSummary("Grant or remove administrator rights (body: { isAdmin }); the last administrator can't be removed (admins only)")
+                .Accepts<AdminUpdateRequest>("application/json")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(403)
+                .Produces<ErrorResponse>(404)
+                .Produces<ErrorResponse>(409);
+
             // Totals and disk space
             admin.MapGet("/stats", async (DatabaseServices db, IConfiguration config) =>
             {

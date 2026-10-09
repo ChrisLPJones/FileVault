@@ -6,6 +6,10 @@ public partial class DatabaseServices
 {
     private const int DeadlockErrorNumber = 1205;
 
+    // SQL error 1205, or losing the admin-membership lock as a deadlock victim (sp_getapplock -3)
+    private static bool IsDeadlock(Exception ex) =>
+        ex is SqlException { Number: DeadlockErrorNumber } or AdminLockDeadlockException;
+
     // Run a database action again if SQL Server picked it as a deadlock victim. Deletes can
     // deadlock with each other when several users delete at once (the delete triggers walk the
     // Files table), and so can the recycle bin and move updates that walk the same tree, and
@@ -26,7 +30,7 @@ public partial class DatabaseServices
             {
                 return await action();
             }
-            catch (SqlException ex) when (ex.Number == DeadlockErrorNumber && attempt < attempts)
+            catch (Exception ex) when (IsDeadlock(ex) && attempt < attempts)
             {
                 _logger.LogInformation("Deadlock on attempt {Attempt}; retrying", attempt);
                 await Task.Delay(Random.Shared.Next(20, 80) * attempt);

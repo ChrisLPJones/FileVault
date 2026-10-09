@@ -126,6 +126,7 @@ without the first three.
 | `API_URL` | Where the browser reaches the API. Build-time: rebuild after changing it |
 | `BEHIND_HTTPS_PROXY` | `true` behind an HTTPS reverse proxy (section 1) |
 | `SWAGGER_ENABLED` | `true` to serve the API docs (section 5). Off by default |
+| `INITIAL_ADMIN_EMAIL` | Optional, recommended on a public install: the one email that can become the first administrator (section 7) |
 
 Other API settings can be passed as environment variables on the `api` service using
 `Section__Key` names, for example `Storage__DefaultQuotaBytes`, `Storage__MaxUploadBytes`,
@@ -224,3 +225,55 @@ container works out the API origin from `API_URL` and writes the real config. To
 curl -sI https://files.example.com/ | grep -iE "content-security|strict-transport|x-frame|referrer|permissions"
 curl -sI https://api.files.example.com/ping | grep -iE "content-security|x-frame|referrer"
 ```
+
+## 7. The first administrator
+
+The admin page (`/admin`) shows every account's storage use and quota. Who can open it is
+decided in the app, not in `.env`.
+
+**Without `INITIAL_ADMIN_EMAIL`**, the first account registered on a new install becomes the
+administrator. On a public server, register straight after the first start, before anyone else can.
+
+**With `INITIAL_ADMIN_EMAIL` set** (recommended), nobody is an administrator at registration. The
+account with that email becomes one only once its mailbox is proven, by either:
+
+- registering, then opening the confirmation link in the email. Opening the link for a new sign-up
+  also clears that account's password, so then use "Forgot password?" to choose one; or
+- using "Forgot password?" directly: the reset sets your password, confirms the email and
+  promotes the account.
+
+It also happens at API start for an account with that email that is already confirmed. An account
+whose email was changed to this address can never become the first administrator, by the link, at
+start or by a password reset. Emails are compared exactly (look-alike characters don't match).
+
+Email delivery needs the `SMTP_*` settings (or find the links in `docker compose logs api`).
+
+**If someone registered your address first** (a new sign-up), use "Forgot password?" for it. The
+reset gives you the account and the squatter's password stops working. If someone instead changed
+their existing account's email to your address, use a different address for `INITIAL_ADMIN_EMAIL`,
+or have an operator remove that account.
+
+Use a plain-ASCII, lower-case address for `INITIAL_ADMIN_EMAIL`. Someone registering a look-alike
+address first (for example with `ß` instead of `ss`) can't become administrator, but can stop you
+registering that address. Fix it by choosing a different `INITIAL_ADMIN_EMAIL` or removing that
+account.
+
+Once there is an administrator, they can grant or remove admin rights for other accounts on the
+Admin page ("Admin rights" column). There must always be at least one administrator: removing the
+last one, or the last administrator deleting their own account, is refused.
+
+**Upgrading an existing install**
+
+- `ADMIN_EMAILS` (`Admin:Emails`) no longer makes anyone an administrator. If it is still set, the
+  API logs a warning at start and ignores it. Existing administrators keep their rights.
+- If the install has accounts but no administrator, at API start the oldest confirmed account
+  becomes one (or, with `INITIAL_ADMIN_EMAIL` set, only that account). Accounts from before this
+  version are trusted, so before (or right after) the first start of the new version, check the user
+  list. If in doubt, set the administrator yourself: leave `INITIAL_ADMIN_EMAIL` unset so the oldest
+  confirmed account is promoted, or set `IsAdmin` in the database.
+- An account stored with capital letters by an old version won't match `INITIAL_ADMIN_EMAIL`. For
+  that install leave the setting unset, or lower-case the address in the database.
+- The upgrade adds a `Users.EmailChanged` column; re-running `init.sql` (`docker compose up --build -d`)
+  applies it.
+- Changing admin rights takes a short database lock. If it can't be had in time the API answers
+  `503` with a `Retry-After` header; retrying a moment later works.

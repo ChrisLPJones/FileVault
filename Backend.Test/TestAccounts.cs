@@ -38,9 +38,9 @@ namespace Backend.Test
         }
 
         // Log an existing test account in; the client then sends its access token
-        public static async Task<HttpClient> LoginAsync(HttpClient client, string email)
+        public static async Task<HttpClient> LoginAsync(HttpClient client, string email, string password = Password)
         {
-            var login = await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password });
+            var login = await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = password });
             login.EnsureSuccessStatusCode();
             using var json = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
             var token = json.RootElement.GetProperty("success").GetString()!;

@@ -18,7 +18,7 @@ function VerifyEmail() {
         started.current = true;
 
         verifyEmailAPI(token)
-            .then(() => setResult({ ok: true, message: "Thanks, your email address is confirmed." }))
+            .then((data) => setResult({ ok: true, message: "Thanks, your email address is confirmed.", choosePassword: data?.passwordReset === true }))
             .catch((err) => setResult({ ok: false, message: getErrorMessage(err, "Could not confirm your email address") }));
     }, [token]);
 
@@ -34,6 +34,13 @@ function VerifyEmail() {
                         <div className={`auth-alert auth-alert-top ${result.ok ? "success" : "danger"}`} role={result.ok ? "status" : "alert"}>
                             {result.message}
                         </div>
+                        {result.choosePassword && (
+                            <p className="auth-subtitle">
+                                This is the first administrator account. As anyone could have signed up with this
+                                address, its password has been cleared: <Link to="/forgot-password">choose your own</Link> to
+                                log in.
+                            </p>
+                        )}
                         {!result.ok && (
                             <p className="auth-subtitle">
                                 {loggedIn

@@ -76,7 +76,6 @@ namespace Backend.Routes
                 HttpContext http,
                 AuthServices auth,
                 DatabaseServices db,
-                AdminService admins,
                 TwoFactorService twoFactor) =>
             {
                 var login = await ReadJsonAsync<LoginModel>(http.Request);
@@ -93,10 +92,6 @@ namespace Backend.Routes
                 // Only after the password matched, so this doesn't reveal anything about other accounts
                 if (!await db.IsEmailVerifiedAsync(userRecord.Id.ToString()))
                     return Results.Json(new { error = "Please confirm your email address first", emailNotVerified = true }, statusCode: 403);
-
-                // Admin:Emails decides who is an administrator (see AdminService). Before the two-factor
-                // step, so it applies however the login finishes; it only updates the IsAdmin flag.
-                await admins.SyncAsync(db, userRecord.Id.ToString());
 
                 // With two-factor on, the password only earns a short-lived challenge for POST /user/login/2fa
                 if ((await db.GetTwoFactorStateAsync(userRecord.Id.ToString()))?.Enabled == true)
@@ -251,7 +246,7 @@ namespace Backend.Routes
                 .Produces<TokenUpdateResponse>()
                 .Produces<ErrorResponse>(400).RequireAuthorization();
 
-            // Deletes the authenticated user's account and all their files
+            // Deletes the authenticated user's account and all their files (409 for the last administrator)
             app.MapDelete("/user", async (
                 HttpContext http,
                 ClaimsPrincipal user,
@@ -265,7 +260,7 @@ namespace Backend.Routes
 
                 var response = await db.DeleteUserAndFilesById(userId, fs);
                 if (!response.Success)
-                    return Results.Json(new { error = response.Message }, statusCode: 500);
+                    return Results.Json(new { error = response.Message }, statusCode: response.StatusCode ?? 500);
 
                 avatars.DeleteFile(userId);
 
@@ -277,7 +272,8 @@ namespace Backend.Routes
                 .WithTags("Account")
                 .WithSummary("Delete the account and every stored file")
                 .Produces(200)
-                .Produces<ErrorResponse>(404).RequireAuthorization();
+                .Produces<ErrorResponse>(404)
+                .Produces<ErrorResponse>(409).RequireAuthorization();
 
             // Sets the profile picture (multipart field "avatar": PNG, JPEG or WebP, up to 2 MB)
             app.MapPut("/user/avatar", async (
