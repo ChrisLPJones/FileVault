@@ -126,6 +126,8 @@ without the first three.
 | `API_URL` | Where the browser reaches the API. Build-time: rebuild after changing it |
 | `BEHIND_HTTPS_PROXY` | `true` behind an HTTPS reverse proxy (section 1) |
 | `SWAGGER_ENABLED` | `true` to serve the API docs (section 5). Off by default |
+| `FILEVAULT_MODE` | Optional: `self-hosted` (default) or `hosted` (section 8). Anything else stops the API starting |
+| `HOSTED_CONTACT_EMAIL` | Optional, hosted mode only: the address users are told to email to ask for a permanent account |
 | `INITIAL_ADMIN_EMAIL` | Optional, recommended on a public install: the one email that can become the first administrator (section 7) |
 
 Other API settings can be passed as environment variables on the `api` service using
@@ -288,3 +290,43 @@ writes an audit line to the API log under the `Backend.AdminAudit` category, usi
   re-running `init.sql` (`docker compose up --build -d`) applies them.
 - Changing admin rights takes a short database lock. If it can't be had in time the API answers
   `503` with a `Retry-After` header; retrying a moment later works.
+
+## 8. Hosted mode
+
+Set `FILEVAULT_MODE=hosted` for a public instance with limited resources. The default,
+`self-hosted`, removes nothing. Any other value stops the API at start.
+
+In hosted mode:
+
+- An account with no sign-in and no use of the app for 30 days is removed along with its files.
+  Staying signed in and using the app counts as use. Administrator, permanent and suspended
+  accounts are never removed (mark an account permanent on the Admin page).
+- 7 days before the removal a warning email is sent, only to an address that was confirmed and only
+  if SMTP is set up (the `SMTP_*` settings). Without SMTP no warning is sent, but the removal still
+  happens. A user who signs in again before then keeps the account.
+- New users see a dismissible notice on the dashboard on first login saying unused accounts are
+  removed. Administrators and permanent accounts don't see it. `HOSTED_CONTACT_EMAIL` adds the
+  address to ask for a permanent account; leave it empty to leave that sentence out.
+- The Admin page gains "Last active" and "Removal due" columns.
+
+The job runs with the hourly storage cleanup. These settings go in `appsettings.json`, or on the
+`api` service as environment variables:
+
+| Setting | Default | What it is |
+|---|---|---|
+| `Hosted:InactiveDays` | 30 | Days without sign-in or use before removal |
+| `Hosted:WarningDays` | 7 | Days of warning before removal (kept below `InactiveDays`) |
+| `Hosted:MaxRemovalsPerRun` | 50 | Most accounts warned, and most removed, per run |
+
+**Switching an existing install to hosted**
+
+Accounts that are already stale are not removed straight away. Each gets at least the warning
+period (7 days by default) from the first run, whether or not an email could be sent. Before
+turning it on, mark any account you want to keep as permanent or as an administrator.
+
+**Upgrading**
+
+The upgrade adds the `Users.LastActiveAt`, `Users.InactivityWarnedAt` and
+`Users.HostedNoticeDismissedAt` columns, even if you stay self-hosted; re-running `init.sql`
+(`docker compose up --build -d`) applies them. Existing accounts start their inactivity clock from
+their last login, or when they were created.
