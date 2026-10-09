@@ -10,13 +10,26 @@ namespace Backend.Services;
 // A link is "/s/<token>", where the token is 32 random bytes in URL-safe base64. Links are looked
 // up by a SHA-256 hash of the token and passwords checked against a BCrypt hash, so the public
 // endpoints never need anything decrypted. So the owner can copy a link or see its password again,
-// both are also kept encrypted (ShareSecrets); without the master key the database alone reveals
+// both are also kept encrypted (SecretProtector); without the master key the database alone reveals
 // neither. Anything wrong with a link (unknown, revoked, expired, or its item deleted or in the
 // recycle bin) gives the same "not found" answer, so visitors can't tell which it was.
-public partial class ShareService(FileServices fs, ShareSecrets secrets)
+public partial class ShareService(FileServices fs, SecretProtector secrets)
 {
     public const int MinPasswordLength = 6;
     public const int MaxListedEntries = 1000;
+
+    // A link's token and password are encrypted with their own key, each bound to its link and to
+    // which field it is, so a value can't be copied to another link or swapped for the other one
+    private const string TokenField = "token";
+    private const string PasswordField = "password";
+
+    private static string SecretContext(Guid shareId, string field) => $"share:{shareId:D}:{field}";
+
+    private string ProtectSecret(string value, Guid shareId, string field) =>
+        secrets.Protect(value, SecretContext(shareId, field), SecretProtector.Purpose.ShareLinks);
+
+    private string? UnprotectSecret(string? value, Guid shareId, string field) =>
+        secrets.TryUnprotectString(value, SecretContext(shareId, field), SecretProtector.Purpose.ShareLinks);
 
     public static readonly HttpReturnResult LinkNotFound = HttpReturnResult.NotFound("This link doesn't exist or has expired");
     public static readonly HttpReturnResult PasswordRejected = new(false, "The password is missing or incorrect") { StatusCode = 401 };
@@ -57,8 +70,8 @@ public partial class ShareService(FileServices fs, ShareSecrets secrets)
         var token = NewToken();
         var shareId = Guid.NewGuid();
         var createdAt = await db.CreateShareAsync(shareId, userId, item.Guid, HashToken(token), expiresAt, passwordHash,
-            secrets.Protect(token, shareId, ShareSecrets.TokenPurpose),
-            passwordHash == null ? null : secrets.Protect(request.Password!, shareId, ShareSecrets.PasswordPurpose));
+            ProtectSecret(token, shareId, TokenField),
+            passwordHash == null ? null : ProtectSecret(request.Password!, shareId, PasswordField));
 
         return ServiceResult<CreatedShare>.Success(new CreatedShare(
             shareId, token, $"/s/{token}", item.Guid, item.Name, item.IsDirectory, createdAt, expiresAt, passwordHash != null));
@@ -71,7 +84,7 @@ public partial class ShareService(FileServices fs, ShareSecrets secrets)
     public async Task<List<ShareSummary>> ListAsync(DatabaseServices db, string userId) =>
         (await db.GetSharesAsync(userId)).Select(row =>
         {
-            var token = secrets.Unprotect(row.TokenCipher, row.Id, ShareSecrets.TokenPurpose);
+            var token = UnprotectSecret(row.TokenCipher, row.Id, TokenField);
             return new ShareSummary(row.Id, row.ItemId, row.Name, row.IsDirectory, row.CreatedAt, row.ExpiresAt,
                 row.HasPassword, row.DownloadCount, row.ItemInBin, token, token == null ? null : $"/s/{token}",
                 row.HasPassword && row.PasswordCipher != null);
@@ -87,7 +100,7 @@ public partial class ShareService(FileServices fs, ShareSecrets secrets)
         if (!row.HasPassword)
             return HttpReturnResult.NotFound("This link has no password");
 
-        var password = secrets.Unprotect(row.PasswordCipher, row.Id, ShareSecrets.PasswordPurpose);
+        var password = UnprotectSecret(row.PasswordCipher, row.Id, PasswordField);
         return password == null
             ? HttpReturnResult.NotFound("This link was created before passwords could be shown again")
             : ServiceResult<SharePassword>.Success(new SharePassword(password));
