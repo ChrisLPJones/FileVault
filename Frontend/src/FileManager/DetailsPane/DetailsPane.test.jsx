@@ -26,7 +26,7 @@ const renderPane = (item = file, actions = {}) => {
     const fileActions = { setFavourite: vi.fn(), ...actions };
     render(
         <TranslationProvider language="en-US">
-            <FilesProvider filesData={[item]}>
+            <FilesProvider filesData={item ? [item] : []}>
                 <FileActionsProvider value={fileActions}>
                     <DetailsPaneProvider>
                         <DetailsPane file={item} formatDate={formatDate} />
@@ -86,7 +86,20 @@ describe("DetailsPane", () => {
     });
 
     it("closes and remembers that it was closed", async () => {
+        localStorage.setItem("fv-details-pane", "open");
         renderPane();
+        await userEvent.click(screen.getByRole("button", { name: "Close details" }));
+        expect(localStorage.getItem("fv-details-pane")).toBe("closed");
+    });
+
+    it("asks for a file when none is selected, and can still be closed", async () => {
+        localStorage.setItem("fv-details-pane", "open");
+        renderPane(null);
+
+        const pane = screen.getByRole("complementary", { name: "Details" });
+        expect(pane).toHaveTextContent("Select a file to preview");
+        expect(fetchFileBlob).not.toHaveBeenCalled();
+
         await userEvent.click(screen.getByRole("button", { name: "Close details" }));
         expect(localStorage.getItem("fv-details-pane")).toBe("closed");
     });

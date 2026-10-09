@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
+import userEvent from "@testing-library/user-event";
 import Layout from "./Layout";
 import { isAuthenticated } from "../../utils/auth";
 
-vi.mock("../../utils/auth", () => ({ isAuthenticated: vi.fn() }));
+vi.mock("../../utils/auth", async (importOriginal) => ({ ...(await importOriginal()), isAuthenticated: vi.fn() }));
 
 const renderAt = (pathname) =>
     render(
@@ -16,6 +17,8 @@ const renderAt = (pathname) =>
             </Routes>
         </MemoryRouter>
     );
+
+beforeEach(() => sessionStorage.clear());
 
 describe("Layout top bar when logged out", () => {
     it.each([
@@ -50,5 +53,32 @@ describe("Layout top bar when logged in", () => {
         renderAt("/dashboard");
 
         expect(screen.queryByRole("link", { name: "Back to files" })).not.toBeInTheDocument();
+    });
+});
+
+describe("Back to files", () => {
+    it("returns to the folder that was open", async () => {
+        isAuthenticated.mockReturnValue(true);
+        render(
+            <MemoryRouter initialEntries={["/dashboard?folder=%2FDocs"]}>
+                <Routes>
+                    <Route element={<Layout />}>
+                        <Route path="dashboard" element={<Link to="/settings">Settings</Link>} />
+                        <Route path="settings" element={<p>Settings page</p>} />
+                        <Route path="*" element={<p>Page body</p>} />
+                    </Route>
+                </Routes>
+            </MemoryRouter>
+        );
+
+        await userEvent.click(screen.getByRole("link", { name: "Settings" }));
+        expect(screen.getByText("Settings page")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Back to files" })).toHaveAttribute("href", "/dashboard?folder=%2FDocs");
+    });
+
+    it("opens the home folder when no folder was remembered", () => {
+        isAuthenticated.mockReturnValue(true);
+        renderAt("/settings");
+        expect(screen.getByRole("link", { name: "Back to files" })).toHaveAttribute("href", "/dashboard");
     });
 });

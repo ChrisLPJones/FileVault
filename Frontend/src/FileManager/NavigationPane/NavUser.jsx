@@ -1,27 +1,13 @@
-import { useEffect, useState } from "react";
 import UserMenu from "../../components/UserMenu";
-import { getUsageAPI } from "../../api/accountAPI";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { formatBytes } from "../../utils/formatBytes";
-import { useFiles } from "../../contexts/FilesContext";
+import { useUsage } from "../../contexts/UsageContext";
 import Avatar from "../../components/Avatar";
 
 // Bottom of the folder tree: avatar, first name and storage used (name and usage hidden when collapsed)
 export default function NavUser({ compact }) {
   const { firstName } = useUserProfile();
-  const [usage, setUsage] = useState(null);
-  const { files } = useFiles();
-
-  // Usage changes whenever the file list is reloaded
-  useEffect(() => {
-    let cancelled = false;
-    getUsageAPI()
-      .then((data) => !cancelled && setUsage(data))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [files]);
+  const { usage } = useUsage();
 
   const usageText = usage ? `${formatBytes(usage.used)} / ${formatBytes(usage.quota)}` : "";
 

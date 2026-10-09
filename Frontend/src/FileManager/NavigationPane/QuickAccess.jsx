@@ -1,24 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { MdHistory, MdKeyboardArrowRight, MdStar } from "react-icons/md";
+import { useEffect, useMemo, useRef } from "react";
+import { MdHistory, MdStar } from "react-icons/md";
 import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
 import { useFiles } from "../../contexts/FilesContext";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { useSelection } from "../../contexts/SelectionContext";
-import { useDetailsPane } from "../../contexts/DetailsPaneContext";
 import { getParentPath } from "../../utils/getParentPath";
 import { favouriteItems, recentFiles } from "../../utils/quickAccess";
+import NavSection from "./NavSection";
+import { useNavSections } from "./useNavSections";
 import "./QuickAccess.scss";
-
-// Which sections are expanded, remembered in this browser
-const STORAGE_KEY = "fv-quick-access";
-
-const readSaved = () => {
-  try {
-    return { favourites: true, recent: true, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
-  } catch {
-    return { favourites: true, recent: true };
-  }
-};
 
 const SECTIONS = [
   { key: "favourites", title: "Favourites", icon: MdStar, empty: "Star files and folders to see them here" },
@@ -32,8 +22,7 @@ export default function QuickAccess({ compact, onExpand, onFileOpen }) {
   const { files } = useFiles();
   const { currentPath, setCurrentPath, currentPathFiles, onFolderChange } = useFileNavigation();
   const { setSelectedFiles } = useSelection();
-  const { setDetailsOpen } = useDetailsPane();
-  const [expanded, setExpanded] = useState(readSaved);
+  const [expanded, toggle] = useNavSections();
   // A file to select once its folder's contents are showing
   const pendingSelection = useRef(null);
 
@@ -51,18 +40,6 @@ export default function QuickAccess({ compact, onExpand, onFileOpen }) {
     }
   }, [currentPathFiles, setSelectedFiles]);
 
-  const toggle = (key) => {
-    setExpanded((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // Storage unavailable: still works for this visit
-      }
-      return next;
-    });
-  };
-
   // A folder opens; a file is only selected (it isn't "opened", so Recent doesn't change)
   const open = (item) => {
     if (item.isDirectory) {
@@ -73,7 +50,6 @@ export default function QuickAccess({ compact, onExpand, onFileOpen }) {
     }
 
     const folder = getParentPath(item.path);
-    setDetailsOpen(true);
     if (folder === currentPath) {
       setSelectedFiles([currentPathFiles.find((file) => file._id === item._id) ?? item]);
     } else {
@@ -102,16 +78,7 @@ export default function QuickAccess({ compact, onExpand, onFileOpen }) {
   return (
     <div className="quick-access">
       {SECTIONS.map(({ key, title, empty }) => (
-        <section key={key} className="quick-access-section" aria-label={title}>
-          <button
-            type="button"
-            className="quick-access-heading"
-            aria-expanded={expanded[key]}
-            onClick={() => toggle(key)}
-          >
-            <MdKeyboardArrowRight size={18} className={`quick-access-arrow ${expanded[key] ? "open" : ""}`} />
-            {title}
-          </button>
+        <NavSection key={key} title={title} expanded={expanded[key]} onToggle={() => toggle(key)}>
           {expanded[key] && (
             items[key].length > 0 ? (
               <ul className="quick-access-list">
@@ -128,7 +95,7 @@ export default function QuickAccess({ compact, onExpand, onFileOpen }) {
               <p className="quick-access-empty">{empty}</p>
             )
           )}
-        </section>
+        </NavSection>
       ))}
     </div>
   );

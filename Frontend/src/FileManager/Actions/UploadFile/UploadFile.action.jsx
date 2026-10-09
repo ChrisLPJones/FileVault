@@ -10,6 +10,8 @@ import { useFiles } from "../../../contexts/FilesContext";
 import { useTranslation } from "../../../contexts/TranslationProvider";
 import { createFolderResolver, createLimiter, filesFromFolderInput, readDroppedItems } from "../../../utils/folderUpload";
 import { formatBytes } from "../../../utils/formatBytes";
+import { checkUploadSpace, reservedBytes, retrySpaceError } from "../../../utils/uploadSpace";
+import { useUsage } from "../../../contexts/UsageContext";
 import "./UploadFile.action.scss";
 
 const UploadFileAction = ({
@@ -25,6 +27,7 @@ const UploadFileAction = ({
   const [isUploading, setIsUploading] = useState({});
   const { currentFolder } = useFileNavigation();
   const { files: allFiles, onError } = useFiles();
+  const { usage, refreshUsage } = useUsage();
   const fileInputRef = useRef(null);
   const folderResolverRef = useRef(null);
   // A folder can hold hundreds of files: upload a few at a time
@@ -66,10 +69,21 @@ const UploadFileAction = ({
     );
 
     if (items.length > 0) {
+      // Files that pass the type and size checks must also fit in the space left, after those
+      // already queued here that the server hasn't counted yet. The ones that don't fit are marked
+      // and never upload; the others still do.
+      const reserved = reservedBytes(files);
+      const fileErrors = items.map(({ file }) => checkFileError(file));
+      const spaceErrors = checkUploadSpace(
+        items.map(({ file }, i) => (fileErrors[i] ? 0 : file.size)),
+        usage,
+        reserved
+      );
+
       // A name that is already in the folder is given a number by the server ("report (1).pdf")
-      const newFiles = items.map(({ file, dir }) => {
+      const newFiles = items.map(({ file, dir }, i) => {
         const appendData = onFileUploading(file, currentFolder);
-        const error = checkFileError(file);
+        const error = fileErrors[i] || spaceErrors[i];
         error && onError({ type: "upload", message: error }, file);
         return {
           file: file,
@@ -97,6 +111,16 @@ const UploadFileAction = ({
 
   const handleChooseFolder = (e) => {
     setSelectedFiles(filesFromFolderInput(e.target.files));
+  };
+
+  // An upload finished: reload the list, and once the usage includes the file stop holding its
+  // size back from the space check
+  const handleUploaded = (index, response) => {
+    onFileUploaded(response);
+    refreshUsage().then((fresh) => {
+      if (!fresh) return;
+      setFiles((prev) => prev.map((file, i) => (i === index ? { ...file, counted: true } : file)));
+    });
   };
 
   const handleFileRemove = (index) => {
@@ -188,8 +212,9 @@ const UploadFileAction = ({
                 setFiles={setFiles}
                 fileUploadConfig={fileUploadConfig}
                 setIsUploading={setIsUploading}
-                onFileUploaded={onFileUploaded}
+                onFileUploaded={(response) => handleUploaded(index, response)}
                 handleFileRemove={handleFileRemove}
+                checkSpace={() => retrySpaceError(files, index, usage)}
                 resolveParentId={(dir) => getFolderResolver()(dir)}
                 runLimited={runLimited}
               />

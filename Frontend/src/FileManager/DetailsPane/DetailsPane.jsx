@@ -15,10 +15,38 @@ const typeLabel = (name) => {
   return ext ? `${ext.toUpperCase()} file` : "File";
 };
 
-// Explorer-style pane on the right of the file list for the selected file: its name, size
-// and dates, with a preview underneath. Only shown for a single selected file, not folders.
-export default function DetailsPane({ file, formatDate, filePreviewComponent }) {
+const CloseButton = () => {
   const { setDetailsOpen } = useDetailsPane();
+  const t = useTranslation();
+  return (
+    <button
+      type="button"
+      className="details-close"
+      title={t("close")}
+      aria-label="Close details"
+      onClick={() => setDetailsOpen(false)}
+    >
+      <MdClear size={18} />
+    </button>
+  );
+};
+
+// Explorer-style pane on the right of the file list for the selected file: its name, size
+// and dates, with a preview underneath. Without a single selected file (nothing, several items or
+// a folder) it only asks for one, so the pane doesn't come and go while it is switched on.
+export default function DetailsPane({ file, formatDate, filePreviewComponent }) {
+  if (!file) {
+    return (
+      <aside className="details-pane" aria-label="Details">
+        <CloseButton />
+        <p className="details-empty">Select a file to preview</p>
+      </aside>
+    );
+  }
+  return <FileDetails file={file} formatDate={formatDate} filePreviewComponent={filePreviewComponent} />;
+}
+
+function FileDetails({ file, formatDate, filePreviewComponent }) {
   const t = useTranslation();
   const customPreview = filePreviewComponent?.(file);
 
@@ -31,15 +59,7 @@ export default function DetailsPane({ file, formatDate, filePreviewComponent }) 
 
   return (
     <aside className="details-pane" aria-label="Details">
-      <button
-        type="button"
-        className="details-close"
-        title={t("close")}
-        aria-label="Close details"
-        onClick={() => setDetailsOpen(false)}
-      >
-        <MdClear size={18} />
-      </button>
+      <CloseButton />
 
       <div className="details-heading">
         <div className="details-icon">

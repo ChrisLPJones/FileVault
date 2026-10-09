@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BsCopy, BsFolderPlus, BsGridFill, BsScissors } from "react-icons/bs";
+import { BsCopy, BsFolderPlus, BsGridFill, BsLayoutSidebarReverse, BsScissors } from "react-icons/bs";
 import { FiRefreshCw } from "react-icons/fi";
 import {
   MdOutlineDelete,
@@ -17,17 +17,19 @@ import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { useSelection } from "../../contexts/SelectionContext";
 import { useClipBoard } from "../../contexts/ClipboardContext";
 import { useLayout } from "../../contexts/LayoutContext";
+import { useDetailsPane } from "../../contexts/DetailsPaneContext";
 import { validateApiCallback } from "../../utils/validateApiCallback";
 import { useTranslation } from "../../contexts/TranslationProvider";
 import "./Toolbar.scss";
 
-const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
+const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions, enableFilePreview = true }) => {
   const [showToggleViewMenu, setShowToggleViewMenu] = useState(false);
   const { currentFolder } = useFileNavigation();
   const { selectedFiles, setSelectedFiles, handleDownload } = useSelection();
   const { clipBoard, setClipBoard, handleCutCopy, handlePasting } = useClipBoard();
   const { activeLayout, setActiveLayout } = useLayout();
   const { isBinOpen } = useRecycleBin();
+  const { isDetailsOpen, setDetailsOpen } = useDetailsPane();
   const t = useTranslation();
 
   // Toolbar Items
@@ -52,6 +54,11 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
       secondary: true,
     },
   ];
+
+  // Shows or hides the preview pane on the right (not used in the recycle bin)
+  const showPreviewToggle = enableFilePreview && !isBinOpen;
+  const previewTitle = isDetailsOpen ? "Hide preview pane" : "Show preview pane";
+  const togglePreview = () => setDetailsOpen((open) => !open);
 
   const toolbarRightItems = [
     {
@@ -94,6 +101,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
     { text: t("grid"), icon: <BsGridFill size={16} />, onClick: () => changeLayout("grid"), checked: activeLayout === "grid", divider: true },
     { text: t("list"), icon: <FaListUl size={16} />, onClick: () => changeLayout("list"), checked: activeLayout === "list" },
     { text: t("refresh"), icon: <FiRefreshCw size={16} />, onClick: toolbarRightItems[1].onClick, divider: true },
+    showPreviewToggle && { text: previewTitle, icon: <BsLayoutSidebarReverse size={16} />, onClick: togglePreview, checked: isDetailsOpen },
   ].filter(Boolean);
   // The first item after the file actions starts a new group
   overflowItems[0] = { ...overflowItems[0], divider: false };
@@ -114,6 +122,20 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
           </button>
         </div>
       ))}
+      {showPreviewToggle && (
+        <div className="toolbar-left-items">
+          <button
+            type="button"
+            className="item-action icon-only secondary-action"
+            title={previewTitle}
+            aria-label="Preview pane"
+            aria-pressed={isDetailsOpen}
+            onClick={togglePreview}
+          >
+            <BsLayoutSidebarReverse size={16} />
+          </button>
+        </div>
+      )}
 
       {showToggleViewMenu && (
         <LayoutToggler

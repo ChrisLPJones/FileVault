@@ -157,20 +157,6 @@
     }
   }
 
-  // "Folders" label above the tree; same look as the Favourites / Recent headings (QuickAccess.scss)
-  .folders-heading {
-    box-sizing: border-box;
-    margin: 10px 0 2px;
-    padding: 4px 4px 4px 22px;
-    color: var(--fm-muted);
-    font-size: 0.72em;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    text-align: left;
-    cursor: default;
-  }
-
   .empty-nav-pane {
     margin: 2px 8px 6px 22px;
     color: var(--fm-muted);

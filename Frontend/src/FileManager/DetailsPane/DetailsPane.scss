@@ -151,3 +151,10 @@
 }
 
 // Small screens show it as a bottom sheet instead (see FileManager/Mobile.scss)
+
+.details-pane .details-empty {
+  margin: auto 0;
+  padding: 0 18px;
+  color: var(--fm-muted);
+  text-align: center;
+}

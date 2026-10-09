@@ -1,16 +1,35 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FiArrowLeft } from "react-icons/fi";
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import "./Layout.css";
-import { isAuthenticated } from "../../utils/auth";
+import { isAuthenticated, LAST_FILES_KEY } from "../../utils/auth";
 import { HeaderSlotContext } from "../../contexts/HeaderSlotContext";
+
+// The file list's address (it holds the open folder) is kept so "Back to files" returns to that folder
+
+const readLastFilesUrl = () => {
+    try {
+        return sessionStorage.getItem(LAST_FILES_KEY) || "/dashboard";
+    } catch {
+        return "/dashboard";
+    }
+};
 
 const Layout = () => {
     // Re-render on navigation so the bar follows the login state
-    const { pathname: rawPathname } = useLocation();
+    const { pathname: rawPathname, search } = useLocation();
     // "/login/" is the same page as "/login"
     const pathname = rawPathname.replace(/\/+$/, "") || "/";
     const loggedIn = isAuthenticated();
+
+    useEffect(() => {
+        if (pathname !== "/dashboard") return;
+        try {
+            sessionStorage.setItem(LAST_FILES_KEY, `/dashboard${search}`);
+        } catch {
+            // Storage unavailable: Back to files opens the home folder
+        }
+    }, [pathname, search]);
     // Only logged-in users get the top bar, with no account menu: the file list has it at the
     // bottom of the folder tree and other pages reach it from there. Logged-out pages (login,
     // register, reset password, share links...) need nothing from the bar
@@ -26,7 +45,7 @@ const Layout = () => {
                         <div className="nav-left">
                             {/* Pages other than the file list (e.g. Settings) get a way back */}
                             {pathname !== "/dashboard" && (
-                                <NavLink to="/dashboard" className="link-style nav-back">
+                                <NavLink to={readLastFilesUrl()} className="link-style nav-back">
                                     <FiArrowLeft aria-hidden="true" />
                                     Back to files
                                 </NavLink>
