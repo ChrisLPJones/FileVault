@@ -309,11 +309,12 @@ Without a MaxMind account, copy a `GeoLite2-Country.mmdb` into the `geoip_data` 
 - Without `BEHIND_HTTPS_PROXY=true`, behind a reverse proxy every user shows the proxy's IP.
 - With it, the API trusts `X-Forwarded-For`, so the API port must not be reachable except through
   the proxy (section 1). Otherwise anyone can send their own header and fake the address shown.
+  Setting `ForwardedHeaders__KnownProxies__0` to your proxy's address (section 1) narrows this further.
 
 **Privacy**
 
 Storing IP addresses is personal data processing. If you run a public instance, mention the
-last-login IP logging in your privacy notice.
+last-login IP logging in your privacy notice. Only the latest address is kept, and only admins can see it.
 
 **Upgrading**
 
