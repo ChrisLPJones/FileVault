@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // Which sections of the folder pane (Folders, Favourites, Recent) are expanded, remembered in
-// this browser. Sections missing from storage default to open.
+// this browser. Sections missing from storage default to open, except Favourites and Recent (collapsed).
 const STORAGE_KEY = "fv-quick-access";
-const DEFAULTS = { folders: true, favourites: true, recent: true };
+const DEFAULTS = { folders: true, favourites: false, recent: false };
 
 // The stored sections, or null when storage is unavailable or unreadable
 const readStored = () => {

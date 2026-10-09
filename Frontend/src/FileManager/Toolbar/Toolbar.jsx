@@ -106,10 +106,9 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions, enable
   // The first item after the file actions starts a new group
   overflowItems[0] = { ...overflowItems[0], divider: false };
 
-  // Search, view and refresh: on the right in both toolbars
+  // View, refresh and search (far right): on the right in both toolbars
   const rightGroup = (
     <div>
-      <SearchBox />
       <ToolbarOverflow items={overflowItems} />
       {toolbarRightItems.map((item, index) => (
         <div key={index} className="toolbar-left-items">
@@ -136,6 +135,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions, enable
           </button>
         </div>
       )}
+      <SearchBox />
 
       {showToggleViewMenu && (
         <LayoutToggler

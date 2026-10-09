@@ -131,15 +131,6 @@ export default function UserMenu({ children, className = "", title }) {
 
                     <div className="user-menu-separator" role="separator" />
 
-                    <Link
-                        to="/settings"
-                        role="menuitem"
-                        className={`user-menu-item ${pathname === "/settings" ? "current" : ""}`}
-                        onClick={close}
-                    >
-                        <FiSettings aria-hidden="true" />
-                        Settings
-                    </Link>
                     {user.isAdmin && (
                         <Link
                             to="/admin"
@@ -151,6 +142,15 @@ export default function UserMenu({ children, className = "", title }) {
                             Admin
                         </Link>
                     )}
+                    <Link
+                        to="/settings"
+                        role="menuitem"
+                        className={`user-menu-item ${pathname === "/settings" ? "current" : ""}`}
+                        onClick={close}
+                    >
+                        <FiSettings aria-hidden="true" />
+                        Settings
+                    </Link>
                     <button
                         type="button"
                         role="menuitem"
