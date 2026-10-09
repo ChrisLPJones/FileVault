@@ -6,6 +6,7 @@ import { setToken } from "../../utils/auth";
 import ServerStatus from "../../components/ServerStatus";
 import { getErrorMessage } from "../../api/api";
 import { resendVerificationByEmailAPI } from "../../api/accountEmailAPI";
+import TwoFactorStep from "./TwoFactorStep";
 
 function Login() {
     const [identifier, setIdentifier] = useState("");
@@ -15,6 +16,8 @@ function Login() {
     const [submitting, setSubmitting] = useState(false);
     const [unverifiedEmail, setUnverifiedEmail] = useState(null);
     const [resendStatus, setResendStatus] = useState(null); // null | "sending" | message
+    // Set when the password was right but two-factor authentication needs a code
+    const [challengeToken, setChallengeToken] = useState(null);
     const location = useLocation();
     const navigate = useNavigate();
     // "Account created" shows after arriving from the register page, until the first login attempt
@@ -49,6 +52,12 @@ function Login() {
         setSubmitting(true);
         try {
             const response = await login(identifier.trim(), password);
+            if (response.status === 200 && response.data?.twoFactorRequired) {
+                setPassword("");
+                setSubmitting(false);
+                setChallengeToken(response.data.challengeToken);
+                return;
+            }
             if (response.status === 200) {
                 setToken(response.data.success);
                 navigate("/dashboard", { replace: true });
@@ -72,6 +81,18 @@ function Login() {
             setResendStatus(getErrorMessage(err, "Could not send the email. Please try again."));
         }
     };
+    if (challengeToken) {
+        return (
+            <TwoFactorStep
+                challengeToken={challengeToken}
+                onSuccess={(token) => {
+                    setToken(token);
+                    navigate("/dashboard", { replace: true });
+                }}
+                onRestart={() => setChallengeToken(null)}
+            />
+        );
+    }
 
     return (
         <div className="auth-page">

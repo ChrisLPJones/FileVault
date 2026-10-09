@@ -58,7 +58,7 @@ function ResetPassword() {
                     <div className="auth-alert auth-alert-top success" role="status">
                         Your password has been changed and you've been signed out everywhere.
                     </div>
-                    <Link to="/login" className="auth-button auth-link-button">Log in</Link>
+                    <Link to="/login" className="auth-button auth-button-link">Log in</Link>
                 </>
             );
         }

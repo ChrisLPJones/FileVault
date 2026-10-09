@@ -41,7 +41,7 @@ function VerifyEmail() {
                                     : "Try logging in: if your address still needs confirming, you can ask for a new link there."}
                             </p>
                         )}
-                        <Link to={loggedIn ? "/dashboard" : "/login"} className="auth-button auth-link-button">
+                        <Link to={loggedIn ? "/dashboard" : "/login"} className="auth-button auth-button-link">
                             {loggedIn ? "Go to your files" : "Log in"}
                         </Link>
                     </>

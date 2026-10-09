@@ -164,7 +164,7 @@
 }
 
 /* A link styled as the main button (e.g. "Log in" after resetting a password) */
-.auth-button.auth-link-button {
+.auth-button.auth-button-link {
     display: block;
     margin-top: 16px;
     box-sizing: border-box;
@@ -207,4 +207,24 @@
     margin-top: 8px;
     color: var(--fv-link);
     font-size: 0.9rem;
+}
+
+/* Two-factor login step */
+.auth-field input.auth-code-input {
+    letter-spacing: 0.25em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.auth-link-button {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--fv-link);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.auth-link-button:hover {
+    text-decoration: underline;
 }

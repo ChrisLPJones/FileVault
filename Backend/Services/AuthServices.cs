@@ -126,25 +126,51 @@ namespace Backend.Services
 
         private TimeSpan RefreshLifetime => TimeSpan.FromDays(_config.GetValue("Jwt:RefreshDays", 7));
 
-        // Create a refresh token for the user and set it as an httpOnly cookie
-        public async Task IssueRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http)
+        // Create a refresh token for the user and set it as an httpOnly cookie.
+        // Without a session ID this is a new login: it starts a new session (see Active sessions)
+        // and retires any refresh token this browser already had.
+        public async Task<Guid> IssueRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http, Guid? sessionId = null)
         {
             var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
             var expiresAt = DateTime.UtcNow.Add(RefreshLifetime);
+            var ipAddress = DeviceDescription.IpAddress(http);
 
-            await db.StoreRefreshTokenAsync(userId, HashToken(token), expiresAt);
+            if (sessionId == null)
+            {
+                if (http.Request.Cookies.TryGetValue(RefreshCookieName, out var previous) && !string.IsNullOrEmpty(previous))
+                    await db.RevokeRefreshTokenAsync(HashToken(previous));
+
+                sessionId = await db.CreateSessionAsync(
+                    userId, DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), ipAddress);
+            }
+            else
+            {
+                await db.TouchSessionAsync(sessionId.Value, ipAddress);
+            }
+
+            await db.StoreRefreshTokenAsync(userId, sessionId.Value, HashToken(token), expiresAt);
 
             http.Response.Cookies.Append(RefreshCookieName, token, RefreshCookieOptions(http, expiresAt));
+            return sessionId.Value;
         }
+
+        // The session the request's refresh cookie belongs to, or null without a known cookie
+        public async Task<Guid?> CurrentSessionIdAsync(DatabaseServices db, HttpContext http) =>
+            http.Request.Cookies.TryGetValue(RefreshCookieName, out var token) && !string.IsNullOrEmpty(token)
+                ? await db.GetSessionIdForTokenAsync(HashToken(token))
+                : null;
 
         public static void ClearRefreshCookie(HttpContext http) =>
             http.Response.Cookies.Delete(RefreshCookieName, RefreshCookieOptions(http, null));
 
-        // httpOnly so scripts can't read it; scoped to /user so it's only sent to refresh/logout
+        // httpOnly so scripts can't read it; scoped to /user so it's only sent to account endpoints.
+        // Secure on HTTPS requests (behind a proxy, see ForwardedHeaders:Enabled), or always with
+        // Jwt:SecureRefreshCookie.
         private static CookieOptions RefreshCookieOptions(HttpContext http, DateTime? expiresAt) => new()
         {
             HttpOnly = true,
-            Secure = http.Request.IsHttps,
+            Secure = http.Request.IsHttps ||
+                http.RequestServices.GetRequiredService<IConfiguration>().GetValue("Jwt:SecureRefreshCookie", false),
             SameSite = SameSiteMode.Strict,
             Path = "/user",
             Expires = expiresAt
@@ -163,6 +189,11 @@ namespace Backend.Services
 
             if (!use.Valid)
             {
+                // Signed out on purpose (logout, or the session was signed out from another
+                // device): just refuse it. Only a rotated-away token suggests theft.
+                if (use.SessionId != null && !use.Replaced)
+                    return null;
+
                 // A used token being presented again outside the short grace window (two tabs
                 // refreshing at once) suggests it was stolen: end every session for this user.
                 var grace = TimeSpan.FromSeconds(_config.GetValue("Jwt:RefreshReuseGraceSeconds", 30));
@@ -175,7 +206,10 @@ namespace Backend.Services
             if (user == null)
                 return null;
 
-            await IssueRefreshTokenAsync(use.UserId, db, http);
+            // Stay in the same session (tokens from before sessions existed start one now)
+            await IssueRefreshTokenAsync(use.UserId, db, http, use.SessionId
+                ?? await db.CreateSessionAsync(use.UserId,
+                    DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), DeviceDescription.IpAddress(http)));
             return user;
         }
 
