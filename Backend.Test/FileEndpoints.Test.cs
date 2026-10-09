@@ -347,6 +347,30 @@ namespace Backend.Test
             missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
         }
 
+        [Fact, TestPriority(13)]
+        public async Task FileTimes_AreSentAsUtc_AfterUploadAndRename()
+        {
+            await AuthenticateAsync();
+
+            // Browsers read a time without an offset as local time, so these must carry one ("Z")
+            static void ShouldBeUtcNow(JsonElement item, string property)
+            {
+                var text = item.GetProperty(property).GetString()!;
+                text.Should().EndWith("Z", $"{property} is {text}");
+                DateTimeOffset.Parse(text).Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromMinutes(2));
+            }
+
+            (await UploadAsync(_client, "utc-times.txt", "when")).StatusCode.Should().Be(HttpStatusCode.OK);
+            var uploaded = (await ListFilesAsync(_client)).Single(f => f.GetProperty("name").GetString() == "utc-times.txt");
+            ShouldBeUtcNow(uploaded, "updatedAt");
+            ShouldBeUtcNow(uploaded, "createdAt");
+
+            var id = uploaded.GetProperty("_id").GetString();
+            (await _client.PatchAsJsonAsync("/rename", new { id, newName = "utc-times-renamed.txt" })).StatusCode.Should().Be(HttpStatusCode.OK);
+            var renamed = (await ListFilesAsync(_client)).Single(f => f.GetProperty("_id").GetString() == id);
+            ShouldBeUtcNow(renamed, "updatedAt");
+        }
+
         [Fact, TestPriority(14)]
         public async Task MoveFolder_UpdatesTree_AndRejectsMovingIntoItself()
         {

@@ -105,7 +105,7 @@ public partial class DatabaseServices
                 WHERE UserId = @UserId AND GUID IN (SELECT GUID FROM Tree);
 
                 UPDATE Files
-                SET FileName = @Name, FilePath = @NewPath, ParentId = @ParentId, UpdatedAt = GETDATE()
+                SET FileName = @Name, FilePath = @NewPath, ParentId = @ParentId, UpdatedAt = SYSUTCDATETIME()
                 WHERE GUID = @GUID AND UserId = @UserId;
 
                 UPDATE Files SET DeletedAt = NULL, TrashRootId = NULL
