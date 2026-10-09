@@ -1,0 +1,225 @@
+# Deploying FileVault
+
+How to run FileVault for real: behind HTTPS, with the right secrets, backed up, and with the
+security settings that matter. The quick start in the [README](../README.md#run-everything-with-docker)
+gets it running on `localhost`; this guide picks up from there.
+
+## 1. Serve it over HTTPS
+
+FileVault's containers speak plain HTTP. Put a reverse proxy in front of them that terminates TLS,
+and don't expose the containers' ports to the internet.
+
+The browser talks to two origins: the frontend (nginx, container port 80) and the API (container
+port 8080). The simplest setup gives each its own hostname, for example `files.example.com` and
+`api.files.example.com`. Keep them on the same registrable domain: the refresh-token cookie is
+`SameSite=Strict`, so it is only sent when the frontend and API are the same *site*.
+
+In `.env`:
+
+```bash
+FRONTEND_URL=https://files.example.com        # CORS: the only origin allowed to call the API
+API_URL=https://api.files.example.com         # compiled into the frontend, and used in its CSP
+BEHIND_HTTPS_PROXY=true                       # see below
+```
+
+`API_URL` is a build argument, so rebuild after changing it: `docker compose up --build -d`.
+
+`BEHIND_HTTPS_PROXY=true` makes the API:
+
+- trust the proxy's `X-Forwarded-For` and `X-Forwarded-Proto` headers, so rate limits and the
+  sessions list see the real client IP, and requests count as HTTPS;
+- always mark the refresh-token cookie `Secure`.
+
+Only set it when the API can't be reached except through the proxy. Otherwise anyone could send
+their own `X-Forwarded-For` header and dodge the per-IP rate limits. With the proxy on the same
+host, publish the containers on the loopback interface only, e.g. in `docker-compose.override.yml`
+(`!override` needs Docker Compose 2.24 or later):
+
+```yaml
+services:
+  api:
+    ports: !override
+      - "127.0.0.1:3000:8080"
+  frontend:
+    ports: !override
+      - "127.0.0.1:5173:80"
+```
+
+(The settings behind it are `ForwardedHeaders__Enabled` and `Jwt__SecureRefreshCookie`. To trust
+only specific proxy addresses, set `ForwardedHeaders__KnownProxies__0=10.0.0.5` and so on.)
+
+### Caddy
+
+Caddy gets and renews certificates automatically.
+
+```caddyfile
+files.example.com {
+    reverse_proxy 127.0.0.1:5173
+}
+
+api.files.example.com {
+    # Allow large uploads (the API's own limit is Storage:MaxUploadBytes, 100 MB by default)
+    request_body {
+        max_size 110MB
+    }
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+Caddy sets `X-Forwarded-For` and `X-Forwarded-Proto` itself.
+
+### nginx
+
+```nginx
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name files.example.com;
+    ssl_certificate     /etc/letsencrypt/live/files.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/files.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:5173;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name api.files.example.com;
+    ssl_certificate     /etc/letsencrypt/live/api.files.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.files.example.com/privkey.pem;
+
+    client_max_body_size 110m;      # uploads; the API enforces its own limit
+    proxy_request_buffering off;    # stream uploads straight through
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# Redirect plain HTTP to HTTPS
+server {
+    listen 80;
+    server_name files.example.com api.files.example.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+## 2. Secrets and settings
+
+Set these in `.env` next to `docker-compose.yml` (it's gitignored). Compose refuses to start
+without the first three.
+
+| Variable | What it is |
+|---|---|
+| `MSSQL_SA_PASSWORD` | SQL Server `sa` password. Only applied when the database volume is first created |
+| `JWT_KEY` | Signs access tokens. At least 32 bytes: `openssl rand -base64 48` |
+| `ENCRYPTION_MASTER_KEY` | Encrypts every file's key, and the two-factor secrets. Exactly 32 bytes, base64: `openssl rand -base64 32` |
+| `FRONTEND_URL` | Where the browser loads the app; the only origin the API accepts calls from |
+| `API_URL` | Where the browser reaches the API. Build-time: rebuild after changing it |
+| `BEHIND_HTTPS_PROXY` | `true` behind an HTTPS reverse proxy (section 1) |
+| `SWAGGER_ENABLED` | `true` to serve the API docs (section 5). Off by default |
+
+Other API settings can be passed as environment variables on the `api` service using
+`Section__Key` names, for example `Storage__DefaultQuotaBytes`, `Storage__MaxUploadBytes`,
+`RateLimiting__auth__PermitLimit` or `TwoFactor__Issuer` (the name shown in authenticator apps).
+See `Backend/appsettings.json` for the full list and defaults.
+
+Keep the master key somewhere other than the server too, such as a password manager.
+
+## 3. Backups
+
+Everything lives in two Docker volumes:
+
+- `filevault_sql_data`: the database (accounts, file metadata, each file's wrapped key)
+- `filevault_file_storage`: the encrypted files
+
+**Back up both volumes together, and keep a copy of `ENCRYPTION_MASTER_KEY`.** The three only work
+as a set: the files can't be decrypted without their keys from the database, and those keys can't
+be unwrapped without the master key. A database backup from a different moment than the files
+backup leaves files without keys (lost) or keys without files. Lose the master key and every file,
+and every two-factor secret, is unreadable.
+
+A simple consistent backup stops the API and the database briefly (SQL Server's data files can't
+be copied safely while it's running):
+
+```bash
+docker compose stop api sqlserver
+docker run --rm -v filevault_sql_data:/data -v "$PWD/backup:/backup" alpine \
+    tar czf /backup/sql_data-$(date +%F).tar.gz -C /data .
+docker run --rm -v filevault_file_storage:/data -v "$PWD/backup:/backup" alpine \
+    tar czf /backup/file_storage-$(date +%F).tar.gz -C /data .
+docker compose start sqlserver api
+```
+
+Restore by extracting both archives into empty volumes of the same names before starting the stack,
+with the same `ENCRYPTION_MASTER_KEY` in `.env`.
+
+## 4. Rotating the JWT key
+
+Change `JWT_KEY` in `.env` and run `docker compose up -d`. Every access token signed with the old key
+stops working at once. Refresh tokens are random values checked against the database, not signed,
+so an open browser tab quietly gets a new access token on its next request and stays logged in.
+
+To log **everyone** out as well (for example after a suspected leak), also revoke every refresh token:
+
+```bash
+docker compose exec sqlserver sh -c '/opt/mssql-tools18/bin/sqlcmd -C -U sa -P "$MSSQL_SA_PASSWORD" \
+    -d SecureVaultDb -Q "UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE RevokedAt IS NULL"'
+```
+
+Users then log in again (with their two-factor code if they use one). Their files are unaffected.
+
+Don't rotate `ENCRYPTION_MASTER_KEY` this way: changing it makes every stored file unreadable.
+There is no master-key rotation tool yet.
+
+## 5. API docs (Swagger)
+
+The interactive docs at `/swagger` are served when the API runs in Development (`dotnet run`), and
+otherwise only when `Swagger:Enabled` is true. The Docker stack runs in Production, so they're off.
+To turn them on, add `SWAGGER_ENABLED=true` to `.env` and run `docker compose up -d`; remove it (or
+set it to `false`) to turn them off again. They describe the API but don't bypass its
+authentication, so leaving them off in production is about not advertising the API surface.
+
+## 6. Security headers
+
+**API** (every response, set in `Backend/Services/SecurityHeaders.cs`):
+
+- `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`
+- `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`: the API only returns data,
+  so a response opened directly can't run anything or be framed (Swagger UI only gets the
+  `frame-ancestors` rule, as it's a real page)
+- `Cache-Control: no-store` on `/user/*` (login, tokens, profile, sessions, two-factor), unless the
+  endpoint sets its own caching
+- The refresh cookie is `HttpOnly`, `SameSite=Strict`, limited to `/user`, and `Secure` on HTTPS
+  (section 1)
+
+**Frontend** (nginx, `Frontend/nginx/`):
+
+- `Content-Security-Policy`: scripts, styles and fonts from the app's own origin only (no inline
+  scripts; the font is bundled rather than loaded from Google Fonts); `connect-src` and `img-src`
+  add the API origin from `API_URL`; `blob:` and `data:` images (previews, profile pictures, the
+  two-factor QR code); `blob:` media and frames (video/audio and PDF previews);
+  `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`
+- `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  and a `Permissions-Policy` that turns off camera, microphone, geolocation, payment and USB
+- `Strict-Transport-Security: max-age=31536000`, only when the request came through the proxy over
+  HTTPS (`X-Forwarded-Proto: https`). Browsers ignore HSTS over plain HTTP, and sending it on a
+  `localhost` setup would be pointless. Once it's been sent, browsers refuse plain HTTP for that
+  host for a year, so only put FileVault behind HTTPS you intend to keep. Add `includeSubDomains`
+  or `preload` in your proxy only if every subdomain is HTTPS too.
+
+The nginx config is a template (`/etc/nginx/templates/default.conf.template`); at start-up the
+container works out the API origin from `API_URL` and writes the real config. To check the headers:
+
+```bash
+curl -sI https://files.example.com/ | grep -iE "content-security|strict-transport|x-frame|referrer|permissions"
+curl -sI https://api.files.example.com/ping | grep -iE "content-security|x-frame|referrer"
+```

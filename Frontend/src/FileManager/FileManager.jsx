@@ -1,3 +1,6 @@
+// Bundled rather than loaded from Google Fonts, so the Content-Security-Policy can stay "self" only
+import "@fontsource-variable/nunito-sans/wght.css";
+import "@fontsource-variable/nunito-sans/wght-italic.css";
 import Loader from "../components/Loader/Loader";
 import Toolbar from "./Toolbar/Toolbar";
 import NavigationPane from "./NavigationPane/NavigationPane";
@@ -59,7 +62,7 @@ const FileManager = ({
   initialPath = "",
   filePreviewComponent,
   primaryColor = "#6155b4",
-  fontFamily = "Nunito Sans, sans-serif",
+  fontFamily = "Nunito Sans Variable, Nunito Sans, sans-serif",
   language = "en-US",
   permissions: userPermissions = {},
   collapsibleNav = false,

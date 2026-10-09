@@ -162,3 +162,23 @@
     color: var(--fv-text-muted);
     font-weight: normal;
 }
+
+/* Two-factor login step */
+.auth-field input.auth-code-input {
+    letter-spacing: 0.25em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.auth-link-button {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--fv-link);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.auth-link-button:hover {
+    text-decoration: underline;
+}

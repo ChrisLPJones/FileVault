@@ -4,6 +4,7 @@ import "../Auth/Auth.css";
 import { login } from "../../services/Auth";
 import { setToken } from "../../utils/auth";
 import ServerStatus from "../../components/ServerStatus";
+import TwoFactorStep from "./TwoFactorStep";
 
 function Login() {
     const [identifier, setIdentifier] = useState("");
@@ -11,6 +12,8 @@ function Login() {
     const [errors, setErrors] = useState({});
     const [loginError, setLoginError] = useState(null);
     const [submitting, setSubmitting] = useState(false);
+    // Set when the password was right but two-factor authentication needs a code
+    const [challengeToken, setChallengeToken] = useState(null);
     const location = useLocation();
     const navigate = useNavigate();
     // "Account created" shows after arriving from the register page, until the first login attempt
@@ -43,6 +46,12 @@ function Login() {
         setSubmitting(true);
         try {
             const response = await login(identifier.trim(), password);
+            if (response.status === 200 && response.data?.twoFactorRequired) {
+                setPassword("");
+                setSubmitting(false);
+                setChallengeToken(response.data.challengeToken);
+                return;
+            }
             if (response.status === 200) {
                 setToken(response.data.success);
                 navigate("/dashboard", { replace: true });
@@ -55,6 +64,19 @@ function Login() {
         }
         setSubmitting(false);
     };
+
+    if (challengeToken) {
+        return (
+            <TwoFactorStep
+                challengeToken={challengeToken}
+                onSuccess={(token) => {
+                    setToken(token);
+                    navigate("/dashboard", { replace: true });
+                }}
+                onRestart={() => setChallengeToken(null)}
+            />
+        );
+    }
 
     return (
         <div className="auth-page">

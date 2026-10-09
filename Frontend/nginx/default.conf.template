@@ -1,0 +1,39 @@
+# FileVault frontend (nginx). This is a template: when the container starts, the nginx image
+# substitutes the API_ORIGIN environment variable (worked out from API_URL by 15-api-origin.envsh)
+# and writes the result to /etc/nginx/conf.d/default.conf.
+
+# HSTS only when the request reached the HTTPS proxy in front of this container over HTTPS.
+# (Browsers ignore the header over plain HTTP anyway.) An empty value means no header.
+map $http_x_forwarded_proto $fv_hsts {
+    https   "max-age=31536000";
+    default "";
+}
+
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    # Only this site's own scripts and styles. The API is the one other origin the app talks to and
+    # loads images from; previews are blob: URLs (images, video, audio and PDFs in an iframe),
+    # the 2FA QR code is a data: URL. Nothing may frame the app.
+    set $fv_csp "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: ${API_ORIGIN}; media-src 'self' blob:; frame-src blob:; connect-src 'self' ${API_ORIGIN}; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+
+    # Hashed build assets never change, so cache them for a long time
+    location /assets/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # Client-side routes (/login, /dashboard, ...) all serve the app
+    location / {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri $uri/ /index.html;
+    }
+}

@@ -1,0 +1,155 @@
+/* Two-factor authentication and active sessions cards (see Settings.css for the shared card styles) */
+
+.settings-card h2 .security-badge {
+    margin-left: 10px;
+    vertical-align: middle;
+}
+
+.security-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.security-badge.on {
+    background-color: var(--fv-alert-success-bg);
+    color: var(--fv-alert-success-text);
+}
+
+.security-badge.off,
+.security-badge.neutral {
+    background-color: var(--fv-track);
+    color: var(--fv-text-muted);
+}
+
+.security-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.setup-steps {
+    margin: 0 0 10px;
+    padding-left: 20px;
+}
+
+/* Always dark on white: scanners need the contrast, whatever the theme */
+.qr-code {
+    display: inline-block;
+    margin: 0 0 12px;
+    padding: 8px;
+    border-radius: 6px;
+    background-color: #fff;
+}
+
+.qr-code img {
+    display: block;
+}
+
+.setup-secret,
+.recovery-code-list {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.setup-secret {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background-color: var(--fv-track);
+    color: var(--fv-text);
+    word-break: break-all;
+}
+
+.settings-card input.code-input {
+    max-width: 160px;
+    letter-spacing: 0.2em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.recovery-code-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 16px;
+    margin: 0 0 14px;
+    padding: 12px 16px;
+    border: 1px dashed var(--fv-border);
+    border-radius: 6px;
+    list-style: none;
+    font-size: 0.95rem;
+}
+
+@media (max-width: 420px) {
+    .recovery-code-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* A button that looks like a link (e.g. "Use a recovery code") */
+.link-button {
+    display: inline-block;
+    margin: -6px 0 14px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--fv-link);
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.link-button:hover {
+    text-decoration: none;
+}
+
+/* Active sessions */
+.session-list {
+    margin: 0 0 14px;
+    padding: 0;
+    list-style: none;
+}
+
+.session-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--fv-border);
+}
+
+.session-item:first-child {
+    border-top: none;
+    padding-top: 0;
+}
+
+.session-icon {
+    flex-shrink: 0;
+    color: var(--fv-text-muted);
+}
+
+.session-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.session-device {
+    font-weight: 600;
+}
+
+.session-device .security-badge {
+    margin-left: 8px;
+}
+
+.session-meta {
+    color: var(--fv-text-muted);
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+}
+
+.session-item .settings-button {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    font-size: 0.9rem;
+}

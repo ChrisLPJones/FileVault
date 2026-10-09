@@ -1,0 +1,6 @@
+#!/bin/sh
+# Sourced by the nginx image's entrypoint before it fills in /etc/nginx/templates/*.template.
+# The Content-Security-Policy needs the API's origin (scheme, host and port) rather than its
+# full URL: "https://example.com/api" -> "https://example.com". Empty if the API is on this origin.
+API_ORIGIN=$(printf '%s' "${API_URL:-}" | sed -nE 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/?#]+).*#\1#p')
+export API_ORIGIN
