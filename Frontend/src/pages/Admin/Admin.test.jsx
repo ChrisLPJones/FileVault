@@ -184,6 +184,30 @@ describe("Admin page", () => {
         expect(within(row("alex@example.com")).queryByRole("alert")).not.toBeInTheDocument();
     });
 
+    it("shows last active and removal due only in hosted mode", async () => {
+        getAdminStatsAPI.mockResolvedValue({ ...stats, mode: "hosted" });
+        getAdminUsersAPI.mockResolvedValue([
+            { ...users[0], lastActiveAt: "2026-03-05T09:30:00Z", removalDueAt: null },
+            { ...users[1], isPermanent: false, lastActiveAt: "2026-02-10T09:30:00Z", removalDueAt: "2026-03-12T09:30:00Z" },
+        ]);
+        render(<Admin />);
+
+        expect(await screen.findByRole("columnheader", { name: "Last active" })).toBeInTheDocument();
+        expect(screen.getByRole("columnheader", { name: "Removal due" })).toBeInTheDocument();
+        expect(within(row("alex@example.com")).getByText("Not removed")).toBeInTheDocument();
+        expect(within(row("sam@example.com")).queryByText("Not removed")).not.toBeInTheDocument();
+        expect(within(row("sam@example.com")).getByText(/Mar 12, 2026|12 Mar 2026/)).toBeInTheDocument();
+    });
+
+    it("has no removal columns when self-hosted", async () => {
+        getAdminStatsAPI.mockResolvedValue({ ...stats, mode: "self-hosted" });
+        render(<Admin />);
+
+        await screen.findByText("alex@example.com");
+        expect(screen.queryByRole("columnheader", { name: "Last active" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("columnheader", { name: "Removal due" })).not.toBeInTheDocument();
+    });
+
     it("tells non-admins the page isn't for them", async () => {
         getAdminUsersAPI.mockImplementation(async () => {
             throw Object.assign(new Error("Forbidden"), { response: { status: 403, data: { error: "Administrators only" } } });

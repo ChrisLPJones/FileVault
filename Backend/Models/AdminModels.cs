@@ -19,7 +19,9 @@ namespace Backend.Models
         bool IsAdmin,
         bool IsPermanent,
         DateTime? AvatarUpdatedAt,
-        DateTime? SuspendedAt); // non-null = suspended (can't sign in; data kept)
+        DateTime? SuspendedAt, // non-null = suspended (can't sign in; data kept)
+        DateTime? LastActiveAt = null, // last sign-in or use of the app
+        DateTime? RemovalDueAt = null); // hosted mode only: when the account will be removed for inactivity; null if exempt
 
     // POST /admin/users. Validated like /user/register; the email counts as confirmed.
     public class AdminCreateUserRequest
@@ -77,5 +79,6 @@ namespace Backend.Models
         long? DiskTotalBytes,
         long? DiskFreeBytes,
         Guid CurrentUserId, // the administrator asking, so the page can leave their own row's account actions out
-        int SuspendedCount = 0);
+        int SuspendedCount = 0,
+        string Mode = "self-hosted"); // "self-hosted" or "hosted"
 }

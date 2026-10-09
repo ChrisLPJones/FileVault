@@ -163,6 +163,10 @@ namespace Backend.Services
                     rotatedFrom != null, rotatedFrom?.UserTokensValidAfter))
                 return null;
 
+            // Signing in, and renewing the access token while the app is open, count as use (hosted mode's
+            // inactivity clock); written at most about hourly
+            await db.TouchActivityAsync(userId);
+
             http.Response.Cookies.Append(RefreshCookieName, token, RefreshCookieOptions(http, expiresAt));
             return sessionId.Value;
         }

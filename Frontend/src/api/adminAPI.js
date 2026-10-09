@@ -4,11 +4,11 @@ import { api } from "./api";
 export const getAdminStatusAPI = async () => (await api.get("/admin/me")).data;
 
 // [{ id, firstName, lastName, email, createdAt, lastLogin, bytesUsed, fileCount, quota, quotaOverride,
-//    isAdmin, isPermanent, avatarUpdatedAt, suspendedAt }]
+//    isAdmin, isPermanent, avatarUpdatedAt, suspendedAt, lastActiveAt, removalDueAt (hosted mode only) }]
 export const getAdminUsersAPI = async () => (await api.get("/admin/users")).data;
 
 // { userCount, adminCount, fileCount, folderCount, totalStoredBytes, defaultQuotaBytes,
-//   storageBytesOnDisk, diskTotalBytes, diskFreeBytes, currentUserId, suspendedCount }
+//   storageBytesOnDisk, diskTotalBytes, diskFreeBytes, currentUserId, suspendedCount, mode: "self-hosted" | "hosted" }
 export const getAdminStatsAPI = async () => (await api.get("/admin/stats")).data;
 
 // quotaBytes: a number of bytes, or null for the server's default

@@ -60,6 +60,22 @@ public partial class AccountEmailService(IConfiguration config, EmailQueue queue
             "this email; your password hasn't changed."));
     }
 
+    // Tell a user their account will be removed for inactivity (hosted mode). The address is only
+    // emailed if it was confirmed; the caller checks.
+    public void SendInactivityWarning(string email, string firstName, DateTime removalDueAt, int inactiveDays, string? contactEmail)
+    {
+        var date = removalDueAt.ToString("d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+        var contact = string.IsNullOrWhiteSpace(contactEmail) ? "" : $"To ask for a permanent account, email {contactEmail}.\n\n";
+        queue.Enqueue(new EmailMessage(email, "Your FileVault account will be removed soon",
+            $"Hi {firstName},\n\n" +
+            "You haven't used your FileVault account for a while. FileVault is a free service with limited hosting, " +
+            $"so accounts that aren't used for {inactiveDays} days are removed along with their files.\n\n" +
+            $"Your account will be removed on or after {date} (UTC).\n\n" +
+            "To keep it, sign in to FileVault before then.\n\n" +
+            contact +
+            $"{FrontendUrl}/login"));
+    }
+
     // Use a token: the user (and the email it was sent to), or null if it's unknown, used or expired
     public static async Task<DatabaseServices.AccountTokenUse?> ConsumeAsync(string? token, string purpose, DatabaseServices db) =>
         token != null && TokenFormat().IsMatch(token)
