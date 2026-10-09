@@ -24,7 +24,15 @@ public sealed class AccessTokenGate(IMemoryCache cache, IConfiguration config)
     private TimeSpan CacheTime => TimeSpan.FromSeconds(Math.Max(0, config.GetValue("Auth:UserStateCacheSeconds", 30)));
 
     // Forget what is known about this user (after deleting them or invalidating their tokens)
-    public void Evict(string userId) => cache.Remove(CacheKey(userId));
+    public void Evict(string userId)
+    {
+        // Bump first: a read that started before this can no longer cache its (stale) answer
+        _generations.AddOrUpdate(userId, 1, (_, g) => g + 1);
+        cache.Remove(CacheKey(userId));
+    }
+
+    // Per-user count of Evict calls (one small entry per evicted user)
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> _generations = new();
 
     public async Task<bool> IsAcceptedAsync(ClaimsPrincipal principal, DatabaseServices db)
     {
@@ -33,7 +41,7 @@ public sealed class AccessTokenGate(IMemoryCache cache, IConfiguration config)
             return false;
         userId = id.ToString();
 
-        var state = await GetStateAsync(userId, db);
+        var state = await GetStateAsync(userId, () => db.GetUserAuthStateAsync(userId));
         if (!state.Exists)
             return false;
         if (state.TokensValidAfter is not { } validAfter)
@@ -45,17 +53,20 @@ public sealed class AccessTokenGate(IMemoryCache cache, IConfiguration config)
         return issuedAt >= new DateTimeOffset(validAfter).ToUnixTimeMilliseconds();
     }
 
-    private async Task<DatabaseServices.UserAuthState> GetStateAsync(string userId, DatabaseServices db)
+    // Public so tests can supply the database read
+    public async Task<DatabaseServices.UserAuthState> GetStateAsync(string userId, Func<Task<DatabaseServices.UserAuthState>> read)
     {
         var time = CacheTime;
         if (time == TimeSpan.Zero)
-            return await db.GetUserAuthStateAsync(userId);
+            return await read();
 
         if (cache.TryGetValue(CacheKey(userId), out DatabaseServices.UserAuthState? cached) && cached != null)
             return cached;
 
-        var state = await db.GetUserAuthStateAsync(userId);
-        cache.Set(CacheKey(userId), state, time);
+        var generation = _generations.GetValueOrDefault(userId);
+        var state = await read();
+        if (_generations.GetValueOrDefault(userId) == generation)
+            cache.Set(CacheKey(userId), state, time);
         return state;
     }
 }

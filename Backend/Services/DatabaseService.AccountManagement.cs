@@ -60,7 +60,10 @@ public partial class DatabaseServices
     // refresh tokens (so every session), pending two-factor login challenges and unused
     // password-reset links, and TokensValidAfter, which makes the access tokens they hold stop
     // working now (see AccessTokenGate). Returns false if there's no such user.
-    public async Task<bool> SetPasswordAndSignOutAsync(string userId, string passwordHash)
+    public Task<bool> SetPasswordAndSignOutAsync(string userId, string passwordHash) =>
+        RetryOnDeadlockAsync(() => SetPasswordAndSignOutOnceAsync(userId, passwordHash));
+
+    private async Task<bool> SetPasswordAndSignOutOnceAsync(string userId, string passwordHash)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();

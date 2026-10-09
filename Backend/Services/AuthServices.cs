@@ -134,7 +134,8 @@ namespace Backend.Services
         // Create a refresh token for the user and set it as an httpOnly cookie.
         // Without a session ID this is a new login: it starts a new session (see Active sessions)
         // and retires any refresh token this browser already had.
-        public async Task<Guid> IssueRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http, Guid? sessionId = null)
+        public async Task<Guid?> IssueRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http, Guid? sessionId = null,
+            DatabaseServices.RefreshTokenUse? rotatedFrom = null)
         {
             var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
             var expiresAt = DateTime.UtcNow.Add(RefreshLifetime);
@@ -153,7 +154,11 @@ namespace Backend.Services
                 await db.TouchSessionAsync(sessionId.Value, ipAddress);
             }
 
-            await db.StoreRefreshTokenAsync(userId, sessionId.Value, HashToken(token), expiresAt);
+            // When rotating, the token is stored only if no administrator password change landed
+            // since the old one was consumed; null means refused
+            if (!await db.StoreRefreshTokenAsync(userId, sessionId.Value, HashToken(token), expiresAt,
+                    rotatedFrom != null, rotatedFrom?.UserTokensValidAfter))
+                return null;
 
             http.Response.Cookies.Append(RefreshCookieName, token, RefreshCookieOptions(http, expiresAt));
             return sessionId.Value;
@@ -212,10 +217,10 @@ namespace Backend.Services
                 return null;
 
             // Stay in the same session (tokens from before sessions existed start one now)
-            await IssueRefreshTokenAsync(use.UserId, db, http, use.SessionId
+            var issued = await IssueRefreshTokenAsync(use.UserId, db, http, use.SessionId
                 ?? await db.CreateSessionAsync(use.UserId,
-                    DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), DeviceDescription.IpAddress(http)));
-            return user;
+                    DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), DeviceDescription.IpAddress(http)), use);
+            return issued == null ? null : user;
         }
 
         // Revoke the refresh token in the request's cookie (logout)
