@@ -200,7 +200,11 @@ public partial class DatabaseServices
                 return HttpReturnResult.Conflict(LastAdminMessage); // rolled back (nothing written) when disposed
         }
 
-        await using (var update = new SqlCommand("UPDATE Users SET IsAdmin = @IsAdmin WHERE Id = @UserId", connection, transaction))
+        await using (var update = new SqlCommand(@"
+            UPDATE Users SET IsAdmin = @IsAdmin,
+                LastActiveAt = CASE WHEN @IsAdmin = 0 AND IsAdmin = 1 THEN SYSUTCDATETIME() ELSE LastActiveAt END,
+                InactivityWarnedAt = CASE WHEN @IsAdmin = 0 AND IsAdmin = 1 THEN NULL ELSE InactivityWarnedAt END
+            WHERE Id = @UserId", connection, transaction))
         {
             update.Parameters.AddWithValue("@IsAdmin", isAdmin);
             update.Parameters.AddWithValue("@UserId", userId);

@@ -13,8 +13,33 @@ namespace Backend.Services;
 //     Each is checked again inside the delete transaction, so someone who signed in meanwhile is
 //     kept. Removal does not depend on the email being delivered.
 // Each phase handles at most Hosted:MaxRemovalsPerRun accounts per run.
+// Counts removals in the last 24 hours (in memory, per process) for Hosted:MaxRemovalsPerDay
+public class RemovalTracker
+{
+    private readonly object _lock = new();
+    private readonly Queue<DateTime> _removals = new();
+
+    public int CountLastDay()
+    {
+        lock (_lock)
+        {
+            var cutoff = DateTime.UtcNow.AddDays(-1);
+            while (_removals.Count > 0 && _removals.Peek() < cutoff)
+                _removals.Dequeue();
+            return _removals.Count;
+        }
+    }
+
+    public void Record()
+    {
+        lock (_lock)
+            _removals.Enqueue(DateTime.UtcNow);
+    }
+}
+
 public class InactiveAccountService(
     DatabaseServices db,
+    RemovalTracker tracker,
     AccountDeletionService deletion,
     AccountEmailService emails,
     IEmailSender emailSender,
@@ -41,14 +66,29 @@ public class InactiveAccountService(
                 hosted.InactiveDays, hosted.ContactEmail);
         }
 
+        if (warnings.Count >= hosted.MaxRemovalsPerRun)
+            logger.LogWarning("{Count} accounts were warned in one run (the per-run limit): check that this many inactive accounts is expected",
+                warnings.Count);
+
         var removed = 0;
-        foreach (var userId in await db.GetAccountsDueForRemovalAsync(hosted, hosted.MaxRemovalsPerRun, onlyUsers))
+        var remainingToday = hosted.MaxRemovalsPerDay - tracker.CountLastDay();
+        if (remainingToday <= 0)
+        {
+            logger.LogWarning("Daily limit of {Max} inactive-account removals reached; no more accounts will be removed today",
+                hosted.MaxRemovalsPerDay);
+            return new RunResult(warnings.Count, 0);
+        }
+
+        foreach (var userId in await db.GetAccountsDueForRemovalAsync(hosted, Math.Min(hosted.MaxRemovalsPerRun, remainingToday), onlyUsers))
         {
             try
             {
                 var result = await deletion.DeleteAsync(userId, hosted);
                 if (result.Success)
+                {
                     removed++;
+                    tracker.Record();
+                }
                 else if (result.StatusCode != 409)
                     logger.LogWarning("Removing inactive account {UserId} failed: {Message}", userId, result.Message);
             }

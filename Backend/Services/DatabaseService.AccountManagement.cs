@@ -99,7 +99,12 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        await using var command = new SqlCommand("UPDATE Users SET IsPermanent = @IsPermanent WHERE Id = @UserId", connection);
+        // Losing permanent status restarts the inactivity clock so the account isn't removed straight away
+        await using var command = new SqlCommand(@"
+            UPDATE Users SET IsPermanent = @IsPermanent,
+                LastActiveAt = CASE WHEN @IsPermanent = 0 AND IsPermanent = 1 THEN SYSUTCDATETIME() ELSE LastActiveAt END,
+                InactivityWarnedAt = CASE WHEN @IsPermanent = 0 AND IsPermanent = 1 THEN NULL ELSE InactivityWarnedAt END
+            WHERE Id = @UserId", connection);
         command.Parameters.AddWithValue("@IsPermanent", isPermanent);
         command.Parameters.AddWithValue("@UserId", userId);
         return await command.ExecuteNonQueryAsync() > 0;
@@ -163,7 +168,10 @@ public partial class DatabaseServices
         }
         else
         {
-            await using var command = new SqlCommand("UPDATE Users SET SuspendedAt = NULL WHERE Id = @UserId", connection, transaction);
+            await using var command = new SqlCommand(
+                // Restart the inactivity clock so the account isn't warned or removed straight away
+                "UPDATE Users SET SuspendedAt = NULL, LastActiveAt = SYSUTCDATETIME(), InactivityWarnedAt = NULL WHERE Id = @UserId",
+                connection, transaction);
             command.Parameters.AddWithValue("@UserId", userId);
             await command.ExecuteNonQueryAsync();
         }

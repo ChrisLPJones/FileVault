@@ -5,7 +5,7 @@ import { clearToken, setToken } from "../utils/auth";
 export const PROFILE_CHANGED_EVENT = "fv-profile-change";
 export const notifyProfileChanged = () => window.dispatchEvent(new Event(PROFILE_CHANGED_EVENT));
 
-// { firstName, lastName, email, avatarUpdatedAt, emailVerified, hostedNotice, hostedContactEmail }
+// { firstName, lastName, email, avatarUpdatedAt, emailVerified, hostedNotice, hostedInactiveDays, hostedContactEmail }
 export const getUserInfoAPI = async () => (await api.get("/user/info")).data;
 
 // Hosted mode: remember that this user closed the first-login notice

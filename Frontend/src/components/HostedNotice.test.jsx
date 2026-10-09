@@ -25,6 +25,13 @@ describe("HostedNotice", () => {
         expect(screen.getByRole("link", { name: "owner@example.com" })).toHaveAttribute("href", "mailto:owner@example.com");
     });
 
+    it("uses the configured number of inactive days", () => {
+        useUserProfile.mockReturnValue({ hostedNotice: true, hostedContactEmail: null, hostedInactiveDays: 90 });
+        render(<HostedNotice />);
+
+        expect(screen.getByRole("status")).toHaveTextContent("accounts that aren't used for 90 days are removed.");
+    });
+
     it("leaves the permanent-account sentence out without a contact address", () => {
         useUserProfile.mockReturnValue({ hostedNotice: true, hostedContactEmail: null });
         render(<HostedNotice />);

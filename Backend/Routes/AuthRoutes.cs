@@ -167,7 +167,7 @@ namespace Backend.Routes
                 var verified = await db.IsEmailVerifiedAsync(userId);
                 return Results.Ok(showNotice
                     ? new HostedUserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified,
-                        true, hosted.ContactEmail)
+                        true, hosted.InactiveDays, hosted.ContactEmail)
                     : new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified));
             })
                 .WithTags("Account")

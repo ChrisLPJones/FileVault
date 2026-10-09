@@ -261,6 +261,72 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task Remove_RespectsThePerDayLimit()
+        {
+            var limited = _hosted.WithWebHostBuilder(builder => builder.UseSetting("Hosted:MaxRemovalsPerDay", "1"));
+            var first = await NewUserAsync();
+            var second = await NewUserAsync();
+            await BackdateAsync(first.UserId, 40, 8);
+            await BackdateAsync(second.UserId, 40, 8);
+
+            (await RunJobAsync(limited, first, second)).Removed.Should().Be(1);
+            // The day's allowance is used up, so the other stays even though it is due
+            (await RunJobAsync(limited, first, second)).Removed.Should().Be(0);
+
+            (await ExistsAsync(_hosted, first)).Should().NotBe(await ExistsAsync(_hosted, second));
+        }
+
+        [Fact]
+        public async Task Unsuspending_RestartsTheInactivityClock()
+        {
+            var user = await NewUserAsync();
+            await BackdateAsync(user.UserId, 90, 30);
+            using var scope = _hosted.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<DatabaseServices>();
+            (await db.SetSuspendedAsync(user.UserId, true)).Success.Should().BeTrue();
+
+            (await db.SetSuspendedAsync(user.UserId, false)).Success.Should().BeTrue();
+
+            (await ColumnAsync(_hosted, user, "InactivityWarnedAt")).Should().BeNull();
+            (await ColumnAsync(_hosted, user, "LastActiveAt")).Should().BeAfter(DateTime.UtcNow.AddMinutes(-5));
+            (await RunJobAsync(_hosted, user)).Should().Be(new InactiveAccountService.RunResult(0, 0));
+        }
+
+        [Fact]
+        public async Task LosingAdminRights_RestartsTheInactivityClock()
+        {
+            var admin = await NewUserAsync();
+            var other = await NewUserAsync();
+            await TestDatabase.SetAdminAsync(_hosted, admin.UserId, true);
+            await TestDatabase.SetAdminAsync(_hosted, other.UserId, true);
+            await BackdateAsync(admin.UserId, 90, 30);
+            using var scope = _hosted.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<DatabaseServices>();
+
+            (await db.SetAdminAsync(admin.UserId, false)).Success.Should().BeTrue();
+
+            (await ColumnAsync(_hosted, admin, "InactivityWarnedAt")).Should().BeNull();
+            (await ColumnAsync(_hosted, admin, "LastActiveAt")).Should().BeAfter(DateTime.UtcNow.AddMinutes(-5));
+            (await RunJobAsync(_hosted, admin)).Should().Be(new InactiveAccountService.RunResult(0, 0));
+        }
+
+        [Fact]
+        public async Task LosingPermanentStatus_RestartsTheInactivityClock()
+        {
+            var user = await NewUserAsync();
+            await TestDatabase.ExecuteAsync(_hosted, "UPDATE Users SET IsPermanent = 1 WHERE Id = @Id", ("@Id", user.UserId));
+            await BackdateAsync(user.UserId, 90, 30);
+            using var scope = _hosted.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<DatabaseServices>();
+
+            (await db.SetPermanentAsync(user.UserId, false)).Should().BeTrue();
+
+            (await ColumnAsync(_hosted, user, "InactivityWarnedAt")).Should().BeNull();
+            (await ColumnAsync(_hosted, user, "LastActiveAt")).Should().BeAfter(DateTime.UtcNow.AddMinutes(-5));
+            (await RunJobAsync(_hosted, user)).Should().Be(new InactiveAccountService.RunResult(0, 0));
+        }
+
+        [Fact]
         public async Task Job_SkipsAdminPermanentAndSuspendedAccounts()
         {
             var admin = await NewUserAsync();
@@ -367,6 +433,7 @@ namespace Backend.Test
             var info = await GetJsonAsync(user.Client, "/user/info");
             info.NoticeShown().Should().BeTrue();
             info.GetProperty("hostedContactEmail").GetString().Should().Be(Contact);
+            info.GetProperty("hostedInactiveDays").GetInt32().Should().Be(30);
 
             (await user.Client.PostAsync("/user/notices/hosted/dismiss", null)).StatusCode.Should().Be(HttpStatusCode.OK);
             // Dismissing again is harmless
@@ -456,12 +523,12 @@ namespace Backend.Test
             row.GetProperty("removalDueAt").ValueKind.Should().Be(JsonValueKind.Null);
         }
     }
-
-
-    internal static class UserInfoExtensions
-    {
-        // The notice fields are left out of /user/info unless the notice is due
-        public static bool NoticeShown(this JsonElement info) =>
-            info.TryGetProperty("hostedNotice", out var shown) && shown.GetBoolean();
+
+
+    internal static class UserInfoExtensions
+    {
+        // The notice fields are left out of /user/info unless the notice is due
+        public static bool NoticeShown(this JsonElement info) =>
+            info.TryGetProperty("hostedNotice", out var shown) && shown.GetBoolean();
     }
 }

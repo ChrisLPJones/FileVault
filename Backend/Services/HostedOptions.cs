@@ -4,7 +4,7 @@ namespace Backend.Services;
 // and the hosted-only settings. Self-hosted is the default; any value other than "self-hosted" or
 // "hosted" stops the API starting. Inactive-account removal and the first-login notice only exist
 // in hosted mode.
-public sealed record HostedOptions(bool IsHosted, int InactiveDays, int WarningDays, int MaxRemovalsPerRun, string? ContactEmail)
+public sealed record HostedOptions(bool IsHosted, int InactiveDays, int WarningDays, int MaxRemovalsPerRun, string? ContactEmail, int MaxRemovalsPerDay = 200)
 {
     public const string SelfHostedName = "self-hosted";
     public const string HostedName = "hosted";
@@ -31,6 +31,7 @@ public sealed record HostedOptions(bool IsHosted, int InactiveDays, int WarningD
 
         return new HostedOptions(hosted, inactiveDays, warningDays,
             Math.Max(1, config.GetValue("Hosted:MaxRemovalsPerRun", 50)),
-            string.IsNullOrEmpty(contact) ? null : contact);
+            string.IsNullOrEmpty(contact) ? null : contact,
+            Math.Max(1, config.GetValue("Hosted:MaxRemovalsPerDay", 200)));
     }
 }

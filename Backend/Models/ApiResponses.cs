@@ -15,6 +15,7 @@ namespace Backend.Models
     // these two (the contact address is left out when none is set)
     public record HostedUserInfoResponse(string FirstName, string LastName, string Email, DateTime? AvatarUpdatedAt, bool EmailVerified,
         bool HostedNotice,
+        int HostedInactiveDays,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         string? HostedContactEmail)
         : UserInfoResponse(FirstName, LastName, Email, AvatarUpdatedAt, EmailVerified);
