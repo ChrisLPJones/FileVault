@@ -146,6 +146,36 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task Delete_WhenSqlServerPicksItAsADeadlockVictim_IsRetriedAndStillSucceeds()
+        {
+            var client = await NewUserAsync();
+            var rootId = await CreateFolderAsync(client, "Root");
+            var childId = await CreateFolderAsync(client, "Child", rootId);
+
+            // The bin update locks the root, then needs the child
+            var response = await TestDatabase.RequestAsDeadlockVictimAsync(Factory, childId, rootId,
+                () => client.DeleteAsync($"/delete/{rootId}"));
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            (await ListTrashAsync(client)).Select(Id).Should().Equal(rootId);
+        }
+
+        [Fact]
+        public async Task Restore_WhenSqlServerPicksItAsADeadlockVictim_IsRetriedAndStillSucceeds()
+        {
+            var client = await NewUserAsync();
+            var rootId = await CreateFolderAsync(client, "Root");
+            var childId = await CreateFolderAsync(client, "Child", rootId);
+            (await client.DeleteAsync($"/delete/{rootId}")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            // The restore updates the paths below the folder, then the folder itself
+            var response = await TestDatabase.RequestAsDeadlockVictimAsync(Factory, rootId, childId,
+                () => RestoreAsync(client, rootId));
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            Paths(await ListFilesAsync(client)).Should().Contain(new[] { "/Root", "/Root/Child" });
+            (await ListTrashAsync(client)).Should().BeEmpty();
+        }
+
+        [Fact]
         public async Task BinEndpoints_RequireLogin_ValidateInput_AndOnlyTouchYourOwnItems()
         {
             var owner = await NewUserAsync();

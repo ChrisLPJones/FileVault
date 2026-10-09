@@ -259,7 +259,10 @@ public partial class DatabaseServices
 
 
     // Rename and/or move an item, rewriting the stored path of everything below it
-    public async Task RelocateAsync(FileRecord item, string? newParentId, string newName, string newPath, string userId)
+    public Task RelocateAsync(FileRecord item, string? newParentId, string newName, string newPath, string userId) =>
+        RetryOnDeadlockAsync(() => RelocateOnceAsync(item, newParentId, newName, newPath, userId));
+
+    private async Task RelocateOnceAsync(FileRecord item, string? newParentId, string newName, string newPath, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -318,7 +321,10 @@ public partial class DatabaseServices
 
 
     // Insert copied rows (parents before children) in one transaction
-    public async Task InsertItemsAsync(List<FileRecord> items, string userId)
+    public Task InsertItemsAsync(List<FileRecord> items, string userId) =>
+        RetryOnDeadlockAsync(() => InsertItemsOnceAsync(items, userId));
+
+    private async Task InsertItemsOnceAsync(List<FileRecord> items, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
