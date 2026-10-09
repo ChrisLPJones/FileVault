@@ -226,23 +226,201 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Children always belong to the same user, so the search stays within the users whose
+    -- rows were deleted (an index seek on UserId, ParentId). The descendants are collected
+    -- first and then deleted by Id, so concurrent deletes by different users don't take
+    -- update locks on each other's rows and deadlock.
+    DECLARE @descendants TABLE (Id INT PRIMARY KEY);
+
+    -- FORCESEEK keeps the plan on that index even when the table is small enough for the
+    -- optimiser to prefer a scan, which would read (and wait on) other users' rows.
     ;WITH RecursiveChildren AS (
-        SELECT f.Id, f.GUID, f.ParentId
-        FROM Files f
-        INNER JOIN deleted d ON f.ParentId = d.GUID
+        SELECT f.Id, f.GUID, f.UserId
+        FROM deleted d
+        INNER JOIN Files f WITH (FORCESEEK, INDEX (IX_Files_UserId_ParentId))
+            ON f.UserId = d.UserId AND f.ParentId = d.GUID
 
         UNION ALL
 
-        SELECT f2.Id, f2.GUID, f2.ParentId
-        FROM Files f2
-        INNER JOIN RecursiveChildren rc ON f2.ParentId = rc.GUID
+        SELECT f2.Id, f2.GUID, f2.UserId
+        FROM RecursiveChildren rc
+        INNER JOIN Files f2 WITH (FORCESEEK, INDEX (IX_Files_UserId_ParentId))
+            ON f2.UserId = rc.UserId AND f2.ParentId = rc.GUID
     )
-    DELETE FROM Files
-    WHERE Id IN (SELECT Id FROM RecursiveChildren);
+    INSERT INTO @descendants (Id)
+    SELECT DISTINCT Id FROM RecursiveChildren;
+
+    IF EXISTS (SELECT 1 FROM @descendants)
+        DELETE FROM Files WHERE Id IN (SELECT Id FROM @descendants);
 END
 GO
 
 PRINT 'Recursive delete trigger created.';
+
+------------------------------------------------------------
+-- SHARE LINKS
+------------------------------------------------------------
+-- A public link to one file or folder. Only a SHA-256 hash of the link's
+-- token is stored, so the link itself is shown once, when it is created.
+-- Optional expiry and BCrypt-hashed password; revoked links keep their row.
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'Shares')
+BEGIN
+    CREATE TABLE Shares
+    (
+        Id UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_Shares_Id DEFAULT NEWID(),
+        TokenHash CHAR(64) NOT NULL,
+        ItemId NVARCHAR(100) NOT NULL,
+        UserId UNIQUEIDENTIFIER NOT NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Shares_CreatedAt DEFAULT SYSUTCDATETIME(),
+        ExpiresAt DATETIME2 NULL,
+        RevokedAt DATETIME2 NULL,
+        PasswordHash NVARCHAR(255) NULL,
+        DownloadCount INT NOT NULL CONSTRAINT DF_Shares_DownloadCount DEFAULT 0,
+        CONSTRAINT PK_Shares PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT UQ_Shares_TokenHash UNIQUE NONCLUSTERED (TokenHash),
+        CONSTRAINT FK_Shares_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_Shares_UserId ON Shares (UserId);
+    CREATE INDEX IX_Shares_ItemId ON Shares (ItemId);
+    PRINT 'Table "Shares" created.';
+END
+ELSE
+BEGIN
+    PRINT 'Table "Shares" already exists.';
+END
+GO
+
+-- Removing a file or folder removes the links to it and to anything inside it.
+-- Runs last, after TR_Files_RecursiveDelete has removed the descendants, and
+-- clears every link whose item no longer exists for the affected users.
+CREATE OR ALTER TRIGGER TR_Files_DeleteShares
+ON Files
+AFTER DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Find the links first (an index seek on the affected users' rows only), then delete them
+    -- by ID, so concurrent deletes by other users never lock each other's links (deadlocks)
+    DECLARE @orphans TABLE (Id UNIQUEIDENTIFIER PRIMARY KEY);
+
+    INSERT INTO @orphans (Id)
+    SELECT s.Id FROM Shares s WITH (FORCESEEK, INDEX (IX_Shares_UserId))
+    WHERE s.UserId IN (SELECT DISTINCT UserId FROM deleted)
+      AND NOT EXISTS (SELECT 1 FROM Files f WHERE f.GUID = s.ItemId AND f.UserId = s.UserId);
+
+    IF EXISTS (SELECT 1 FROM @orphans)
+        DELETE FROM Shares WHERE Id IN (SELECT Id FROM @orphans);
+END
+GO
+
+EXEC sp_settriggerorder @triggername = 'TR_Files_DeleteShares', @order = 'Last', @stmttype = 'DELETE';
+GO
+
+PRINT 'Share cleanup trigger created.';
+
+------------------------------------------------------------
+-- RECYCLE BIN
+------------------------------------------------------------
+-- Deleting a file or folder only marks it (and everything inside it) as
+-- deleted. TrashRootId is the GUID of the item the user deleted, shared by
+-- everything that went into the bin with it; the bin lists the rows where
+-- TrashRootId = GUID. ParentId and FilePath are kept so items can go back
+-- where they came from. Emptying the bin deletes the rows for real (the
+-- recursive delete trigger above still removes descendants).
+IF COL_LENGTH('Files', 'DeletedAt') IS NULL
+BEGIN
+    ALTER TABLE Files ADD DeletedAt DATETIME2 NULL, TrashRootId NVARCHAR(100) NULL;
+    PRINT 'Columns "Files.DeletedAt/TrashRootId" added.';
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Files_UserId_TrashRootId' AND object_id = OBJECT_ID('Files'))
+BEGIN
+    -- Not a filtered index: sqlcmd runs this script with QUOTED_IDENTIFIER off, which filtered indexes need on
+    CREATE INDEX IX_Files_UserId_TrashRootId ON Files (UserId, TrashRootId);
+    PRINT 'Index "IX_Files_UserId_TrashRootId" created.';
+END
+GO
+
+------------------------------------------------------------
+-- EMAIL VERIFICATION AND PASSWORD RESET
+------------------------------------------------------------
+-- New accounts start unverified; accounts that existed before this column
+-- are treated as verified.
+IF COL_LENGTH('Users', 'EmailVerified') IS NULL
+BEGIN
+    ALTER TABLE Users ADD EmailVerified BIT NOT NULL CONSTRAINT DF_Users_EmailVerified DEFAULT 0;
+    EXEC('UPDATE Users SET EmailVerified = 1');
+    PRINT 'Column "Users.EmailVerified" added (existing accounts marked verified).';
+END
+GO
+
+-- Single-use links sent by email. Purpose is 'verify-email' (Email is the
+-- address being confirmed) or 'reset-password'. Only a SHA-256 hash of each
+-- token is stored.
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'AccountTokens')
+BEGIN
+    CREATE TABLE AccountTokens
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        UserId UNIQUEIDENTIFIER NOT NULL,
+        Purpose NVARCHAR(20) NOT NULL,
+        TokenHash CHAR(64) NOT NULL,
+        Email NVARCHAR(100) NULL,
+        ExpiresAt DATETIME2 NOT NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_AccountTokens_CreatedAt DEFAULT SYSUTCDATETIME(),
+        UsedAt DATETIME2 NULL,
+        CONSTRAINT PK_AccountTokens PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT UQ_AccountTokens_TokenHash UNIQUE NONCLUSTERED (TokenHash),
+        CONSTRAINT FK_AccountTokens_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_AccountTokens_UserId ON AccountTokens (UserId);
+    PRINT 'Table "AccountTokens" created.';
+END
+ELSE
+BEGIN
+    PRINT 'Table "AccountTokens" already exists.';
+END
+GO
+
+------------------------------------------------------------
+-- CHUNKED UPLOADS
+------------------------------------------------------------
+-- An upload in progress. Its chunks are kept (encrypted with WrappedKey)
+-- under StorageRoot/tmp/<UserId>/<Id>/ until the upload is completed,
+-- cancelled, or abandoned for 24 hours. CompletingAt is set while it is
+-- being assembled so it can't be completed twice.
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'Uploads')
+BEGIN
+    CREATE TABLE Uploads
+    (
+        Id UNIQUEIDENTIFIER NOT NULL,
+        UserId UNIQUEIDENTIFIER NOT NULL,
+        FileName NVARCHAR(255) NOT NULL,
+        Size BIGINT NOT NULL,
+        ParentId NVARCHAR(100) NULL,
+        MimeType NVARCHAR(255) NULL,
+        ChunkSize INT NOT NULL,
+        WrappedKey NVARCHAR(200) NOT NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_Uploads_CreatedAt DEFAULT SYSUTCDATETIME(),
+        CompletingAt DATETIME2 NULL,
+        CONSTRAINT PK_Uploads PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT FK_Uploads_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE INDEX IX_Uploads_UserId ON Uploads (UserId);
+    PRINT 'Table "Uploads" created.';
+END
+ELSE
+BEGIN
+    PRINT 'Table "Uploads" already exists.';
+END
 GO
 
 ------------------------------------------------------------
@@ -301,6 +479,20 @@ BEGIN
     );
     CREATE INDEX IX_LoginChallenges_UserId ON LoginChallenges (UserId);
     PRINT 'Table "LoginChallenges" created.';
+END
+GO
+
+------------------------------------------------------------
+-- SHARE LINKS: VIEWABLE LATER
+------------------------------------------------------------
+-- The link's token and password, encrypted (AES-256-GCM, a key derived from
+-- the master key, bound to the share's Id) so the owner can copy the link and
+-- see the password again. TokenHash and PasswordHash are still what the
+-- public endpoints check. NULL for links created before these columns.
+IF COL_LENGTH('Shares', 'TokenCipher') IS NULL
+BEGIN
+    ALTER TABLE Shares ADD TokenCipher NVARCHAR(200) NULL, PasswordCipher NVARCHAR(400) NULL;
+    PRINT 'Columns "Shares.TokenCipher/PasswordCipher" added.';
 END
 GO
 

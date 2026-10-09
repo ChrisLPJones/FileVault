@@ -4,6 +4,8 @@ import "../Auth/Auth.css";
 import { login } from "../../services/Auth";
 import { setToken } from "../../utils/auth";
 import ServerStatus from "../../components/ServerStatus";
+import { getErrorMessage } from "../../api/api";
+import { resendVerificationByEmailAPI } from "../../api/accountEmailAPI";
 import TwoFactorStep from "./TwoFactorStep";
 
 function Login() {
@@ -12,6 +14,8 @@ function Login() {
     const [errors, setErrors] = useState({});
     const [loginError, setLoginError] = useState(null);
     const [submitting, setSubmitting] = useState(false);
+    const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+    const [resendStatus, setResendStatus] = useState(null); // null | "sending" | message
     // Set when the password was right but two-factor authentication needs a code
     const [challengeToken, setChallengeToken] = useState(null);
     const location = useLocation();
@@ -38,6 +42,8 @@ function Login() {
         event.preventDefault();
         setRegMessageDismissed(true);
         setLoginError(null);
+        setUnverifiedEmail(null);
+        setResendStatus(null);
 
         const formErrors = validateForm();
         setErrors(formErrors);
@@ -57,6 +63,8 @@ function Login() {
                 navigate("/dashboard", { replace: true });
                 return;
             }
+            // Right password, but the address hasn't been confirmed yet: offer to resend the link
+            setUnverifiedEmail(response.data?.emailNotVerified ? identifier.trim() : null);
             // e.g. "Invalid email or password" or the rate-limit message
             setLoginError(response.data?.error || "Login failed");
         } catch {
@@ -65,6 +73,14 @@ function Login() {
         setSubmitting(false);
     };
 
+    const handleResend = async () => {
+        setResendStatus("sending");
+        try {
+            setResendStatus((await resendVerificationByEmailAPI(unverifiedEmail)).success);
+        } catch (err) {
+            setResendStatus(getErrorMessage(err, "Could not send the email. Please try again."));
+        }
+    };
     if (challengeToken) {
         return (
             <TwoFactorStep
@@ -87,7 +103,7 @@ function Login() {
 
                 {showRegistered && (
                     <div className="auth-alert auth-alert-top success" role="status">
-                        Account created. You can log in now.
+                        Account created. We've emailed you a link to confirm your address: open it, then log in.
                     </div>
                 )}
 
@@ -122,13 +138,37 @@ function Login() {
                             aria-describedby={errors.password ? "login-password-error" : undefined}
                         />
                         {errors.password && <div id="login-password-error" className="auth-field-error">{errors.password}</div>}
+                        <Link to="/forgot-password" className="auth-forgot">Forgot password?</Link>
                     </div>
 
                     <button type="submit" className="auth-button" disabled={submitting}>
                         {submitting ? "Logging in…" : "Log in"}
                     </button>
 
-                    {loginError && <div className="auth-alert danger" role="alert">{loginError}</div>}
+                    {loginError && (
+                        <div className="auth-alert danger" role="alert">
+                            {loginError}
+                            {unverifiedEmail && (
+                                <p className="auth-alert-detail">
+                                    Open the link we emailed to {unverifiedEmail}, then log in.
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    {unverifiedEmail && (
+                        resendStatus && resendStatus !== "sending" ? (
+                            <div className="auth-alert success" role="status">{resendStatus}</div>
+                        ) : (
+                            <button
+                                type="button"
+                                className="auth-secondary-button"
+                                disabled={resendStatus === "sending"}
+                                onClick={handleResend}
+                            >
+                                {resendStatus === "sending" ? "Sending…" : "Resend confirmation email"}
+                            </button>
+                        )
+                    )}
                 </form>
 
                 <p className="auth-switch">

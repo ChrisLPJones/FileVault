@@ -49,6 +49,7 @@ namespace Backend.Test
             (await client.PostAsJsonAsync("/user/register",
                 new UserModel { FirstName = "Session", LastName = "Tester", Email = email, Password = Password }))
                 .EnsureSuccessStatusCode();
+            await TestDatabase.MarkEmailVerifiedAsync(_baseFactory, email);
             return email;
         }
 

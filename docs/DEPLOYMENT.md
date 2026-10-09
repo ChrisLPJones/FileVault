@@ -206,8 +206,9 @@ authentication, so leaving them off in production is about not advertising the A
 - `Content-Security-Policy`: scripts, styles and fonts from the app's own origin only (no inline
   scripts; the font is bundled rather than loaded from Google Fonts); `connect-src` and `img-src`
   add the API origin from `API_URL`; `blob:` and `data:` images (previews, profile pictures, the
-  two-factor QR code); `blob:` media and frames (video/audio and PDF previews);
-  `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`
+  two-factor QR code); `blob:` media and frames (video/audio and PDF previews); `form-action`
+  and `frame-src` also allow the API origin, for the download form on public share pages (it
+  posts into a hidden frame); `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`
 - `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
   and a `Permissions-Policy` that turns off camera, microphone, geolocation, payment and USB
 - `Strict-Transport-Security: max-age=31536000`, only when the request came through the proxy over

@@ -10,9 +10,11 @@ import { renameAPI } from "../../api/renameAPI";
 import "./Dashboard.scss";
 import FileManager from "../../FileManager/FileManager";
 import { useHeaderSlot } from "../../contexts/HeaderSlotContext";
+import VerifyEmailBanner from "../../components/VerifyEmailBanner";
 
-// Matches the API's default Storage:MaxUploadBytes until /user/usage responds
-const DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+// Matches the API's default Storage:MaxFileBytes until /user/usage responds. Files above 8 MB are
+// uploaded in chunks, so the per-request limit (maxUploadBytes) only applies to smaller ones.
+const DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
 
 const fileUploadConfig = {
     url: `${API_BASE_URL}/upload`,
@@ -25,7 +27,15 @@ function Dashboard() {
     const [files, setFiles] = useState([]);
     const [currentPath, setCurrentPath] = useState("");
     const [error, setError] = useState(null);
-    const [maxFileSize, setMaxFileSize] = useState(DEFAULT_MAX_UPLOAD_BYTES);
+    const [maxFileSize, setMaxFileSize] = useState(DEFAULT_MAX_FILE_BYTES);
+    // Short confirmation (e.g. "Moved ... to the recycle bin") that hides itself
+    const [notice, setNotice] = useState(null);
+
+    useEffect(() => {
+        if (!notice) return;
+        const timer = setTimeout(() => setNotice(null), 6000);
+        return () => clearTimeout(timer);
+    }, [notice]);
 
     // Initial load
     useEffect(() => {
@@ -38,7 +48,7 @@ function Dashboard() {
 
         // Use the server's upload limit (quota is checked by the server on upload)
         getUsageAPI()
-            .then((usage) => !cancelled && setMaxFileSize(usage.maxUploadBytes))
+            .then((usage) => !cancelled && setMaxFileSize(usage.maxFileBytes ?? usage.maxUploadBytes))
             .catch(() => {});
 
         return () => {
@@ -74,7 +84,11 @@ function Dashboard() {
         runAction(() => renameAPI(file._id, newName), "Could not rename item");
 
     const handleDelete = (filesToDelete) =>
-        runAction(() => deleteAPI(filesToDelete.map((file) => file._id)), "Could not delete items");
+        runAction(async () => {
+            await deleteAPI(filesToDelete.map((file) => file._id));
+            const what = filesToDelete.length === 1 ? `"${filesToDelete[0].name}"` : `${filesToDelete.length} items`;
+            setNotice(`Moved ${what} to the recycle bin`);
+        }, "Could not delete items");
 
     const handlePaste = (copiedItems, destinationFolder, operationType) => {
         const ids = copiedItems.map((item) => item._id);
@@ -107,6 +121,15 @@ function Dashboard() {
                     </button>
                 </div>
             )}
+            {!error && <VerifyEmailBanner />}
+            {notice && !error && (
+                <div className="dashboard-notice" role="status">
+                    <span>{notice}</span>
+                    <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss">
+                        ×
+                    </button>
+                </div>
+            )}
             <div className="file-manager-container">
                 <FileManager
                     files={files}
@@ -125,7 +148,6 @@ function Dashboard() {
                     primaryColor="var(--fv-primary)"
                     enableFilePreview
                     maxFileSize={maxFileSize}
-                    acceptedFileTypes=".txt, .png, .jpg, .jpeg, .pdf, .doc, .docx, .exe"
                     height="100%"
                     width="100%"
                     initialPath={currentPath}

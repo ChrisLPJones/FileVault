@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { FiLogOut, FiSettings } from "react-icons/fi";
+import { FiLink, FiLogOut, FiSettings } from "react-icons/fi";
 import { logout } from "../api/api";
 import Avatar from "./Avatar";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -139,6 +139,15 @@ export default function UserMenu({ children, className = "", title }) {
                     >
                         <FiSettings aria-hidden="true" />
                         Settings
+                    </Link>
+                    <Link
+                        to="/shared-links"
+                        role="menuitem"
+                        className={`user-menu-item ${pathname === "/shared-links" ? "current" : ""}`}
+                        onClick={close}
+                    >
+                        <FiLink aria-hidden="true" />
+                        Shared links
                     </Link>
                     <button
                         type="button"

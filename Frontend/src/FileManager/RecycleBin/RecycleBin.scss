@@ -1,0 +1,189 @@
+@use "../../styles/variables" as *;
+
+.fm-recycle-bin {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-size: 15px;
+
+  .fm-bin-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid $border-color;
+  }
+
+  .fm-bin-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+
+    h2 {
+      margin: 0;
+      font-size: 17px;
+    }
+
+    span {
+      color: var(--fm-muted);
+      font-size: 13px;
+    }
+  }
+
+  .fm-bin-actions,
+  .fm-bin-confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+
+    .fm-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0.4rem 0.8rem;
+      font-size: 14px;
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: default;
+        background-image: none;
+      }
+    }
+  }
+
+  .fm-bin-confirm {
+    padding: 10px 14px;
+    border-bottom: 1px solid $border-color;
+    background-color: var(--fv-alert-danger-bg);
+    color: var(--fv-alert-danger-text);
+
+    span {
+      flex: 1 1 240px;
+    }
+  }
+
+  .fm-bin-status {
+    padding: 8px 14px;
+    font-size: 14px;
+
+    &.success {
+      background-color: var(--fv-alert-success-bg);
+      color: var(--fv-alert-success-text);
+    }
+
+    &.error {
+      background-color: var(--fv-alert-danger-bg);
+      color: var(--fv-alert-danger-text);
+    }
+  }
+
+  .fm-bin-empty {
+    padding: 40px 14px;
+    color: var(--fm-muted);
+    text-align: center;
+  }
+
+  .fm-bin-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+    @include overflow-y-scroll;
+
+    li {
+      display: grid;
+      grid-template-columns: 16px 24px minmax(0, 2fr) minmax(0, 1.5fr) 150px 70px;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+
+      &:hover {
+        background-color: $item-hover-color;
+      }
+
+      &.selected {
+        background-color: rgba(var(--fm-shade), 0.1);
+      }
+
+      &:focus-visible {
+        outline: none;
+        box-shadow: inset 0 0 0 2px var(--file-manager-primary-color);
+      }
+    }
+
+    .fm-checkbox {
+      accent-color: var(--file-manager-primary-color);
+      margin: 0;
+    }
+  }
+
+  .fm-bin-from,
+  .fm-bin-date,
+  .fm-bin-size {
+    color: var(--fm-muted);
+    font-size: 14px;
+  }
+
+  .fm-bin-size {
+    text-align: right;
+  }
+}
+
+@media (max-width: 900px) {
+  .fm-recycle-bin .fm-bin-list li {
+    grid-template-columns: 16px 24px minmax(0, 1fr) 70px;
+
+    .fm-bin-from,
+    .fm-bin-date {
+      display: none;
+    }
+  }
+}
+
+// The "Recycle bin" entry at the bottom of the folder tree
+.sb-folders-list .sb-recycle-bin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 5px 6px 7px; // icon lines up with the folder icons above
+  box-sizing: border-box;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &:hover {
+    background-color: $item-hover-color;
+  }
+
+  &.active {
+    background-color: var(--file-manager-primary-color);
+    color: var(--fv-primary-text, white);
+  }
+}
+
+.sb-folders-list.compact .sb-recycle-bin span {
+  display: none;
+}

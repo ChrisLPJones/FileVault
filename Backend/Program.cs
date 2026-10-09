@@ -83,6 +83,10 @@ namespace Backend
                     });
                 }
             });
+            // Public share links: viewing, and password attempts/downloads
+            builder.Services.AddFixedWindowRateLimits(("share", 60), ("share-download", 20));
+            // Endpoints that send email (forgot password, resend verification)
+            builder.Services.AddFixedWindowRateLimits(("email", 5));
             // OpenAPI document (/swagger/v1/swagger.json) and interactive docs (/swagger)
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(options =>
@@ -111,10 +115,16 @@ namespace Backend
             });
 
             builder.Services.AddSingleton<FileEncryption>();
+            builder.Services.AddSingleton<ShareSecrets>();
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<AvatarService>();
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();
+            builder.Services.AddScoped<ShareService>();
+            builder.Services.AddScoped<TrashService>();
+            builder.Services.AddScoped<ChunkedUploadService>();
+            builder.Services.AddHostedService<StorageCleanupService>();
+            builder.Services.AddEmail(builder.Configuration);
             builder.Services.AddSingleton<SecretProtector>();
             builder.Services.AddSingleton(TimeProvider.System);
             builder.Services.AddScoped<TwoFactorService>();
@@ -202,6 +212,10 @@ namespace Backend
             app.MapFileRoutes();
             app.MapHealthCheckRoutes();
             app.MapAuthRoutes();
+            app.MapShareRoutes();
+            app.MapTrashRoutes();
+            app.MapAccountEmailRoutes();
+            app.MapUploadRoutes();
             app.MapTwoFactorRoutes();
             app.MapSessionRoutes();
 

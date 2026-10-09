@@ -14,6 +14,10 @@ import { SelectionProvider, useSelection } from "../contexts/SelectionContext";
 import { ClipBoardProvider } from "../contexts/ClipboardContext";
 import { LayoutProvider } from "../contexts/LayoutContext";
 import { DetailsPaneProvider, useDetailsPane } from "../contexts/DetailsPaneContext";
+import { SearchProvider, SearchReveal } from "../contexts/SearchContext";
+import { SearchSwitch } from "./Search/SearchResults";
+import { RecycleBinProvider } from "../contexts/RecycleBinContext";
+import { RecycleBinSwitch } from "./RecycleBin/RecycleBin";
 import { useTriggerAction } from "../hooks/useTriggerAction";
 import { useColumnResize } from "../hooks/useColumnResize";
 import PropTypes from "prop-types";
@@ -107,6 +111,9 @@ const FileManager = ({
               <ClipBoardProvider onPaste={onPaste} onCut={onCut} onCopy={onCopy}>
                 <LayoutProvider layout={layout}>
                 <DetailsPaneProvider>
+                <RecycleBinProvider>
+                <SearchProvider>
+                  <SearchReveal />
                   {/* The toolbar can live elsewhere (the app header) but stays inside these providers */}
                   {toolbarContainer
                     ? createPortal(
@@ -149,6 +156,9 @@ const FileManager = ({
                       className="folders-preview"
                       style={{ width: (isNavigationPaneOpen && !isNavCompact ? colSizes.col2 : 100) + "%" }}
                     >
+                      {/* Search results or the recycle bin replace the folder view while showing */}
+                      <RecycleBinSwitch onRefresh={onRefresh}>
+                      <SearchSwitch>
                       <BreadCrumb
                         collapsibleNav={collapsibleNav}
                         isNavigationPaneOpen={isNavigationPaneOpen}
@@ -164,6 +174,8 @@ const FileManager = ({
                         permissions={permissions}
                         formatDate={formatDate}
                       />
+                      </SearchSwitch>
+                      </RecycleBinSwitch>
                     </div>
 
                     <DetailsPaneSlot formatDate={formatDate} filePreviewComponent={filePreviewComponent} />
@@ -180,6 +192,8 @@ const FileManager = ({
                     triggerAction={triggerAction}
                     permissions={permissions}
                   />
+                </SearchProvider>
+                </RecycleBinProvider>
                 </DetailsPaneProvider>
                 </LayoutProvider>
               </ClipBoardProvider>

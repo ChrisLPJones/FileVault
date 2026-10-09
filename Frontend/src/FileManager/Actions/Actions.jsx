@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Modal from "../../components/Modal/Modal";
 import DeleteAction from "./Delete/Delete.action";
 import UploadFileAction from "./UploadFile/UploadFile.action";
+import ShareAction from "./Share/Share.action";
 import { useShortcutHandler } from "../../hooks/useShortcutHandler";
 import { useTranslation } from "../../contexts/TranslationProvider";
 
@@ -41,6 +42,11 @@ const Actions = ({
       title: t("delete"),
       component: <DeleteAction triggerAction={triggerAction} onDelete={onDelete} />,
       width: "25%",
+    },
+    share: {
+      title: t("share"),
+      component: <ShareAction triggerAction={triggerAction} />,
+      width: "min(460px, 94vw)",
     },
   };
 

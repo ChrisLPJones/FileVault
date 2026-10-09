@@ -163,6 +163,52 @@
     font-weight: normal;
 }
 
+/* A link styled as the main button (e.g. "Log in" after resetting a password) */
+.auth-button.auth-button-link {
+    display: block;
+    margin-top: 16px;
+    box-sizing: border-box;
+    text-align: center;
+    text-decoration: none;
+}
+
+/* Second line inside an alert (e.g. what to do about an unconfirmed address) */
+.auth-alert-detail {
+    margin: 6px 0 0;
+    font-size: 0.9rem;
+}
+
+/* A less prominent action under the main button (e.g. "Resend confirmation email") */
+.auth-secondary-button {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid var(--fv-border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--fv-text);
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.auth-secondary-button:hover:not(:disabled) {
+    background-color: var(--fv-track);
+}
+
+.auth-secondary-button:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+/* "Forgot password?" under the password field */
+.auth-forgot {
+    display: inline-block;
+    margin-top: 8px;
+    color: var(--fv-link);
+    font-size: 0.9rem;
+}
+
 /* Two-factor login step */
 .auth-field input.auth-code-input {
     letter-spacing: 0.25em;

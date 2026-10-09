@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getErrorMessage } from "../../api/api";
 import {
     changePasswordAPI,
@@ -52,6 +52,7 @@ function Settings() {
 
     const [profile, setProfile] = useState({ firstName: "", lastName: "", email: "" });
     const [profileStatus, setProfileStatus] = useState(null);
+    const [savedEmail, setSavedEmail] = useState("");
     const [hasAvatar, setHasAvatar] = useState(false);
     const [savingAvatar, setSavingAvatar] = useState(false);
     const [avatarStatus, setAvatarStatus] = useState(null);
@@ -72,6 +73,7 @@ function Settings() {
             .then(([info, usageData]) => {
                 if (cancelled) return;
                 setProfile({ firstName: info.firstName, lastName: info.lastName, email: info.email });
+                setSavedEmail(info.email);
                 setHasAvatar(!!info.avatarUpdatedAt);
                 setUsage(usageData);
             })
@@ -121,7 +123,15 @@ function Settings() {
         setSavingProfile(true);
         try {
             await updateProfileAPI(profile.firstName.trim(), profile.lastName.trim(), profile.email.trim());
-            setProfileStatus({ type: "success", message: "Profile updated" });
+            // A new address has to be confirmed; the server emails a link to it
+            const emailChanged = profile.email.trim().toLowerCase() !== savedEmail.toLowerCase();
+            setSavedEmail(profile.email.trim());
+            setProfileStatus({
+                type: "success",
+                message: emailChanged
+                    ? `Profile updated. We've sent a link to ${profile.email.trim()} to confirm the new address.`
+                    : "Profile updated",
+            });
         } catch (err) {
             setProfileStatus({ type: "danger", message: getErrorMessage(err, "Could not update profile") });
         } finally {
@@ -207,7 +217,7 @@ function Settings() {
                     {" · "}
                     {formatBytes(usage.quota - usage.used)} free
                 </p>
-                <p className="settings-hint">Files can be up to {formatBytes(usage.maxUploadBytes, 0)} each.</p>
+                <p className="settings-hint">Files can be up to {formatBytes(usage.maxFileBytes ?? usage.maxUploadBytes, 0)} each.</p>
             </section>
 
             <section className="settings-card" aria-labelledby="appearance-heading">
@@ -373,6 +383,13 @@ function Settings() {
                 </form>
             </section>
 
+            <section className="settings-card" aria-labelledby="shares-heading">
+                <h2 id="shares-heading">Shared links</h2>
+                <p className="settings-hint">See the links you've shared, copy them, show their passwords or revoke them.</p>
+                <Link to="/shared-links" className="settings-button secondary settings-link-button">
+                    Manage shared links
+                </Link>
+            </section>
             <TwoFactorCard />
 
             <SessionsCard />
