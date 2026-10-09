@@ -12,7 +12,9 @@ and don't expose the containers' ports to the internet.
 The browser talks to two origins: the frontend (nginx, container port 80) and the API (container
 port 8080). The simplest setup gives each its own hostname, for example `files.example.com` and
 `api.files.example.com`. Keep them on the same registrable domain: the refresh-token cookie is
-`SameSite=Strict`, so it is only sent when the frontend and API are the same *site*.
+`SameSite=Strict`, so it is only sent when the frontend and API are the same *site*. The browser
+keeps the access token in memory only and gets a new one from that cookie on every page load, so
+on different sites users are signed out each time they reload or open a new tab.
 
 In `.env`:
 
