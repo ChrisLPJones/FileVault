@@ -11,14 +11,14 @@ namespace Backend.Test
 {
     public class TrashEndpointsTests(WebApplicationFactory<Program> factory) : IntegrationTestBase(factory)
     {
-        private static async Task<JsonElement[]> ListTrashAsync(HttpClient client)
+        internal static async Task<JsonElement[]> ListTrashAsync(HttpClient client)
         {
             var response = await client.GetAsync("/trash");
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             return await ReadArrayAsync(response);
         }
 
-        private static Task<HttpResponseMessage> RestoreAsync(HttpClient client, params string[] ids) =>
+        internal static Task<HttpResponseMessage> RestoreAsync(HttpClient client, params string[] ids) =>
             client.PostAsJsonAsync("/trash/restore", new { ids });
 
         private static async Task<long> UsedBytesAsync(HttpClient client) =>
@@ -195,6 +195,40 @@ namespace Backend.Test
             (await ListTrashAsync(client)).Select(e => e.GetProperty("_id").GetString()).Should().BeEquivalentTo(recentId);
             File.Exists(StoredFilePath(oldId)).Should().BeFalse();
             File.Exists(StoredFilePath(recentId)).Should().BeTrue();
+        }
+    }
+
+    [Collection(DeadlockCollection.Name)]
+    public class TrashDeadlockTests(WebApplicationFactory<Program> factory) : IntegrationTestBase(factory)
+    {
+        [Fact]
+        public async Task Delete_WhenSqlServerPicksItAsADeadlockVictim_IsRetriedAndStillSucceeds()
+        {
+            var client = await NewUserAsync();
+            var rootId = await CreateFolderAsync(client, "Root");
+            var childId = await CreateFolderAsync(client, "Child", rootId);
+
+            // The bin update locks the root, then needs the child
+            var response = await TestDatabase.RequestAsDeadlockVictimAsync(Factory, childId, rootId,
+                () => client.DeleteAsync($"/delete/{rootId}"));
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            (await TrashEndpointsTests.ListTrashAsync(client)).Select(Id).Should().Equal(rootId);
+        }
+
+        [Fact]
+        public async Task Restore_WhenSqlServerPicksItAsADeadlockVictim_IsRetriedAndStillSucceeds()
+        {
+            var client = await NewUserAsync();
+            var rootId = await CreateFolderAsync(client, "Root");
+            var childId = await CreateFolderAsync(client, "Child", rootId);
+            (await client.DeleteAsync($"/delete/{rootId}")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            // The blocker locks the child then updates the root; the restore locks the root first, then the paths below it
+            var response = await TestDatabase.RequestAsDeadlockVictimAsync(Factory, childId, rootId,
+                () => TrashEndpointsTests.RestoreAsync(client, rootId));
+            response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            Paths(await ListFilesAsync(client)).Should().Contain(new[] { "/Root", "/Root/Child" });
+            (await TrashEndpointsTests.ListTrashAsync(client)).Should().BeEmpty();
         }
     }
 }

@@ -39,6 +39,75 @@ namespace Backend.Test
             return result == DBNull.Value ? null : result;
         }
 
+        // Make SQL Server pick the API's statement as a deadlock victim. A second session takes an
+        // update lock on one row (lockedId) before the request starts; it is taken on the primary
+        // key, as a lock on the GUID index alone wouldn't stop the request updating the row. Once
+        // the request is stuck waiting on it, the session updates another row (updatedId) the
+        // request has already locked: the two wait on each other, and the session is the high
+        // priority one, so the request's statement is rolled back with error 1205. This relies on
+        // the request locking updatedId before lockedId; if a change reverses that order there is
+        // no deadlock, and the check on SQL Server's deadlock count below fails the test.
+        public static async Task<HttpResponseMessage> RequestAsDeadlockVictimAsync(
+            WebApplicationFactory<Program> factory, string lockedId, string updatedId, Func<Task<HttpResponseMessage>> request)
+        {
+            // Not pooled, so closing the connection ends the session and releases its locks even
+            // if the test fails before the commit below
+            var connectionString = new SqlConnectionStringBuilder(
+                factory.Services.GetRequiredService<IConfiguration>().GetConnectionString("DefaultConnection")) { Pooling = false }.ConnectionString;
+            await using var blocker = new SqlConnection(connectionString);
+            await blocker.OpenAsync();
+
+            const string deadlockCount = @"
+                SELECT cntr_value FROM sys.dm_os_performance_counters
+                WHERE counter_name = 'Number of Deadlocks/sec' AND instance_name = '_Total'";
+            var deadlocksBefore = Convert.ToInt64(await ScalarAsync(factory, deadlockCount));
+
+            await ExecuteAsync(blocker, "SET DEADLOCK_PRIORITY HIGH; BEGIN TRAN;");
+            Task<HttpResponseMessage>? pending = null;
+            try
+            {
+                await ExecuteAsync(blocker, "SELECT 1 FROM Files WITH (UPDLOCK, ROWLOCK) WHERE Id = (SELECT Id FROM Files WHERE GUID = @Locked)", ("@Locked", lockedId));
+                int blockerSession;
+                await using (var spid = new SqlCommand("SELECT @@SPID", blocker))
+                    blockerSession = Convert.ToInt32(await spid.ExecuteScalarAsync());
+
+                pending = request();
+
+                // Wait until the request really is stuck behind the blocker, not for a fixed time
+                var deadline = DateTime.UtcNow.AddSeconds(15);
+                while (Convert.ToInt32(await ScalarAsync(factory,
+                           "SELECT COUNT(*) FROM sys.dm_exec_requests WHERE blocking_session_id = @Session AND wait_type LIKE 'LCK_M_%'",
+                           ("@Session", blockerSession)) ?? 0) == 0)
+                {
+                    var finished = pending.IsCompleted ? $"; it already finished: {(int)pending.Result.StatusCode} {await pending.Result.Content.ReadAsStringAsync()}" : "";
+                    DateTime.UtcNow.Should().BeBefore(deadline, "the request should have been waiting on the locked row" + finished);
+                    await Task.Delay(20);
+                }
+
+                await ExecuteAsync(blocker, "UPDATE Files SET UpdatedAt = UpdatedAt WHERE GUID = @Updated", ("@Updated", updatedId));
+                await ExecuteAsync(blocker, "COMMIT");
+            }
+            finally
+            {
+                // On failure, end the session so the request isn't left waiting on the locked row
+                if (blocker.State == System.Data.ConnectionState.Open)
+                    await blocker.CloseAsync();
+            }
+
+            var response = await pending;
+            Convert.ToInt64(await ScalarAsync(factory, deadlockCount)).Should().BeGreaterThan(deadlocksBefore,
+                "SQL Server should have had to break a deadlock, or the test proves nothing");
+            return response;
+        }
+
+        private static async Task ExecuteAsync(SqlConnection connection, string sql, params (string name, object value)[] parameters)
+        {
+            await using var command = new SqlCommand(sql, connection);
+            foreach (var (name, value) in parameters)
+                command.Parameters.AddWithValue(name, value);
+            await command.ExecuteNonQueryAsync();
+        }
+
         // New accounts must confirm their email before logging in; tests that register and log
         // straight in mark the address confirmed, as if the emailed link had been opened
         public static Task MarkEmailVerifiedAsync(WebApplicationFactory<Program> factory, string email) =>
@@ -193,5 +262,18 @@ namespace Backend.Test
             foreach (var factory in _extraFactories)
                 await factory.DisposeAsync();
         }
+    }
+}
+
+namespace Backend.Test
+{
+    // The deadlock tests hold row locks and force SQL Server to break a deadlock; any other test
+    // running at the same time could be blocked by those locks or picked as a victim of that
+    // deadlock (plain reads aren't retried). Collections that disable parallelization run alone,
+    // after the parallel ones have finished.
+    [CollectionDefinition(Name, DisableParallelization = true)]
+    public class DeadlockCollection
+    {
+        public const string Name = "Deadlock tests (run alone)";
     }
 }

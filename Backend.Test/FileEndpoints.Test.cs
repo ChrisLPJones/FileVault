@@ -574,6 +574,43 @@ namespace Backend.Test
         }
     }
 
+    // Rename and move run in a transaction; if SQL Server picks them as a deadlock victim they must be retried
+    [Collection(DeadlockCollection.Name)]
+    public class MoveRenameDeadlockTests(WebApplicationFactory<Program> factory) : IntegrationTestBase(factory)
+    {
+        [Fact]
+        public async Task RenameFolder_WhenSqlServerPicksItAsADeadlockVictim_IsRetriedAndStillSucceeds()
+        {
+            var client = await NewUserAsync();
+            var folderId = await CreateFolderAsync(client, "docs");
+            var childId = await CreateFolderAsync(client, "inner", folderId);
+
+            // The rename updates the folder, then the paths below it
+            var rename = await TestDatabase.RequestAsDeadlockVictimAsync(Factory, childId, folderId,
+                () => client.PatchAsJsonAsync("/rename", new { id = folderId, newName = "papers" }));
+            rename.StatusCode.Should().Be(HttpStatusCode.OK, await rename.Content.ReadAsStringAsync());
+
+            Paths(await ListFilesAsync(client)).Should().Contain(new[] { "/papers", "/papers/inner" })
+                .And.NotContain(new[] { "/docs", "/docs/inner" });
+        }
+
+        [Fact]
+        public async Task MoveFolder_WhenSqlServerPicksItAsADeadlockVictim_IsRetriedAndStillSucceeds()
+        {
+            var client = await NewUserAsync();
+            var destId = await CreateFolderAsync(client, "dest");
+            var srcId = await CreateFolderAsync(client, "src");
+            var childId = await CreateFolderAsync(client, "inner", srcId);
+
+            var move = await TestDatabase.RequestAsDeadlockVictimAsync(Factory, childId, srcId,
+                () => client.PutAsJsonAsync("/move", new { sourceIds = new[] { srcId }, destinationId = destId }));
+            move.StatusCode.Should().Be(HttpStatusCode.OK, await move.Content.ReadAsStringAsync());
+
+            Paths(await ListFilesAsync(client)).Should().Contain(new[] { "/dest/src", "/dest/src/inner" })
+                .And.NotContain(new[] { "/src", "/src/inner" });
+        }
+    }
+
     // xUnit Test Priority Attribute & Orderer
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
     public class TestPriorityAttribute : Attribute

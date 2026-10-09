@@ -8,7 +8,10 @@ public partial class DatabaseServices
 {
     // Move an item and everything inside it that isn't already in the bin into the bin, as one
     // entry. Returns false if the item doesn't exist or is already in the bin.
-    public async Task<bool> MoveToTrashAsync(string guid, string userId)
+    public Task<bool> MoveToTrashAsync(string guid, string userId) =>
+        RetryOnDeadlockAsync(() => MoveToTrashOnceAsync(guid, userId));
+
+    private async Task<bool> MoveToTrashOnceAsync(string guid, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -34,7 +37,10 @@ public partial class DatabaseServices
 
     // The user's bin entries (the items they deleted), most recently deleted first.
     // Size is the total of the files that went into the bin with the entry.
-    public async Task<List<(FileRecord item, DateTime deletedAt, long size)>> GetTrashAsync(string userId)
+    public Task<List<(FileRecord item, DateTime deletedAt, long size)>> GetTrashAsync(string userId) =>
+        RetryOnDeadlockAsync(() => GetTrashOnceAsync(userId));
+
+    private async Task<List<(FileRecord item, DateTime deletedAt, long size)>> GetTrashOnceAsync(string userId)
     {
         var entries = new List<(FileRecord, DateTime, long)>();
 
@@ -83,7 +89,10 @@ public partial class DatabaseServices
 
     // Take a bin entry out of the bin, under a (possibly new) parent and name. Everything below it
     // gets the new path prefix, like a move; only what went into the bin with it is restored.
-    public async Task RestoreFromTrashAsync(FileRecord entry, string? parentId, string name, string path, string userId)
+    public Task RestoreFromTrashAsync(FileRecord entry, string? parentId, string name, string path, string userId) =>
+        RetryOnDeadlockAsync(() => RestoreFromTrashOnceAsync(entry, parentId, name, path, userId));
+
+    private async Task RestoreFromTrashOnceAsync(FileRecord entry, string? parentId, string name, string path, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -92,6 +101,10 @@ public partial class DatabaseServices
         try
         {
             const string query = @"
+                -- Lock the bin entry first so the lock order is always root, then descendants, whatever the
+                -- query plan; this avoids crossing locks with other tree updates
+                SELECT 1 FROM Files WITH (UPDLOCK, ROWLOCK) WHERE GUID = @GUID AND UserId = @UserId;
+
                 WITH Tree AS (
                     SELECT GUID FROM Files WHERE ParentId = @GUID AND UserId = @UserId
                     UNION ALL
@@ -134,7 +147,10 @@ public partial class DatabaseServices
     // Before a bin entry is deleted for good: separate bin entries inside it (deleted earlier, on
     // their own) are moved to the root so the delete trigger doesn't take them too. They stay in
     // the bin and are restored to the root, since their folder is gone.
-    public async Task DetachTrashedChildrenAsync(string guid, string userId)
+    public Task DetachTrashedChildrenAsync(string guid, string userId) =>
+        RetryOnDeadlockAsync(() => DetachTrashedChildrenOnceAsync(guid, userId));
+
+    private async Task DetachTrashedChildrenOnceAsync(string guid, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
