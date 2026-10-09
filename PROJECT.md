@@ -53,7 +53,7 @@ Frontend/
   src/utils/             Theme/accent, formatting, password rules
   nginx/                 default.conf.template + security headers (used by the Docker image)
 Desktop/                 Electron app
-docs/                    DEPLOYMENT.md, ROADMAP.md, screenshots, original CODEBASE_REVIEW.md
+docs/                    DEPLOYMENT.md, screenshots, original CODEBASE_REVIEW.md
 docker-compose.yml       Full stack: SQL Server, schema init, API, frontend
 ```
 
@@ -236,7 +236,7 @@ npm run dist     # Windows installer in Desktop/dist/
 
 ## What's next
 
-From [docs/ROADMAP.md](docs/ROADMAP.md), roughly in priority order:
+Roughly in priority order:
 
 1. Master key rotation command (re-wrap file keys and stored secrets under a new key)
 2. Sharing with other FileVault accounts (read-only or edit)

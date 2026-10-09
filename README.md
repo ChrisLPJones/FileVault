@@ -228,11 +228,7 @@ To try protected endpoints, call `POST /user/login`, then click **Authorize** an
 | `Backend.Test/` | xUnit integration tests |
 | `Frontend/` | React app and its Vitest tests; the file manager UI is in `src/FileManager` ([credits](Frontend/src/FileManager/README.md)) |
 | `Desktop/` | Electron desktop app |
-| `docs/` | [Deployment guide](docs/DEPLOYMENT.md), [roadmap](docs/ROADMAP.md), screenshots and the original [codebase review](docs/CODEBASE_REVIEW.md) |
-
-## Roadmap
-
-Planned features are listed in [docs/ROADMAP.md](docs/ROADMAP.md).
+| `docs/` | [Deployment guide](docs/DEPLOYMENT.md), screenshots and the original [codebase review](docs/CODEBASE_REVIEW.md) |
 
 ## License
 
