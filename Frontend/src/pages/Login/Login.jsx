@@ -15,6 +15,7 @@ function Login() {
     const [loginError, setLoginError] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+    const [suspended, setSuspended] = useState(false); // right password, but an administrator suspended the account
     const [resendStatus, setResendStatus] = useState(null); // null | "sending" | message
     // Set when the password was right but two-factor authentication needs a code
     const [challengeToken, setChallengeToken] = useState(null);
@@ -65,6 +66,7 @@ function Login() {
             }
             // Right password, but the address hasn't been confirmed yet: offer to resend the link
             setUnverifiedEmail(response.data?.emailNotVerified ? identifier.trim() : null);
+            setSuspended(response.data?.suspended === true);
             // e.g. "Invalid email or password" or the rate-limit message
             setLoginError(response.data?.error || "Login failed");
         } catch {
@@ -151,6 +153,11 @@ function Login() {
                             {unverifiedEmail && (
                                 <p className="auth-alert-detail">
                                     Open the link we emailed to {unverifiedEmail}, then log in.
+                                </p>
+                            )}
+                            {suspended && (
+                                <p className="auth-alert-detail">
+                                    Your files are kept. Contact an administrator to get access back.
                                 </p>
                             )}
                         </div>

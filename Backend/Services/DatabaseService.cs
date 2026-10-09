@@ -709,7 +709,7 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = "UPDATE Users SET LastLogin = @LastLogin WHERE Id = @UserId";
+        const string query = "UPDATE Users SET LastLogin = @LastLogin WHERE Id = @UserId AND SuspendedAt IS NULL";
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@LastLogin", DateTime.UtcNow);
         command.Parameters.AddWithValue("@UserId", userId);

@@ -18,7 +18,8 @@ namespace Backend.Models
         long? QuotaOverride,
         bool IsAdmin,
         bool IsPermanent,
-        DateTime? AvatarUpdatedAt);
+        DateTime? AvatarUpdatedAt,
+        DateTime? SuspendedAt); // non-null = suspended (can't sign in; data kept)
 
     // POST /admin/users. Validated like /user/register; the email counts as confirmed.
     public class AdminCreateUserRequest
@@ -38,6 +39,12 @@ namespace Backend.Models
     public class AdminSetPasswordRequest
     {
         public string? Password { get; set; }
+    }
+
+    // PUT /admin/users/{id}/suspended
+    public class AdminSuspendRequest
+    {
+        public bool? Suspended { get; set; }
     }
 
     // PUT /admin/users/{id}/permanent
@@ -69,5 +76,6 @@ namespace Backend.Models
         long? StorageBytesOnDisk,
         long? DiskTotalBytes,
         long? DiskFreeBytes,
-        Guid CurrentUserId); // the administrator asking, so the page can leave their own row's account actions out
+        Guid CurrentUserId, // the administrator asking, so the page can leave their own row's account actions out
+        int SuspendedCount = 0);
 }

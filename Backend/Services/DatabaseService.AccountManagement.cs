@@ -107,20 +107,88 @@ public partial class DatabaseServices
 
 
 
-    // What the access-token check needs to know about a user: whether they still exist, and the
-    // moment before which their access tokens are refused (null = none refused)
-    public record UserAuthState(bool Exists, DateTime? TokensValidAfter);
+    // Suspend or unsuspend an account. Suspending ends every way the user is signed in, in one
+    // transaction: SuspendedAt, TokensValidAfter (their access tokens stop working now), all refresh
+    // tokens, pending two-factor login challenges and unused password-reset links. Their files,
+    // shares and quota are left alone. Suspending the last effective administrator is refused
+    // (409). Takes the admin-membership lock because it can remove an administrator.
+    public Task<HttpReturnResult> SetSuspendedAsync(string userId, bool suspended) =>
+        RetryOnDeadlockAsync(() => SetSuspendedOnceAsync(userId, suspended));
+
+    private async Task<HttpReturnResult> SetSuspendedOnceAsync(string userId, bool suspended)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+
+        await TakeAdminMembershipLockAsync(connection, transaction);
+
+        var found = false;
+        var effectiveAdmin = false;
+        await using (var read = new SqlCommand("SELECT IsAdmin, SuspendedAt FROM Users WHERE Id = @UserId", connection, transaction))
+        {
+            read.Parameters.AddWithValue("@UserId", userId);
+            await using var reader = await read.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                found = true;
+                effectiveAdmin = reader.GetBoolean(0) && reader.IsDBNull(1);
+            }
+        }
+        if (!found)
+            return HttpReturnResult.NotFound("User not found");
+
+        if (suspended && effectiveAdmin)
+        {
+            await using var others = new SqlCommand(
+                $"SELECT COUNT(*) FROM Users WHERE {EffectiveAdminPredicate} AND Id <> @UserId", connection, transaction);
+            others.Parameters.AddWithValue("@UserId", userId);
+            if (Convert.ToInt32(await others.ExecuteScalarAsync()) == 0)
+                return HttpReturnResult.Conflict(LastAdminMessage); // rolled back (nothing written) when disposed
+        }
+
+        if (suspended)
+        {
+            await using var command = new SqlCommand(@"
+                UPDATE Users SET SuspendedAt = COALESCE(SuspendedAt, SYSUTCDATETIME()), TokensValidAfter = @Now
+                WHERE Id = @UserId;
+                UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE UserId = @UserId AND RevokedAt IS NULL;
+                DELETE FROM LoginChallenges WHERE UserId = @UserId;
+                UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
+                WHERE UserId = @UserId AND Purpose = @ResetPurpose AND UsedAt IS NULL;", connection, transaction);
+            command.Parameters.AddWithValue("@Now", DateTime.UtcNow);
+            command.Parameters.AddWithValue("@UserId", userId);
+            command.Parameters.AddWithValue("@ResetPurpose", AccountEmailService.ResetPurpose);
+            await command.ExecuteNonQueryAsync();
+        }
+        else
+        {
+            await using var command = new SqlCommand("UPDATE Users SET SuspendedAt = NULL WHERE Id = @UserId", connection, transaction);
+            command.Parameters.AddWithValue("@UserId", userId);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await transaction.CommitAsync();
+        return new HttpReturnResult(true, suspended ? "Account suspended" : "Account unsuspended");
+    }
+
+
+
+    // What the access-token check needs to know about a user: whether they still exist, the
+    // moment before which their access tokens are refused (null = none refused), and whether the
+    // account is suspended
+    public record UserAuthState(bool Exists, DateTime? TokensValidAfter, bool Suspended = false);
 
     public async Task<UserAuthState> GetUserAuthStateAsync(string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        await using var command = new SqlCommand("SELECT TokensValidAfter FROM Users WHERE Id = @UserId", connection);
+        await using var command = new SqlCommand("SELECT TokensValidAfter, SuspendedAt FROM Users WHERE Id = @UserId", connection);
         command.Parameters.AddWithValue("@UserId", userId);
         await using var reader = await command.ExecuteReaderAsync();
         if (!await reader.ReadAsync())
             return new UserAuthState(false, null);
-        return new UserAuthState(true, reader.IsDBNull(0) ? null : DateTime.SpecifyKind(reader.GetDateTime(0), DateTimeKind.Utc));
+        return new UserAuthState(true, reader.IsDBNull(0) ? null : DateTime.SpecifyKind(reader.GetDateTime(0), DateTimeKind.Utc), !reader.IsDBNull(1));
     }
 }

@@ -9,6 +9,7 @@ import {
     setUserPasswordAPI,
     setUserPermanentAPI,
     setUserQuotaAPI,
+    setUserSuspendedAPI,
 } from "../../api/adminAPI";
 import { formatBytes } from "../../utils/formatBytes";
 import { DeleteAccountDialog, SetPasswordDialog } from "./AccountDialogs";
@@ -167,7 +168,7 @@ function AdminCell({ user, onChange }) {
     );
 }
 
-// The "Actions" button of a row and the choices it opens: set password, permanent, delete.
+// The "Actions" button of a row and the choices it opens: set password, permanent, suspend, delete.
 // You can't set your own password or delete your own account here (Settings does that).
 function RowActions({ user, isSelf, onChoose }) {
     const [open, setOpen] = useState(false);
@@ -208,6 +209,11 @@ function RowActions({ user, isSelf, onChoose }) {
                     <button type="button" role="menuitem" onClick={() => choose("permanent")}>
                         {user.isPermanent ? "Remove permanent" : "Make permanent"}
                     </button>
+                    {!isSelf && (
+                        <button type="button" role="menuitem" onClick={() => choose("suspend")}>
+                            {user.suspendedAt ? "Unsuspend account" : "Suspend account"}
+                        </button>
+                    )}
                     {!isSelf && (
                         <button type="button" role="menuitem" className="danger" onClick={() => choose("delete")}>
                             Delete account
@@ -264,6 +270,19 @@ export default function Admin() {
     const chooseAction = async (action, user) => {
         setNotice(null);
         setActionError(null);
+        if (action === "suspend") {
+            const suspend = !user.suspendedAt;
+            try {
+                await setUserSuspendedAPI(user.id, suspend);
+                setNotice(suspend
+                    ? `${user.email} is suspended and signed out everywhere. Their files are kept.`
+                    : `${user.email} is no longer suspended.`);
+                reload();
+            } catch (err) {
+                setActionError(getErrorMessage(err, suspend ? "Could not suspend the account" : "Could not unsuspend the account"));
+            }
+            return;
+        }
         if (action !== "permanent") {
             setDialog({ type: action, user });
             return;
@@ -313,7 +332,7 @@ export default function Admin() {
     const { users, stats } = data;
     const diskUsed = stats.diskTotalBytes != null && stats.diskFreeBytes != null ? stats.diskTotalBytes - stats.diskFreeBytes : null;
     const tiles = [
-        ["Users", stats.userCount, `${stats.adminCount} admin${stats.adminCount === 1 ? "" : "s"}`],
+        ["Users", stats.userCount, `${stats.adminCount} admin${stats.adminCount === 1 ? "" : "s"}${stats.suspendedCount ? `, ${stats.suspendedCount} suspended` : ""}`],
         ["Files", stats.fileCount.toLocaleString(), `${stats.folderCount.toLocaleString()} folders`],
         ["Stored", formatBytes(stats.totalStoredBytes), stats.storageBytesOnDisk != null ? `${formatBytes(stats.storageBytesOnDisk)} on disk, encrypted` : "Size of all files"],
         ["Disk", diskUsed != null ? `${formatBytes(stats.diskFreeBytes)} free` : "Unknown",
@@ -380,6 +399,7 @@ export default function Admin() {
                                                         {`${user.firstName} ${user.lastName}`.trim()}
                                                         {user.isAdmin && <span className="admin-badge">Admin</span>}
                                                         {user.isPermanent && <span className="admin-badge permanent">Permanent</span>}
+                                                        {user.suspendedAt && <span className="admin-badge suspended">Suspended</span>}
                                                     </div>
                                                     <div className="admin-muted admin-email">{user.email}</div>
                                                     <RowActions user={user} isSelf={user.id === stats.currentUserId} onChoose={chooseAction} />

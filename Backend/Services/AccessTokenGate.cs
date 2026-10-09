@@ -4,7 +4,7 @@ using System.Security.Claims;
 namespace Backend.Services;
 
 // Decides whether an access token that is otherwise valid (signature, expiry) may still be used.
-// It is refused when its user no longer exists (the account was deleted), or when it was issued
+// It is refused when its user no longer exists (the account was deleted), or is suspended, or when it was issued
 // before the user's TokensValidAfter (an administrator set their password). Access tokens are
 // self-contained, so without this they would keep working until they expire.
 //
@@ -42,7 +42,7 @@ public sealed class AccessTokenGate(IMemoryCache cache, IConfiguration config)
         userId = id.ToString();
 
         var state = await GetStateAsync(userId, () => db.GetUserAuthStateAsync(userId));
-        if (!state.Exists)
+        if (!state.Exists || state.Suspended)
             return false;
         if (state.TokensValidAfter is not { } validAfter)
             return true;

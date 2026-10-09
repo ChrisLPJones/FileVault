@@ -93,6 +93,10 @@ namespace Backend.Routes
                 if (!await db.IsEmailVerifiedAsync(userRecord.Id.ToString()))
                     return Results.Json(new { error = "Please confirm your email address first", emailNotVerified = true }, statusCode: 403);
 
+                // Also only after the password matched. No challenge is issued and nothing is recorded.
+                if ((await db.GetUserAuthStateAsync(userRecord.Id.ToString())).Suspended)
+                    return Results.Json(new { error = AuthServices.SuspendedMessage, suspended = true }, statusCode: 403);
+
                 // With two-factor on, the password only earns a short-lived challenge for POST /user/login/2fa
                 if ((await db.GetTwoFactorStateAsync(userRecord.Id.ToString()))?.Enabled == true)
                     return Results.Ok(new TwoFactorChallengeResponse(true,

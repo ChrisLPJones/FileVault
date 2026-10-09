@@ -102,6 +102,9 @@ namespace Backend.Services
 
         // Validates credentials by email address.
         // Returns the user, or null if the email/password is wrong.
+        // What login answers (with suspended: true) for a suspended account
+        public const string SuspendedMessage = "This account has been suspended";
+
         public async Task<UserModel?> ValidateUser(LoginModel user, DatabaseServices db)
         {
             var identifier = user.Identifier;
@@ -213,7 +216,7 @@ namespace Backend.Services
             }
 
             var user = await db.GetUserByUserId(use.UserId);
-            if (user == null)
+            if (user == null || (await db.GetUserAuthStateAsync(use.UserId)).Suspended)
                 return null;
 
             // Stay in the same session (tokens from before sessions existed start one now)

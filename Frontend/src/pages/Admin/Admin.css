@@ -318,6 +318,11 @@
     color: var(--fv-text);
 }
 
+.admin-badge.suspended {
+    background-color: var(--fv-alert-danger-bg);
+    color: var(--fv-alert-danger-text);
+}
+
 /* Row actions: shown under the name so they stay on screen when the table scrolls sideways */
 .admin-actions {
     margin-top: 4px;
