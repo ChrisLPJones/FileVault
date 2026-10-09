@@ -176,7 +176,11 @@ namespace Backend.Test
             var second = RefreshCookie(refresh);
 
             // e.g. two tabs refreshing at the same moment
-            (await RefreshAsync(client, first)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            var raced = await RefreshAsync(client, first);
+            raced.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            // The losing tab must not delete the cookie the winning tab just received
+            raced.Headers.TryGetValues("Set-Cookie", out var setCookies);
+            (setCookies ?? Array.Empty<string>()).Should().NotContain(c => c.StartsWith("fv_refresh="));
             (await RefreshAsync(client, second)).StatusCode.Should().Be(HttpStatusCode.OK);
         }
 

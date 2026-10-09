@@ -177,40 +177,45 @@ namespace Backend.Services
         };
 
         // Exchange the refresh cookie for a new access token and a new refresh cookie.
-        // Returns null if the cookie is missing, expired, revoked or unknown.
-        public async Task<UserModel?> RotateRefreshTokenAsync(DatabaseServices db, HttpContext http)
+        // User is null if the cookie is missing, expired, revoked or unknown. RacedWithinGrace is true
+        // when the token was just rotated away (e.g. a second tab refreshing at the same moment): the
+        // caller must not clear the cookie then, as it now holds the winner's fresh token.
+        public async Task<(UserModel? User, bool RacedWithinGrace)> RotateRefreshTokenAsync(DatabaseServices db, HttpContext http)
         {
             if (!http.Request.Cookies.TryGetValue(RefreshCookieName, out var token) || string.IsNullOrEmpty(token))
-                return null;
+                return (null, false);
 
             var use = await db.ConsumeRefreshTokenAsync(HashToken(token));
             if (use == null)
-                return null;
+                return (null, false);
 
             if (!use.Valid)
             {
                 // Signed out on purpose (logout, or the session was signed out from another
                 // device): just refuse it. Only a rotated-away token suggests theft.
                 if (use.SessionId != null && !use.Replaced)
-                    return null;
+                    return (null, false);
 
                 // A used token being presented again outside the short grace window (two tabs
                 // refreshing at once) suggests it was stolen: end every session for this user.
                 var grace = TimeSpan.FromSeconds(_config.GetValue("Jwt:RefreshReuseGraceSeconds", 30));
                 if (use.SinceRevoked >= grace)
+                {
                     await db.RevokeAllRefreshTokensAsync(use.UserId);
-                return null;
+                    return (null, false);
+                }
+                return (null, true);
             }
 
             var user = await db.GetUserByUserId(use.UserId);
             if (user == null)
-                return null;
+                return (null, false);
 
             // Stay in the same session (tokens from before sessions existed start one now)
             await IssueRefreshTokenAsync(use.UserId, db, http, use.SessionId
                 ?? await db.CreateSessionAsync(use.UserId,
                     DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), DeviceDescription.IpAddress(http)));
-            return user;
+            return (user, false);
         }
 
         // Revoke the refresh token in the request's cookie (logout)

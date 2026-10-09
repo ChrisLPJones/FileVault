@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { FiArrowLeft } from "react-icons/fi";
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import "./Layout.css";
-import { isAuthenticated, LAST_FILES_KEY } from "../../utils/auth";
+import { LAST_FILES_KEY, useAuthToken } from "../../utils/auth";
+import { ensureSession } from "../../api/api";
 import { HeaderSlotContext } from "../../contexts/HeaderSlotContext";
 
 // The file list's address (it holds the open folder) is kept so "Back to files" returns to that folder
@@ -16,11 +17,16 @@ const readLastFilesUrl = () => {
 };
 
 const Layout = () => {
-    // Re-render on navigation so the bar follows the login state
+    // The bar follows the login state (the in-memory token)
     const { pathname: rawPathname, search } = useLocation();
     // "/login/" is the same page as "/login"
     const pathname = rawPathname.replace(/\/+$/, "") || "/";
-    const loggedIn = isAuthenticated();
+    const loggedIn = useAuthToken() !== null;
+
+    // Unguarded pages (share links, verify email...) show the bar too once the session is restored
+    useEffect(() => {
+        ensureSession().catch(() => {});
+    }, []);
 
     useEffect(() => {
         if (pathname !== "/dashboard") return;

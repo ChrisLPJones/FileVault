@@ -117,10 +117,12 @@ namespace Backend.Routes
                 AuthServices auth,
                 DatabaseServices db) =>
             {
-                var user = await auth.RotateRefreshTokenAsync(db, http);
+                var (user, racedWithinGrace) = await auth.RotateRefreshTokenAsync(db, http);
                 if (user == null)
                 {
-                    AuthServices.ClearRefreshCookie(http);
+                    // Keep the cookie when another tab just rotated it: it holds that tab's fresh token
+                    if (!racedWithinGrace)
+                        AuthServices.ClearRefreshCookie(http);
                     return Results.Json(new { error = "Session expired" }, statusCode: 401);
                 }
 

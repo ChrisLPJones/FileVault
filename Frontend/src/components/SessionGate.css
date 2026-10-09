@@ -1,0 +1,50 @@
+.session-gate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 60vh;
+    padding: 16px;
+    text-align: center;
+    color: var(--fv-text);
+}
+
+.session-gate-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--fv-border);
+    border-top-color: var(--fv-primary);
+    border-radius: 50%;
+    animation: session-gate-spin 0.9s linear infinite;
+}
+
+.session-gate-message {
+    margin: 0;
+    color: var(--fv-text-muted);
+}
+
+.session-gate-retry {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    background: var(--fv-primary);
+    color: var(--fv-primary-text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.session-gate-retry:hover {
+    background: var(--fv-primary-hover);
+}
+
+.session-gate-retry:focus-visible {
+    outline: 2px solid var(--fv-focus-ring);
+    outline-offset: 2px;
+}
+
+@keyframes session-gate-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

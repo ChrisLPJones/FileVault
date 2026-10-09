@@ -1,5 +1,14 @@
 import axios from "axios";
-import { clearToken, getToken, isTokenExpiring, setToken } from "../utils/auth";
+import {
+    SESSION_HINT_KEY,
+    clearToken,
+    endSession,
+    ensureSessionHint,
+    getToken,
+    hasSessionHint,
+    isTokenExpiring,
+    setToken,
+} from "../utils/auth";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -12,14 +21,30 @@ export const api = axios.create({
 // One refresh at a time, shared by every request that needs it
 let refreshPromise = null;
 
-// Exchange the refresh cookie for a new access token
+// Tabs share one refresh cookie that rotates on every use, so refreshes must not overlap across
+// tabs either: the Web Lock makes the second tab wait and then use the cookie the first one set.
+const LOCK_NAME = "fv-refresh";
+const withRefreshLock = (task) => (navigator.locks?.request ? navigator.locks.request(LOCK_NAME, task) : task());
+
+// Exchange the refresh cookie for a new access token. Rejects with error.sessionExpired = true when
+// the server says the session is over (401); any other failure (network, 429, 5xx) is transient and
+// leaves the session as it was.
 export const refreshAccessToken = () => {
     if (!refreshPromise) {
-        refreshPromise = axios
-            .post(`${API_BASE_URL}/user/refresh`, null, { withCredentials: true })
+        refreshPromise = withRefreshLock(() =>
+            axios.post(`${API_BASE_URL}/user/refresh`, null, { withCredentials: true })
+        )
             .then((response) => {
                 setToken(response.data.success);
+                ensureSessionHint();
                 return response.data.success;
+            })
+            .catch((error) => {
+                if (error?.response?.status === 401) {
+                    endSession();
+                    error.sessionExpired = true;
+                }
+                throw error;
             })
             .finally(() => {
                 refreshPromise = null;
@@ -28,24 +53,69 @@ export const refreshAccessToken = () => {
     return refreshPromise;
 };
 
-// Current access token, refreshed first if it is about to expire
+// Current access token, refreshed first if it is about to expire. Null when signed out
+// (ensureSession owns the refresh on page load).
 export const getFreshToken = async () => {
     const token = getToken();
     if (!token || !isTokenExpiring(token)) return token;
 
     try {
         return await refreshAccessToken();
-    } catch {
-        // Another tab may have refreshed already
-        const latest = getToken();
-        return latest && !isTokenExpiring(latest) ? latest : token;
+    } catch (error) {
+        // Session over: nothing to send. Transient failure: the old token may still be valid
+        return error?.sessionExpired ? null : token;
     }
 };
 
+let sessionCheck = null;
+
+// Make sure this tab has a server-confirmed session, once per page load (and again after the token
+// is lost). Resolves "authenticated" or "anonymous"; rejects when the server can't be reached.
+export const ensureSession = () => {
+    const token = getToken();
+    if (token && !isTokenExpiring(token)) return Promise.resolve("authenticated");
+    if (!token && !hasSessionHint()) return Promise.resolve("anonymous");
+
+    if (!sessionCheck) {
+        sessionCheck = refreshAccessToken()
+            .then(
+                () => "authenticated",
+                (error) => {
+                    if (error?.sessionExpired) return "anonymous";
+                    // Keep going on the token we have; with none, report the outage
+                    if (getToken()) return "authenticated";
+                    throw error;
+                }
+            )
+            .finally(() => {
+                sessionCheck = null;
+            });
+    }
+    return sessionCheck;
+};
+
 const redirectToLogin = () => {
-    clearToken();
+    endSession();
     window.location.assign("/login");
 };
+
+// Pages that need a session; a tab on one is sent to the login page when the session ends
+const PROTECTED_PATHS = ["/dashboard", "/shared-links", "/settings", "/admin"];
+
+// Another tab signed in or out (it changed the session hint)
+window.addEventListener("storage", (event) => {
+    if (event.key !== null && event.key !== SESSION_HINT_KEY) return;
+
+    if (!event.newValue) {
+        clearToken();
+        if (PROTECTED_PATHS.some((path) => window.location.pathname.startsWith(path))) {
+            window.location.assign("/login");
+        }
+    } else if (event.newValue !== event.oldValue) {
+        // A different login: don't keep showing the previous account's data
+        window.location.reload();
+    }
+});
 
 // Add auth header for all requests (login/register/refresh opt out with skipAuth)
 api.interceptors.request.use(async (config) => {
@@ -72,8 +142,9 @@ api.interceptors.response.use(
             const token = await refreshAccessToken();
             config.headers.Authorization = `Bearer ${token}`;
             return api(config);
-        } catch {
-            redirectToLogin();
+        } catch (refreshError) {
+            // Only a rejected session logs out; a network error or rate limit must not
+            if (refreshError?.sessionExpired) redirectToLogin();
             return Promise.reject(error);
         }
     }
@@ -81,7 +152,7 @@ api.interceptors.response.use(
 
 // Log out locally straight away, then revoke the refresh token on the server
 export const logout = () => {
-    clearToken();
+    endSession();
     return api.post("/user/logout", null, { skipAuth: true }).catch(() => {});
 };
 

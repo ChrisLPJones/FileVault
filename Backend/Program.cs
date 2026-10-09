@@ -69,7 +69,7 @@ namespace Backend
                         new { error = "Too many attempts. Please wait a minute and try again." }, ct);
                 };
 
-                foreach (var (policy, defaultLimit) in new[] { ("auth", 10), ("refresh", 30), ("two-factor", 10) })
+                foreach (var (policy, defaultLimit) in new[] { ("auth", 10), ("refresh", 60), ("two-factor", 10) })
                 {
                     options.AddPolicy(policy, http =>
                     {

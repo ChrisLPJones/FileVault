@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+import { clearToken } from "../utils/auth";
 
 // jsdom has no matchMedia. Tests can change what matches with setMediaMatches().
 let matching = new Set();
@@ -32,6 +33,8 @@ export const setMediaMatches = (...queries) => {
 
 afterEach(() => {
     cleanup();
+    // The access token lives in module state, which would otherwise leak into the next test
+    clearToken();
     localStorage.clear();
     matching = new Set();
 });
