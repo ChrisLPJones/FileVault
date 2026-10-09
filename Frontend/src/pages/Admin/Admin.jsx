@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getErrorMessage } from "../../api/api";
 import {
     createUserAPI,
@@ -170,8 +170,8 @@ function AdminCell({ user, onChange }) {
 
 // The "Actions" button of a row and the choices it opens: set password, permanent, suspend, delete.
 // You can't set your own password or delete your own account here (Settings does that).
-function RowActions({ user, isSelf, onChoose }) {
-    const [open, setOpen] = useState(false);
+function RowActions({ user, isSelf, open, onOpenChange, onChoose }) {
+    const setOpen = (value) => onOpenChange(value ? user.id : null);
     const name = `${user.firstName} ${user.lastName}`.trim();
 
     const choose = (action) => {
@@ -232,6 +232,8 @@ export default function Admin() {
     const [error, setError] = useState(null);
     const [version, setVersion] = useState(0); // bumped to reload (also resets the rows' admin-rights messages)
     const [dialog, setDialog] = useState(null); // { type: "password" | "delete", user }
+    const [openMenuId, setOpenMenuId] = useState(null); // the one row whose Actions menu is open
+    const openerLabel = useRef(null); // Actions button that opened the current dialog
     const [creating, setCreating] = useState(false);
     const [notice, setNotice] = useState(null); // what the last action did
     const [actionError, setActionError] = useState(null); // why the last row action failed
@@ -267,7 +269,19 @@ export default function Admin() {
 
     const reload = () => setVersion((v) => v + 1);
 
+    // Close the dialog and give focus back to the Actions button that opened it
+    const closeDialog = () => {
+        setDialog(null);
+        const label = openerLabel.current;
+        if (!label) return;
+        setTimeout(() => {
+            const buttons = document.querySelectorAll("button[aria-haspopup='menu']");
+            Array.from(buttons).find((b) => b.getAttribute("aria-label") === label)?.focus();
+        }, 0);
+    };
+
     const chooseAction = async (action, user) => {
+        openerLabel.current = `Actions for ${user.email}`;
         setNotice(null);
         setActionError(null);
         if (action === "suspend") {
@@ -299,13 +313,13 @@ export default function Admin() {
     // These throw on failure; their dialog shows the message
     const savePassword = async (user, password) => {
         await setUserPasswordAPI(user.id, password);
-        setDialog(null);
+        closeDialog();
         setNotice(`Password set for ${user.email}. They have been signed out everywhere.`);
     };
 
     const deleteAccount = async (user) => {
         await deleteUserAPI(user.id);
-        setDialog(null);
+        closeDialog();
         setNotice(`The account for ${user.email} was deleted.`);
         reload();
     };
@@ -405,7 +419,13 @@ export default function Admin() {
                                                         {user.suspendedAt && <span className="admin-badge suspended">Suspended</span>}
                                                     </div>
                                                     <div className="admin-muted admin-email">{user.email}</div>
-                                                    <RowActions user={user} isSelf={user.id === stats.currentUserId} onChoose={chooseAction} />
+                                                    <RowActions
+                                                        user={user}
+                                                        isSelf={user.id === stats.currentUserId}
+                                                        open={openMenuId === user.id}
+                                                        onOpenChange={setOpenMenuId}
+                                                        onChoose={chooseAction}
+                                                    />
                                                 </div>
                                             </div>
                                         </td>
@@ -444,10 +464,10 @@ export default function Admin() {
             </section>
 
             {dialog?.type === "password" && (
-                <SetPasswordDialog user={dialog.user} onSave={savePassword} onClose={() => setDialog(null)} />
+                <SetPasswordDialog user={dialog.user} onSave={savePassword} onClose={closeDialog} />
             )}
             {dialog?.type === "delete" && (
-                <DeleteAccountDialog user={dialog.user} onDelete={deleteAccount} onClose={() => setDialog(null)} />
+                <DeleteAccountDialog user={dialog.user} onDelete={deleteAccount} onClose={closeDialog} />
             )}
         </div>
     );

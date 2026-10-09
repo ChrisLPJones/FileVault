@@ -253,6 +253,21 @@ describe("Admin page", () => {
             expect(within(menu).getByRole("menuitem", { name: "Delete account" })).toBeInTheDocument();
         });
 
+        it("keeps only one row's menu open at a time", async () => {
+            render(<Admin />);
+            await userEvent.click(await screen.findByRole("button", { name: "Actions for sam@example.com" }));
+            await userEvent.click(screen.getByRole("button", { name: "Actions for alex@example.com" }));
+            expect(screen.getAllByRole("menu")).toHaveLength(1);
+            expect(screen.getByRole("button", { name: "Actions for sam@example.com" })).toHaveAttribute("aria-expanded", "false");
+        });
+
+        it("returns focus to the Actions button when its dialog closes", async () => {
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Set password");
+            await userEvent.keyboard("{Escape}");
+            await vi.waitFor(() => expect(screen.getByRole("button", { name: "Actions for sam@example.com" })).toHaveFocus());
+        });
+
         it("leaves set password and delete out of your own row", async () => {
             render(<Admin />);
             await userEvent.click(await screen.findByRole("button", { name: "Actions for alex@example.com" }));
