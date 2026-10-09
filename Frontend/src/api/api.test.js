@@ -158,6 +158,33 @@ describe("refresh failures", () => {
         expect(hasSessionHint()).toBe(false);
     });
 
+    it("retries once when the 401 is a raced refresh, and keeps the session on success", async () => {
+        startSession(makeToken({ expiresIn: -60 }));
+        const fresh = makeToken();
+        let calls = 0;
+        server = () =>
+            ++calls === 1 ? { status: 401, data: { error: "Session expired", raced: true } } : { data: { success: fresh } };
+
+        await expect(refreshAccessToken()).resolves.toBe(fresh);
+        expect(calls).toBe(2);
+        expect(getToken()).toBe(fresh);
+        expect(hasSessionHint()).toBe(true);
+    });
+
+    it("ends the session when the retry after a raced 401 is also a 401", async () => {
+        startSession(makeToken({ expiresIn: -60 }));
+        let calls = 0;
+        server = () =>
+            ++calls === 1
+                ? { status: 401, data: { error: "Session expired", raced: true } }
+                : { status: 401, data: { error: "Session expired" } };
+
+        await expect(refreshAccessToken()).rejects.toMatchObject({ sessionExpired: true });
+        expect(calls).toBe(2);
+        expect(getToken()).toBeNull();
+        expect(hasSessionHint()).toBe(false);
+    });
+
     it("keeps the session on a network error and does not redirect", async () => {
         const token = makeToken();
         startSession(token);

@@ -26,14 +26,24 @@ let refreshPromise = null;
 const LOCK_NAME = "fv-refresh";
 const withRefreshLock = (task) => (navigator.locks?.request ? navigator.locks.request(LOCK_NAME, task) : task());
 
+const postRefresh = () => axios.post(`${API_BASE_URL}/user/refresh`, null, { withCredentials: true });
+
+// A 401 the server marks raced lost a rotation race with another tab, which holds a valid cookie
+const isRaced = (error) => error?.response?.status === 401 && error.response.data?.raced === true;
+
+// Refresh under the lock; a raced 401 is retried once (the lock now yields the other tab's new cookie)
+const refreshUnderLock = () =>
+    withRefreshLock(postRefresh).catch((error) => {
+        if (!isRaced(error)) throw error;
+        return withRefreshLock(postRefresh);
+    });
+
 // Exchange the refresh cookie for a new access token. Rejects with error.sessionExpired = true when
 // the server says the session is over (401); any other failure (network, 429, 5xx) is transient and
 // leaves the session as it was.
 export const refreshAccessToken = () => {
     if (!refreshPromise) {
-        refreshPromise = withRefreshLock(() =>
-            axios.post(`${API_BASE_URL}/user/refresh`, null, { withCredentials: true })
-        )
+        refreshPromise = refreshUnderLock()
             .then((response) => {
                 setToken(response.data.success);
                 ensureSessionHint();
