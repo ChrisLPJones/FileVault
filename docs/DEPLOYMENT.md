@@ -314,7 +314,7 @@ Without a MaxMind account, copy a `GeoLite2-Country.mmdb` into the `geoip_data` 
 **Privacy**
 
 Storing IP addresses is personal data processing. If you run a public instance, mention the
-last-login IP logging in your privacy notice. Only the latest address is kept, and only admins can see it.
+last-login IP logging in your privacy notice. Only the latest login address is kept for the admin page, and only admins can see it; active sessions also keep their own address (users see it under Active sessions).
 
 **Upgrading**
 
