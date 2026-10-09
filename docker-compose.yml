@@ -54,6 +54,18 @@ services:
       Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:5173}
       # Comma-separated emails of the accounts that can use the admin page
       Admin__Emails: ${ADMIN_EMAILS:-}
+      # Links in emails point here
+      App__FrontendUrl: ${FRONTEND_URL:-http://localhost:5173}
+      # Optional SMTP for password reset / email confirmation (otherwise logged)
+      Email__Smtp__Host: ${SMTP_HOST:-}
+      Email__Smtp__Port: ${SMTP_PORT:-587}
+      Email__Smtp__User: ${SMTP_USER:-}
+      Email__Smtp__Password: ${SMTP_PASSWORD:-}
+      Email__Smtp__From: ${SMTP_FROM:-}
+      # Off unless set in .env; see docs/DEPLOYMENT.md
+      Swagger__Enabled: ${SWAGGER_ENABLED:-false}
+      ForwardedHeaders__Enabled: ${BEHIND_HTTPS_PROXY:-false}
+      Jwt__SecureRefreshCookie: ${BEHIND_HTTPS_PROXY:-false}
     ports:
       - "3000:8080"
     volumes:

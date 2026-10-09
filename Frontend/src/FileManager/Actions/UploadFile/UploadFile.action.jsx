@@ -8,6 +8,8 @@ import { getFileExtension } from "../../../utils/getFileExtension";
 import { getDataSize } from "../../../utils/getDataSize";
 import { useFiles } from "../../../contexts/FilesContext";
 import { useTranslation } from "../../../contexts/TranslationProvider";
+import { createFolderResolver, createLimiter, filesFromFolderInput, readDroppedItems } from "../../../utils/folderUpload";
+import { formatBytes } from "../../../utils/formatBytes";
 import "./UploadFile.action.scss";
 
 const UploadFileAction = ({
@@ -22,8 +24,15 @@ const UploadFileAction = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState({});
   const { currentFolder } = useFileNavigation();
-  const { onError } = useFiles();
+  const { files: allFiles, onError } = useFiles();
   const fileInputRef = useRef(null);
+  const folderResolverRef = useRef(null);
+  // A folder can hold hundreds of files: upload a few at a time
+  const limiterRef = useRef(null);
+  const runLimited = (task) => {
+    limiterRef.current ??= createLimiter(3);
+    return limiterRef.current(task);
+  };
   const t = useTranslation();
 
   // To open choose file if the "Choose File" button is focused and Enter key is pressed
@@ -43,20 +52,28 @@ const UploadFileAction = ({
     if (sizeError) return `${t("maxUploadSize")} ${getDataSize(maxFileSize, 0)}.`;
   };
 
-  const setSelectedFiles = (selectedFiles) => {
-    selectedFiles = selectedFiles.filter(
-      (item) =>
-        !files.some((fileData) => fileData.file.name.toLowerCase() === item.name.toLowerCase())
+  // Folder uploads: folders are created under the folder that was open when the dialog was used
+  const getFolderResolver = () => {
+    folderResolverRef.current ??= createFolderResolver(currentFolder, allFiles);
+    return folderResolverRef.current;
+  };
+
+  // items: [{ file, dir }] where dir is the folder path inside a folder upload ("" for loose files)
+  const setSelectedFiles = (items) => {
+    const key = (dir, name) => `${dir}/${name}`.toLowerCase();
+    items = items.filter(
+      (item) => !files.some((fileData) => key(fileData.dir ?? "", fileData.file.name) === key(item.dir, item.file.name))
     );
 
-    if (selectedFiles.length > 0) {
+    if (items.length > 0) {
       // A name that is already in the folder is given a number by the server ("report (1).pdf")
-      const newFiles = selectedFiles.map((file) => {
+      const newFiles = items.map(({ file, dir }) => {
         const appendData = onFileUploading(file, currentFolder);
         const error = checkFileError(file);
         error && onError({ type: "upload", message: error }, file);
         return {
           file: file,
+          dir,
           appendData: appendData,
           ...(error && { error: error }),
         };
@@ -65,17 +82,21 @@ const UploadFileAction = ({
     }
   };
 
-  // Dropped files go through the same checks as chosen ones (setSelectedFiles)
+  // Dropped files and folders go through the same checks as chosen ones (setSelectedFiles)
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    setSelectedFiles(droppedFiles);
+    readDroppedItems(e.dataTransfer)
+      .then(setSelectedFiles)
+      .catch((err) => onError({ type: "upload", message: "Could not read the dropped folder" }, err));
   };
 
   const handleChooseFile = (e) => {
-    const choosenFiles = Array.from(e.target.files);
-    setSelectedFiles(choosenFiles);
+    setSelectedFiles(Array.from(e.target.files).map((file) => ({ file, dir: "" })));
+  };
+
+  const handleChooseFolder = (e) => {
+    setSelectedFiles(filesFromFolderInput(e.target.files));
   };
 
   const handleFileRemove = (index) => {
@@ -128,7 +149,22 @@ const UploadFileAction = ({
               accept={acceptedFileTypes}
             />
           </Button>
+          {/* Uploads a folder and everything in it, recreating its folders */}
+          <Button padding="0" type="secondary">
+            <label htmlFor="chooseFolder">Choose Folder</label>
+            <input
+              type="file"
+              id="chooseFolder"
+              className="choose-file-input"
+              onChange={handleChooseFolder}
+              webkitdirectory=""
+              multiple
+            />
+          </Button>
         </div>
+        {maxFileSize > 0 && (
+          <p className="upload-limit-hint">Any file type, up to {formatBytes(maxFileSize, 0)} per file.</p>
+        )}
       </div>
       )}
       {files.length > 0 && (
@@ -154,6 +190,8 @@ const UploadFileAction = ({
                 setIsUploading={setIsUploading}
                 onFileUploaded={onFileUploaded}
                 handleFileRemove={handleFileRemove}
+                resolveParentId={(dir) => getFolderResolver()(dir)}
+                runLimited={runLimited}
               />
             ))}
           </ul>

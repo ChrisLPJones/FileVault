@@ -21,7 +21,7 @@
 - Light, dark and system themes, and a choice of accent colour
 
 **Tooling**
-- Interactive API docs (Swagger) at `/swagger`
+- Interactive API docs (Swagger) at `/swagger` in development, or with `SWAGGER_ENABLED=true`
 - Desktop app (Electron) for Windows, macOS and Linux
 - Runs with one command using Docker Compose
 - CI on every push: backend build and tests, frontend build and lint, Docker images
@@ -88,6 +88,8 @@ To open the database in a GUI tool (SSMS, Azure Data Studio, VS Code SQLTools), 
 To use the admin page (`/admin`: every account's storage use and quota, and server totals), set `ADMIN_EMAILS` in `.env` to a comma-separated list of account emails and restart; those accounts get an Admin link in the account menu.
 
 The frontend bundle has the API URL compiled in. If the browser reaches the API somewhere other than `http://localhost:3000`, set `API_URL` (and `FRONTEND_URL` for CORS) in `.env` and rebuild.
+
+Hosting it for real (HTTPS reverse proxy, secrets, backups, key rotation, security headers): see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Local development
 
@@ -168,7 +170,7 @@ See [Desktop/README.md](Desktop/README.md) for details.
 
 ## API Documentation
 
-Interactive API docs are served by the API at **http://localhost:3000/swagger**, and the OpenAPI document is at `/swagger/v1/swagger.json` (it can be imported into Postman or Insomnia).
+Interactive API docs are served at `/swagger` on the API, and the OpenAPI document is at `/swagger/v1/swagger.json` (it can be imported into Postman or Insomnia). They're on when the API runs in Development (`dotnet run`). The Docker stack runs in Production, where they're off unless you add `SWAGGER_ENABLED=true` to `.env` (then **http://localhost:3000/swagger**); see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#5-api-docs-swagger).
 
 To try protected endpoints, call `POST /user/login`, then click **Authorize** and paste the returned access token (it lasts 15 minutes). Endpoints are grouped as:
 

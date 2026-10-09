@@ -5,11 +5,14 @@ import {
   MdOutlineDelete,
   MdOutlineFileDownload,
   MdOutlineFileUpload,
+  MdOutlineShare,
 } from "react-icons/md";
 import { BiRename } from "react-icons/bi";
 import { FaListUl, FaRegPaste } from "react-icons/fa6";
 import LayoutToggler from "./LayoutToggler";
 import ToolbarOverflow from "./ToolbarOverflow";
+import SearchBox from "./SearchBox";
+import { useRecycleBin } from "../../contexts/RecycleBinContext";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { useSelection } from "../../contexts/SelectionContext";
 import { useClipBoard } from "../../contexts/ClipboardContext";
@@ -24,6 +27,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
   const { selectedFiles, setSelectedFiles, handleDownload } = useSelection();
   const { clipBoard, setClipBoard, handleCutCopy, handlePasting } = useClipBoard();
   const { activeLayout, setActiveLayout } = useLayout();
+  const { isBinOpen } = useRecycleBin();
   const t = useTranslation();
 
   // Toolbar Items
@@ -74,8 +78,9 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
     setSelectedFiles([]);
   };
 
-  // Narrow screens: the less-used actions (marked "secondary-action") move into a "⋯" menu
-  const selecting = selectedFiles.length > 0;
+  // Narrow screens: the less-used actions (marked "secondary-action") move into a "⋯" menu.
+  // Binned items can't be cut, copied, pasted or renamed, so the bin only gets view and refresh.
+  const selecting = selectedFiles.length > 0 && !isBinOpen;
   const changeLayout = (layout) => {
     setActiveLayout(layout);
     onLayoutChange(layout);
@@ -83,7 +88,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
   const overflowItems = [
     selecting && permissions.move && { text: t("cut"), icon: <BsScissors size={17} />, onClick: () => handleCutCopy(true) },
     selecting && permissions.copy && { text: t("copy"), icon: <BsCopy size={16} />, onClick: () => handleCutCopy(false) },
-    clipBoard?.files?.length > 0 && { text: t("paste"), icon: <FaRegPaste size={17} />, onClick: handleFilePasting },
+    !isBinOpen && clipBoard?.files?.length > 0 && { text: t("paste"), icon: <FaRegPaste size={17} />, onClick: handleFilePasting },
     selecting && selectedFiles.length === 1 && permissions.rename &&
       { text: t("rename"), icon: <BiRename size={18} />, onClick: () => triggerAction.show("rename") },
     { text: t("grid"), icon: <BsGridFill size={16} />, onClick: () => changeLayout("grid"), checked: activeLayout === "grid", divider: true },
@@ -93,9 +98,10 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
   // The first item after the file actions starts a new group
   overflowItems[0] = { ...overflowItems[0], divider: false };
 
-  // Details, view and refresh: on the right in both toolbars
+  // Search, view and refresh: on the right in both toolbars
   const rightGroup = (
     <div>
+      <SearchBox />
       <ToolbarOverflow items={overflowItems} />
       {toolbarRightItems.map((item, index) => (
         <div key={index} className="toolbar-left-items">
@@ -117,6 +123,18 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
       )}
     </div>
   );
+
+  // The recycle bin has its own buttons; only search, view and refresh apply
+  if (isBinOpen) {
+    return (
+      <div className="toolbar">
+        <div className="fm-toolbar">
+          <div />
+          {rightGroup}
+        </div>
+      </div>
+    );
+  }
 
   // Selected File/Folder Actions
   if (selectedFiles.length > 0) {
@@ -155,6 +173,16 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
               >
                 <BiRename size={19} />
                 <span>{t("rename")}</span>
+              </button>
+            )}
+            {selectedFiles.length === 1 && permissions.share && (
+              <button
+                className="item-action file-action"
+                title={t("share")}
+                onClick={() => triggerAction.show("share")}
+              >
+                <MdOutlineShare size={18} />
+                <span>{t("share")}</span>
               </button>
             )}
             {permissions.download && (

@@ -41,11 +41,12 @@ namespace Backend.Test
 
         private static string NewEmail() => $"auth_{Guid.NewGuid():N}@example.test";
 
-        private static async Task RegisterAsync(HttpClient client, string email, string password = Password)
+        private async Task RegisterAsync(HttpClient client, string email, string password = Password)
         {
             var response = await client.PostAsJsonAsync("/user/register",
                 new UserModel { FirstName = "Test", LastName = "User", Email = email, Password = password });
             response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            await TestDatabase.MarkEmailVerifiedAsync(_baseFactory, email);
         }
 
         private static async Task<(string accessToken, string refreshCookie, HttpResponseMessage response)> LoginAsync(
@@ -414,6 +415,7 @@ namespace Backend.Test
             var email = NewEmail();
             (await client.PostAsJsonAsync("/user/register", new UserModel { FirstName = "Login", LastName = "Tester", Email = email, Password = Password }))
                 .EnsureSuccessStatusCode();
+            await TestDatabase.MarkEmailVerifiedAsync(_baseFactory, email);
 
             async Task<HttpStatusCode> LoginAs(object body) => (await client.PostAsJsonAsync("/user/login", body)).StatusCode;
 

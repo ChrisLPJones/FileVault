@@ -18,7 +18,7 @@ public partial class DatabaseServices
             SELECT t.WrappedKey, t.Size, t.MimeType, t.CreatedAt
             FROM FileThumbnails t
             INNER JOIN Files f ON f.GUID = t.FileGuid
-            WHERE t.FileGuid = @GUID AND f.UserId = @UserId";
+            WHERE t.FileGuid = @GUID AND f.UserId = @UserId AND f.DeletedAt IS NULL";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@GUID", fileGuid);

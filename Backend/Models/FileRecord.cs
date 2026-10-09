@@ -18,7 +18,8 @@ namespace Backend.Models
     }
 
     // Storage used and allowed for a user, in bytes
-    public record StorageUsage(long Used, long Quota, long MaxUploadBytes);
+    // MaxUploadBytes applies to POST /upload; MaxFileBytes to chunked uploads (POST /uploads)
+    public record StorageUsage(long Used, long Quota, long MaxUploadBytes, long MaxFileBytes);
 
     // Either a value or an error, so callers can't use one without checking
     public record ServiceResult<T>(T? Value, HttpReturnResult? Error) where T : class

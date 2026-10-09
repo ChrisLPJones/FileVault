@@ -20,7 +20,8 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     public async Task<StorageUsage> GetUsageAsync(DatabaseServices db, string userId)
     {
         var (used, quota) = await db.GetStorageUsageAsync(userId);
-        return new StorageUsage(used, quota ?? config.GetValue("Storage:DefaultQuotaBytes", DefaultQuotaBytes), MaxUploadBytes(config));
+        return new StorageUsage(used, quota ?? config.GetValue("Storage:DefaultQuotaBytes", DefaultQuotaBytes), MaxUploadBytes(config),
+            ChunkedUploadService.MaxFileBytes(config));
     }
 
     public static readonly string[] DefaultFolderNames = ["Documents", "Pictures", "Music", "Videos"];
@@ -61,7 +62,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
         { StatusCode = 413 };
     }
 
-    private static string FormatBytes(long bytes)
+    public static string FormatBytes(long bytes)
     {
         string[] units = ["B", "KB", "MB", "GB", "TB"];
         double value = Math.Max(0, bytes);
@@ -112,7 +113,8 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     // Uploads a file, saves it to disk, and stores metadata in the database
     public async Task<HttpReturnResult> UploadFile(IFormFile file, DatabaseServices db, string userId, string parentId, string mimeType)
     {
-        var maxUpload = MaxUploadBytes(config);
+        // The per-request limit, and the file size limit that chunked uploads also enforce
+        var maxUpload = Math.Min(MaxUploadBytes(config), ChunkedUploadService.MaxFileBytes(config));
         if (file.Length > maxUpload)
             return new HttpReturnResult(false, $"File is larger than the {FormatBytes(maxUpload)} upload limit") { StatusCode = 413 };
 
@@ -250,7 +252,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     }
 
     // "report.pdf" -> "report (1).pdf" until the name is free
-    private static string GetUniqueName(string name, bool isDirectory, HashSet<string> taken)
+    public static string GetUniqueName(string name, bool isDirectory, HashSet<string> taken)
     {
         if (!taken.Contains(name))
             return name;

@@ -2,7 +2,7 @@ using Microsoft.Data.SqlClient;
 
 namespace Backend.Services;
 
-// Favourites (starred items) and recently opened files
+// Favourites (starred items) and recently opened files. Items in the recycle bin count as missing.
 public partial class DatabaseServices
 {
     // Star or unstar one of the user's files or folders; false if it doesn't exist
@@ -11,7 +11,7 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = "UPDATE Files SET Favourite = @Favourite WHERE GUID = @GUID AND UserId = @UserId";
+        const string query = "UPDATE Files SET Favourite = @Favourite WHERE GUID = @GUID AND UserId = @UserId AND DeletedAt IS NULL";
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@Favourite", favourite);
         command.Parameters.AddWithValue("@GUID", guid);
@@ -27,7 +27,7 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = "UPDATE Files SET LastOpenedAt = SYSUTCDATETIME() WHERE GUID = @GUID AND UserId = @UserId";
+        const string query = "UPDATE Files SET LastOpenedAt = SYSUTCDATETIME() WHERE GUID = @GUID AND UserId = @UserId AND DeletedAt IS NULL";
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@GUID", guid);
         command.Parameters.AddWithValue("@UserId", userId);

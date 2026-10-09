@@ -6,4 +6,5 @@ export const defaultPermissions = {
   rename: true,
   download: true,
   delete: true,
+  share: true,
 };

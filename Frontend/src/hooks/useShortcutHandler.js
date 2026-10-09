@@ -5,12 +5,16 @@ import { useFileNavigation } from "../contexts/FileNavigationContext";
 import { useSelection } from "../contexts/SelectionContext";
 import { useLayout } from "../contexts/LayoutContext";
 import { validateApiCallback } from "../utils/validateApiCallback";
+import { useRecycleBin } from "../contexts/RecycleBinContext";
 
 export const useShortcutHandler = (triggerAction, onRefresh, permissions) => {
   const { setClipBoard, handleCutCopy, handlePasting } = useClipBoard();
   const { currentFolder, currentPathFiles } = useFileNavigation();
   const { selectedFiles, setSelectedFiles, handleDownload } = useSelection();
   const { setActiveLayout } = useLayout();
+  const { isBinOpen } = useRecycleBin();
+  // Off while an action (dialog, rename) is open, and in the recycle bin, whose items aren't files to act on
+  const disabled = triggerAction.isActive || isBinOpen;
 
   const triggerCreateFolder = () => {
     permissions.create && triggerAction.show("createFolder");
@@ -79,19 +83,19 @@ export const useShortcutHandler = (triggerAction, onRefresh, permissions) => {
   };
 
   // Keypress detection will be disbaled when some Action is in active state.
-  useKeyPress(shortcuts.createFolder, triggerCreateFolder, triggerAction.isActive);
-  useKeyPress(shortcuts.uploadFiles, triggerUploadFiles, triggerAction.isActive);
-  useKeyPress(shortcuts.cut, triggerCutItems, triggerAction.isActive);
-  useKeyPress(shortcuts.copy, triggerCopyItems, triggerAction.isActive);
-  useKeyPress(shortcuts.paste, triggerPasteItems, triggerAction.isActive);
-  useKeyPress(shortcuts.rename, triggerRename, triggerAction.isActive);
-  useKeyPress(shortcuts.download, triggerDownload, triggerAction.isActive);
-  useKeyPress(shortcuts.delete, triggerDelete, triggerAction.isActive);
-  useKeyPress(shortcuts.jumpToFirst, triggerSelectFirst, triggerAction.isActive);
-  useKeyPress(shortcuts.jumpToLast, triggerSelectLast, triggerAction.isActive);
-  useKeyPress(shortcuts.selectAll, triggerSelectAll, triggerAction.isActive);
-  useKeyPress(shortcuts.clearSelection, triggerClearSelection, triggerAction.isActive);
-  useKeyPress(shortcuts.refresh, triggerRefresh, triggerAction.isActive);
-  useKeyPress(shortcuts.gridLayout, triggerGridLayout, triggerAction.isActive);
-  useKeyPress(shortcuts.listLayout, triggerListLayout, triggerAction.isActive);
+  useKeyPress(shortcuts.createFolder, triggerCreateFolder, disabled);
+  useKeyPress(shortcuts.uploadFiles, triggerUploadFiles, disabled);
+  useKeyPress(shortcuts.cut, triggerCutItems, disabled);
+  useKeyPress(shortcuts.copy, triggerCopyItems, disabled);
+  useKeyPress(shortcuts.paste, triggerPasteItems, disabled);
+  useKeyPress(shortcuts.rename, triggerRename, disabled);
+  useKeyPress(shortcuts.download, triggerDownload, disabled);
+  useKeyPress(shortcuts.delete, triggerDelete, disabled);
+  useKeyPress(shortcuts.jumpToFirst, triggerSelectFirst, disabled);
+  useKeyPress(shortcuts.jumpToLast, triggerSelectLast, disabled);
+  useKeyPress(shortcuts.selectAll, triggerSelectAll, disabled);
+  useKeyPress(shortcuts.clearSelection, triggerClearSelection, disabled);
+  useKeyPress(shortcuts.refresh, triggerRefresh, disabled);
+  useKeyPress(shortcuts.gridLayout, triggerGridLayout, disabled);
+  useKeyPress(shortcuts.listLayout, triggerListLayout, disabled);
 };

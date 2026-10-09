@@ -176,7 +176,7 @@ public partial class DatabaseServices
 
 
 
-    // Get a single file or folder owned by the user, or null if it doesn't exist
+    // Get a single file or folder owned by the user, or null if it doesn't exist or is in the recycle bin
     public async Task<FileRecord?> GetItemAsync(string guid, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
@@ -184,7 +184,7 @@ public partial class DatabaseServices
 
         const string query = @"
             SELECT GUID, FileName, isDirectory, FilePath, ParentId, Size, MimeType, WrappedKey
-            FROM Files WHERE GUID = @GUID AND UserId = @UserId";
+            FROM Files WHERE GUID = @GUID AND UserId = @UserId AND DeletedAt IS NULL";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@GUID", guid);
@@ -196,7 +196,7 @@ public partial class DatabaseServices
 
 
 
-    // Get an item and everything below it, parents before children
+    // Get an item and everything below it, parents before children (skipping anything in the recycle bin)
     public async Task<List<FileRecord>> GetTreeAsync(string guid, string userId)
     {
         var items = new List<FileRecord>();
@@ -206,11 +206,11 @@ public partial class DatabaseServices
 
         const string query = @"
             WITH Tree AS (
-                SELECT GUID, 0 AS Depth FROM Files WHERE GUID = @GUID AND UserId = @UserId
+                SELECT GUID, 0 AS Depth FROM Files WHERE GUID = @GUID AND UserId = @UserId AND DeletedAt IS NULL
                 UNION ALL
                 SELECT f.GUID, t.Depth + 1 FROM Files f
                 INNER JOIN Tree t ON f.ParentId = t.GUID
-                WHERE f.UserId = @UserId
+                WHERE f.UserId = @UserId AND f.DeletedAt IS NULL
             )
             SELECT f.GUID, f.FileName, f.isDirectory, f.FilePath, f.ParentId, f.Size, f.MimeType, f.WrappedKey
             FROM Files f INNER JOIN Tree t ON f.GUID = t.GUID
@@ -240,7 +240,7 @@ public partial class DatabaseServices
         // Older rows may store root as '' instead of NULL
         const string query = @"
             SELECT FileName FROM Files
-            WHERE UserId = @UserId
+            WHERE UserId = @UserId AND DeletedAt IS NULL
               AND ((@ParentId IS NULL AND (ParentId IS NULL OR ParentId = '')) OR ParentId = @ParentId)
               AND (@ExcludeGuid IS NULL OR GUID <> @ExcludeGuid)";
 
@@ -362,7 +362,7 @@ public partial class DatabaseServices
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, FileName, FilePath, GUID, UserId, isDirectory FROM Files WHERE GUID = @GUID AND UserId = @UserId AND isDirectory = 1";
+        string query = "SELECT Id, FileName, FilePath, GUID, UserId, isDirectory FROM Files WHERE GUID = @GUID AND UserId = @UserId AND isDirectory = 1 AND DeletedAt IS NULL";
         using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@GUID", folderId);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -386,7 +386,7 @@ public partial class DatabaseServices
 
 
 
-    // Retrieve all filenames that belong to a specific user
+    // Retrieve all files and folders that belong to a specific user (not those in the recycle bin)
     public async Task<List<FileModel>> GetFilesFromDb(string userId)
     {
         var filesList = new List<FileModel>();
@@ -394,7 +394,7 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, FileName, FilePath, UpdatedAt, ISNULL(CreatedAt, UpdatedAt) AS CreatedAt, GUID, isDirectory, Size, Favourite, LastOpenedAt FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId";
+        string query = "SELECT Id, FileName, FilePath, UpdatedAt, ISNULL(CreatedAt, UpdatedAt) AS CreatedAt, GUID, isDirectory, Size, Favourite, LastOpenedAt FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId AND DeletedAt IS NULL";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -668,18 +668,22 @@ public partial class DatabaseServices
 
 
 
-    // Store a new refresh token (hash only) and drop this user's expired ones
-    public async Task StoreRefreshTokenAsync(string userId, string tokenHash, DateTime expiresAtUtc)
+    // Store a new refresh token (hash only) for a session, and drop this user's expired
+    // tokens and the sessions left without any
+    public async Task StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         const string query = @"
             DELETE FROM RefreshTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
-            INSERT INTO RefreshTokens (UserId, TokenHash, ExpiresAt) VALUES (@UserId, @TokenHash, @ExpiresAt);";
+            INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt) VALUES (@UserId, @SessionId, @TokenHash, @ExpiresAt);
+            DELETE FROM Sessions WHERE UserId = @UserId
+                AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@SessionId", sessionId);
         command.Parameters.AddWithValue("@TokenHash", tokenHash);
         command.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
         await command.ExecuteNonQueryAsync();
@@ -687,8 +691,11 @@ public partial class DatabaseServices
 
 
 
-    // SinceRevoked is measured by the database clock, so it isn't affected by clock differences with the API
-    public record RefreshTokenUse(string UserId, bool Valid, TimeSpan? SinceRevoked);
+    // SinceRevoked is measured by the database clock, so it isn't affected by clock differences with the API.
+    // SessionId is null for tokens from before sessions existed. Replaced is true if the token was
+    // rotated (a newer token exists in its session), as opposed to revoked by logging out or signing
+    // the session out.
+    public record RefreshTokenUse(string UserId, bool Valid, TimeSpan? SinceRevoked, Guid? SessionId = null, bool Replaced = false);
 
     // Atomically revoke a refresh token so it can only be used once.
     // Returns null if the token doesn't exist. Valid is true only if this call revoked an active, unexpired token.
@@ -699,7 +706,7 @@ public partial class DatabaseServices
 
         const string consume = @"
             UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
-            OUTPUT inserted.UserId, inserted.ExpiresAt
+            OUTPUT inserted.UserId, inserted.ExpiresAt, inserted.SessionId
             WHERE TokenHash = @TokenHash AND RevokedAt IS NULL;";
 
         await using (var command = new SqlCommand(consume, connection))
@@ -709,14 +716,17 @@ public partial class DatabaseServices
             if (await reader.ReadAsync())
             {
                 var expiresAt = reader.GetDateTime(1);
-                return new RefreshTokenUse(reader.GetGuid(0).ToString(), expiresAt > DateTime.UtcNow, null);
+                return new RefreshTokenUse(reader.GetGuid(0).ToString(), expiresAt > DateTime.UtcNow, null,
+                    reader.IsDBNull(2) ? null : reader.GetGuid(2));
             }
         }
 
         // Not active: either unknown or already used/revoked
         const string lookup = @"
-            SELECT UserId, DATEDIFF_BIG(millisecond, RevokedAt, SYSUTCDATETIME())
-            FROM RefreshTokens WHERE TokenHash = @TokenHash";
+            SELECT t.UserId, DATEDIFF_BIG(millisecond, t.RevokedAt, SYSUTCDATETIME()), t.SessionId,
+                   CASE WHEN EXISTS (SELECT 1 FROM RefreshTokens n WHERE n.SessionId = t.SessionId AND n.Id > t.Id)
+                        THEN 1 ELSE 0 END
+            FROM RefreshTokens t WHERE t.TokenHash = @TokenHash";
         await using (var command = new SqlCommand(lookup, connection))
         {
             command.Parameters.AddWithValue("@TokenHash", tokenHash);
@@ -725,7 +735,9 @@ public partial class DatabaseServices
                 return new RefreshTokenUse(
                     reader.GetGuid(0).ToString(),
                     false,
-                    reader.IsDBNull(1) ? null : TimeSpan.FromMilliseconds(reader.GetInt64(1)));
+                    reader.IsDBNull(1) ? null : TimeSpan.FromMilliseconds(reader.GetInt64(1)),
+                    reader.IsDBNull(2) ? null : reader.GetGuid(2),
+                    reader.GetInt32(3) == 1);
         }
 
         return null;

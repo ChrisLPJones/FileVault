@@ -32,7 +32,8 @@ namespace Backend.Routes
                 HttpRequest request,
                 DatabaseServices db,
                 AuthServices auth,
-                FileServices fs) =>
+                FileServices fs,
+                AccountEmailService emails) =>
             {
                 var user = await ReadJsonAsync<UserModel>(request);
 
@@ -56,7 +57,11 @@ namespace Backend.Routes
                 // Starter folders (Documents, Pictures, Music, Videos) for the new account
                 var created = await db.GetUserByEmail(user.Email.Trim());
                 if (created != null)
+                {
                     await fs.CreateDefaultFoldersAsync(db, created.Id.ToString());
+                    // Ask them to confirm the address (they can use the app meanwhile)
+                    await emails.SendVerificationAsync(created, db);
+                }
 
                 return Results.Ok(new { success = $"User {$"{user.FirstName.Trim()} {user.LastName}".Trim()} registered" });
             })
@@ -71,7 +76,8 @@ namespace Backend.Routes
                 HttpContext http,
                 AuthServices auth,
                 DatabaseServices db,
-                AdminService admins) =>
+                AdminService admins,
+                TwoFactorService twoFactor) =>
             {
                 var login = await ReadJsonAsync<LoginModel>(http.Request);
 
@@ -84,18 +90,30 @@ namespace Backend.Routes
                 if (userRecord == null)
                     return Results.Json(new { error = "Invalid email or password" }, statusCode: 401);
 
-                // Admin:Emails decides who is an administrator (see AdminService)
+                // Only after the password matched, so this doesn't reveal anything about other accounts
+                if (!await db.IsEmailVerifiedAsync(userRecord.Id.ToString()))
+                    return Results.Json(new { error = "Please confirm your email address first", emailNotVerified = true }, statusCode: 403);
+
+                // Admin:Emails decides who is an administrator (see AdminService). Before the two-factor
+                // step, so it applies however the login finishes; it only updates the IsAdmin flag.
                 await admins.SyncAsync(db, userRecord.Id.ToString());
+
+                // With two-factor on, the password only earns a short-lived challenge for POST /user/login/2fa
+                if ((await db.GetTwoFactorStateAsync(userRecord.Id.ToString()))?.Enabled == true)
+                    return Results.Ok(new TwoFactorChallengeResponse(true,
+                        await twoFactor.CreateLoginChallengeAsync(userRecord.Id.ToString())));
 
                 await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
 
                 return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
             })
                 .WithTags("Account")
-                .WithSummary("Log in with email and password: returns an access token and sets the refresh-token cookie")
+                .WithSummary("Log in with email and password: returns an access token and sets the refresh-token cookie " +
+                    "(with two-factor authentication on, returns { twoFactorRequired, challengeToken } for POST /user/login/2fa instead)")
                 .Produces<TokenResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(401)
+                .Produces<ErrorResponse>(403)
                 .Produces<ErrorResponse>(429).RequireRateLimiting("auth");
 
             // Exchanges the refresh token cookie for a new access token (and a new refresh cookie)
@@ -143,10 +161,11 @@ namespace Backend.Routes
                     return Results.NotFound(new { error = "User not found" });
 
                 var avatar = await db.GetAvatarAsync(userId);
-                return Results.Ok(new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt));
+                return Results.Ok(new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt,
+                    await db.IsEmailVerifiedAsync(userId)));
             })
                 .WithTags("Account")
-                .WithSummary("Get the current user's name, email and when their profile picture last changed")
+                .WithSummary("Get the current user's name, email, whether it's confirmed and when their profile picture last changed")
                 .Produces<UserInfoResponse>()
                 .Produces<ErrorResponse>(404).RequireAuthorization();
 
@@ -155,7 +174,8 @@ namespace Backend.Routes
                 ClaimsPrincipal user,
                 ProfileUpdateRequest request,
                 DatabaseServices db,
-                AuthServices auth) =>
+                AuthServices auth,
+                AccountEmailService emails) =>
             {
                 var firstName = request?.FirstName?.Trim();
                 var lastName = request?.LastName?.Trim() ?? "";
@@ -175,11 +195,20 @@ namespace Backend.Routes
                     return Results.Conflict(new { error = conflict });
 
                 await db.UpdateProfileAsync(userId, firstName, lastName, email);
+                var emailChanged = !string.Equals(account.Email, email, StringComparison.OrdinalIgnoreCase);
 
                 // New access token so the email claim is current
                 account.FirstName = firstName;
                 account.LastName = lastName;
                 account.Email = email;
+
+                // A new address needs confirming
+                if (emailChanged)
+                {
+                    await db.SetEmailVerifiedAsync(userId, false);
+                    await emails.SendVerificationAsync(account, db);
+                }
+
                 return Results.Ok(new { Success = "Profile updated", Token = auth.GetJWTToken(account) });
             })
                 .WithTags("Account")

@@ -22,8 +22,8 @@ namespace Backend.Test
                 .WithWebHostBuilder(builder => builder.UseSetting("Admin:Emails:0", _adminEmail.ToUpperInvariant()));
         }
 
-        private Task<TestAccounts.Account> NewAdminAsync() => TestAccounts.CreateAsync(_factory.CreateClient(), "admin", _adminEmail);
-        private Task<TestAccounts.Account> NewUserAsync() => TestAccounts.CreateAsync(_factory.CreateClient(), "plain");
+        private Task<TestAccounts.Account> NewAdminAsync() => TestAccounts.CreateAsync(_factory, "admin", _adminEmail);
+        private Task<TestAccounts.Account> NewUserAsync() => TestAccounts.CreateAsync(_factory, "plain");
 
         private static async Task<JsonElement> GetJsonAsync(HttpClient client, string url)
         {
@@ -217,8 +217,8 @@ namespace Backend.Test
             var email = $"envadmin_{Guid.NewGuid():N}@example.test";
             var envFactory = TestAccounts.WithoutLoginLimit(new WebApplicationFactory<Program>())
                 .WithWebHostBuilder(builder => builder.UseSetting("Admin:Emails", $"someone@elsewhere.test, {email} ;"));
-            var admin = await TestAccounts.CreateAsync(envFactory.CreateClient(), "envadmin", email);
-            var other = await TestAccounts.CreateAsync(envFactory.CreateClient(), "envplain");
+            var admin = await TestAccounts.CreateAsync(envFactory, "envadmin", email);
+            var other = await TestAccounts.CreateAsync(envFactory, "envplain");
             try
             {
                 (await admin.Client.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.OK);
@@ -236,7 +236,7 @@ namespace Backend.Test
         public async Task WithoutAdminEmails_NobodyIsMadeAdmin()
         {
             var plainFactory = TestAccounts.WithoutLoginLimit(new WebApplicationFactory<Program>());
-            var user = await TestAccounts.CreateAsync(plainFactory.CreateClient(), "noadmin");
+            var user = await TestAccounts.CreateAsync(plainFactory, "noadmin");
             try
             {
                 (await GetJsonAsync(user.Client, "/admin/me")).GetProperty("isAdmin").GetBoolean().Should().BeFalse();

@@ -6,7 +6,8 @@ import { getAdminStatusAPI } from "../api/adminAPI";
 // shows them (avatars, the account menu, the folder tree footer). Reloaded when the profile
 // changes (see notifyProfileChanged) and dropped once nothing shows it, e.g. after logging out,
 // so the next account never sees the previous one's details.
-const EMPTY = { firstName: "", lastName: "", name: "", email: "", imageUrl: null, isAdmin: false };
+// emailVerified starts true so the "confirm your email" banner only shows once the server says so
+const EMPTY = { firstName: "", lastName: "", name: "", email: "", emailVerified: true, imageUrl: null, isAdmin: false };
 
 let profile = EMPTY;
 let loadId = 0;
@@ -34,6 +35,7 @@ const load = async () => {
             lastName: info.lastName,
             name: `${info.firstName} ${info.lastName}`.trim(),
             email: info.email,
+            emailVerified: info.emailVerified !== false,
             imageUrl,
             isAdmin: !!admin?.isAdmin,
         };

@@ -37,6 +37,7 @@
         }
 
         .btn-choose-file {
+            gap: 8px; // "Choose File" and "Choose Folder"
             display: flex;
             justify-content: center;
 
@@ -52,6 +53,14 @@
             .choose-file-input {
                 display: none;
             }
+        }
+
+        // "Any file type, up to 2 GB per file."
+        .upload-limit-hint {
+            margin: 10px 0 0;
+            color: var(--fm-muted);
+            font-size: 13px;
+            text-align: center;
         }
     }
 

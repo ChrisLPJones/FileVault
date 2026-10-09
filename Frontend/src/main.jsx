@@ -8,6 +8,11 @@ import Dashboard from "./pages/Dashboard/Dashboard";
 import Settings from "./pages/Settings/Settings";
 import Admin from "./pages/Admin/Admin";
 import ErrorPage from "./pages/Error/Errorpage";
+import SharePage from "./pages/Share/SharePage";
+import SharedLinks from "./pages/SharedLinks/SharedLinks";
+import ForgotPassword from "./pages/ForgotPassword/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword/ResetPassword";
+import VerifyEmail from "./pages/VerifyEmail/VerifyEmail";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import PublicRoute from "./components/PublicRoute";
@@ -48,6 +53,36 @@ const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <Dashboard />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: "forgot-password",
+                element: (
+                    <PublicRoute>
+                        <ForgotPassword />
+                    </PublicRoute>
+                ),
+            },
+            {
+                // Links from emails work whether or not the visitor is logged in
+                path: "reset-password",
+                element: <ResetPassword />,
+            },
+            {
+                path: "verify-email",
+                element: <VerifyEmail />,
+            },
+            {
+                // Share links work whether or not the visitor is logged in
+                path: "s/:token",
+                element: <SharePage />,
+            },
+            {
+                path: "shared-links",
+                element: (
+                    <ProtectedRoute>
+                        <SharedLinks />
                     </ProtectedRoute>
                 ),
             },

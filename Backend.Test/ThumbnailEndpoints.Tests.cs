@@ -18,7 +18,7 @@ namespace Backend.Test
 
         public ThumbnailEndpointsTests(WebApplicationFactory<Program> factory) => _factory = TestAccounts.WithoutLoginLimit(factory);
 
-        private Task<TestAccounts.Account> NewUserAsync() => TestAccounts.CreateAsync(_factory.CreateClient(), "thumb");
+        private Task<TestAccounts.Account> NewUserAsync() => TestAccounts.CreateAsync(_factory, "thumb");
 
         // A width x height image with a few shapes on it, encoded as PNG, JPEG or WebP
         private static byte[] MakeImage(int width, int height, SKEncodedImageFormat format = SKEncodedImageFormat.Png)
@@ -270,8 +270,16 @@ namespace Backend.Test
             foreach (var id in new[] { inFolder, single, kept })
                 (await client.GetAsync($"/files/{id}/thumbnail")).StatusCode.Should().Be(HttpStatusCode.OK);
 
+            // Deleting moves items to the recycle bin: their thumbnails stay (for a restore) but aren't served
             (await client.DeleteAsync($"/delete/{single}")).StatusCode.Should().Be(HttpStatusCode.OK);
             (await client.DeleteAsync($"/delete/{folderId}")).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await client.GetAsync($"/files/{single}/thumbnail")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await client.GetAsync($"/files/{inFolder}/thumbnail")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            File.Exists(ThumbnailPath(single)).Should().BeTrue();
+
+            // Deleting them for good removes the thumbnails
+            (await client.DeleteAsync($"/trash/{single}")).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await client.DeleteAsync($"/trash/{folderId}")).StatusCode.Should().Be(HttpStatusCode.OK);
             File.Exists(ThumbnailPath(single)).Should().BeFalse();
             File.Exists(ThumbnailPath(inFolder)).Should().BeFalse();
             File.Exists(ThumbnailPath(kept)).Should().BeTrue();

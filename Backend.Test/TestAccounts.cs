@@ -22,13 +22,15 @@ namespace Backend.Test
         public static WebApplicationFactory<Program> WithoutLoginLimit(WebApplicationFactory<Program> factory) =>
             factory.WithWebHostBuilder(builder => builder.UseSetting("RateLimiting:auth:PermitLimit", "1000"));
 
-        // Register and log in a new user; the client sends their access token
-        public static async Task<Account> CreateAsync(HttpClient client, string prefix, string? email = null)
+        // Register a new user, confirm their email address and log them in; the client sends their access token
+        public static async Task<Account> CreateAsync(WebApplicationFactory<Program> factory, string prefix, string? email = null)
         {
+            var client = factory.CreateClient();
             email ??= $"{prefix}_{Guid.NewGuid():N}@example.test";
             (await client.PostAsJsonAsync("/user/register",
                 new UserModel { FirstName = prefix, LastName = "User", Email = email, Password = Password }))
                 .EnsureSuccessStatusCode();
+            await TestDatabase.MarkEmailVerifiedAsync(factory, email);
 
             await LoginAsync(client, email);
             var token = client.DefaultRequestHeaders.Authorization!.Parameter!;

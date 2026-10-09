@@ -12,7 +12,7 @@ namespace Backend.Test
 
         public FavouriteEndpointsTests(WebApplicationFactory<Program> factory) => _factory = TestAccounts.WithoutLoginLimit(factory);
 
-        private Task<TestAccounts.Account> NewUserAsync() => TestAccounts.CreateAsync(_factory.CreateClient(), "fav");
+        private Task<TestAccounts.Account> NewUserAsync() => TestAccounts.CreateAsync(_factory, "fav");
 
         private static Task<string> UploadTextAsync(HttpClient client, string name) =>
             TestAccounts.UploadAsync(client, name, Encoding.UTF8.GetBytes($"contents of {name}"), "text/plain");
@@ -126,6 +126,25 @@ namespace Backend.Test
             {
                 await owner.Client.DeleteAsync("/user");
                 await other.Client.DeleteAsync("/user");
+            }
+        }
+
+        [Fact]
+        public async Task ItemsInTheRecycleBin_CantBeStarredOrOpened()
+        {
+            var (client, _, _) = await NewUserAsync();
+            try
+            {
+                var id = await UploadTextAsync(client, "binned.txt");
+                (await client.DeleteAsync($"/delete/{id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+                (await client.PutAsync($"/files/{id}/favourite", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+                (await client.DeleteAsync($"/files/{id}/favourite")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+                (await client.PostAsync($"/files/{id}/opened", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            }
+            finally
+            {
+                await client.DeleteAsync("/user");
             }
         }
 
