@@ -27,6 +27,9 @@ import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { defaultPermissions } from "../constants";
 import { formatDate as defaultFormatDate } from "../utils/formatDate";
+import { useIsNarrow } from "../hooks/useMediaQuery";
+import NavDrawerToggle from "./NavigationPane/NavDrawerToggle";
+import "./Mobile.scss";
 import "./FileManager.scss";
 
 // The details pane: shown while it is switched on and a single file (not a folder) is selected
@@ -78,6 +81,11 @@ const FileManager = ({
 }) => {
   const [isNavCompact, setNavCompact] = useState(false);
   const [isNavigationPaneOpen, setNavigationPaneOpen] = useState(defaultNavExpanded);
+  // Phones and tablets: the folder tree is a drawer that slides over the files
+  const isNarrow = useIsNarrow();
+  const [isDrawerOpen, setDrawerOpen] = useState(false);
+  const drawerOpen = isNarrow && isDrawerOpen;
+  const compactNav = isNavCompact && !isNarrow;
   const triggerAction = useTriggerAction();
   const { containerRef, colSizes, isDragging, handleMouseMove, handleMouseUp, handleMouseDown } =
     useColumnResize(20, 80);
@@ -117,12 +125,15 @@ const FileManager = ({
                   {/* The toolbar can live elsewhere (the app header) but stays inside these providers */}
                   {toolbarContainer
                     ? createPortal(
-                        <Toolbar
-                          onLayoutChange={onLayoutChange}
-                          onRefresh={onRefresh}
-                          triggerAction={triggerAction}
-                          permissions={permissions}
-                        />,
+                        <>
+                          {isNarrow && <NavDrawerToggle open={drawerOpen} onToggle={() => setDrawerOpen((open) => !open)} />}
+                          <Toolbar
+                            onLayoutChange={onLayoutChange}
+                            onRefresh={onRefresh}
+                            triggerAction={triggerAction}
+                            permissions={permissions}
+                          />
+                        </>,
                         toolbarContainer
                       )
                     : <Toolbar
@@ -137,16 +148,23 @@ const FileManager = ({
                     onMouseUp={handleMouseUp}
                     className="files-container"
                   >
+                    {drawerOpen && <div className="nav-drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
                     <div
-                      className={`navigation-pane ${isNavigationPaneOpen ? "open" : "closed"} ${isNavCompact ? "compact" : ""}`}
-                      style={isNavCompact ? { width: "44px" } : { width: colSizes.col1 + "%" }}
+                      className={`navigation-pane ${isNavigationPaneOpen ? "open" : "closed"} ${compactNav ? "compact" : ""} ${isNarrow ? "nav-drawer" : ""} ${drawerOpen ? "drawer-open" : ""}`}
+                      style={isNarrow ? undefined : compactNav ? { width: "44px" } : { width: colSizes.col1 + "%" }}
+                      aria-hidden={isNarrow && !drawerOpen ? true : undefined}
+                      // React 18 passes inert through as a string attribute
+                      inert={isNarrow && !drawerOpen ? "" : undefined}
+                      // In the drawer, choosing a folder or file closes it
+                      onClick={(e) => isNarrow && e.target.closest(".sb-folders-list-item, .quick-access-item") && setDrawerOpen(false)}
+                      onKeyDown={(e) => drawerOpen && e.key === "Escape" && setDrawerOpen(false)}
                     >
                       <NavigationPane
                         onFileOpen={onFileOpen}
-                        compact={isNavCompact}
-                        onToggleCompact={() => setNavCompact((prev) => !prev)}
+                        compact={compactNav}
+                        onToggleCompact={() => (isNarrow ? setDrawerOpen(false) : setNavCompact((prev) => !prev))}
                       />
-                      {!isNavCompact && <div
+                      {!compactNav && !isNarrow && <div
                         className={`sidebar-resize ${isDragging ? "sidebar-dragging" : ""}`}
                         onMouseDown={handleMouseDown}
                       />}
@@ -154,7 +172,7 @@ const FileManager = ({
 
                     <div
                       className="folders-preview"
-                      style={{ width: (isNavigationPaneOpen && !isNavCompact ? colSizes.col2 : 100) + "%" }}
+                      style={{ width: (isNavigationPaneOpen && !compactNav && !isNarrow ? colSizes.col2 : 100) + "%" }}
                     >
                       {/* Search results or the recycle bin replace the folder view while showing */}
                       <RecycleBinSwitch onRefresh={onRefresh}>

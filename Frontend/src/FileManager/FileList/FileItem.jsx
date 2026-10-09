@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
+import FileThumbnail from "../../components/FileThumbnail/FileThumbnail";
+import FavouriteToggle from "../../components/FavouriteToggle/FavouriteToggle";
+import { MdStar } from "react-icons/md";
+import { useLongPress } from "../../hooks/useLongPress";
 import CreateFolderAction from "../Actions/CreateFolder/CreateFolder.action";
 import RenameAction from "../Actions/Rename/Rename.action";
 import { getDataSize } from "../../utils/getDataSize";
@@ -89,7 +93,7 @@ const FileItem = ({
 
   const handleFileSelection = (e) => {
     e.stopPropagation();
-    if (file.isEditing) return;
+    if (file.isEditing || longPress.wasLongPress()) return;
 
     handleFileRangeSelection(e.shiftKey, e.ctrlKey);
     // Clicking a file shows it in the details pane (folders don't open it)
@@ -124,6 +128,11 @@ const FileItem = ({
     setLastSelectedFile(file);
     handleContextMenu(e, true);
   };
+
+  // Touch and hold opens the context menu (iOS doesn't fire contextmenu for a long press)
+  const longPress = useLongPress(({ clientX, clientY }) =>
+    handleItemContextMenu({ clientX, clientY, preventDefault() {}, stopPropagation() {} })
+  );
 
   // Selection Checkbox Functions
   const handleMouseOver = () => {
@@ -196,6 +205,7 @@ const FileItem = ({
       onClick={handleFileSelection}
       onKeyDown={handleOnKeyDown}
       onContextMenu={handleItemContextMenu}
+      {...longPress.handlers}
       onMouseOver={handleMouseOver}
       onMouseLeave={handleMouseLeave}
       draggable={fileSelected && draggable}
@@ -217,7 +227,12 @@ const FileItem = ({
             onClick={(e) => e.stopPropagation()}
           />
         )}
-        <FileTypeIcon name={file.name} path={file.path} isDirectory={file.isDirectory} size={iconSize} />
+        {/* Grid tiles show a thumbnail for images */}
+        {activeLayout === "grid" ? (
+          <FileThumbnail key={file._id ?? file.name} file={file} size={iconSize} />
+        ) : (
+          <FileTypeIcon name={file.name} path={file.path} isDirectory={file.isDirectory} size={iconSize} />
+        )}
 
         {file.isEditing ? (
           <div className={`rename-file-container ${activeLayout}`}>
@@ -240,6 +255,13 @@ const FileItem = ({
         ) : (
           <span className="text-truncate file-name">{file.name}</span>
         )}
+
+        {/* Favourites: a star toggle in list rows, a small star on grid tiles */}
+        {!file.isEditing && file._id && (activeLayout === "list" ? (
+          <FavouriteToggle file={file} size={16} className="list-favourite" />
+        ) : (
+          file.isFavourite && <MdStar className="grid-favourite" size={16} aria-label="Favourite" />
+        ))}
       </div>
 
       {activeLayout === "list" && (

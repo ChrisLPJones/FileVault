@@ -53,6 +53,9 @@
   }
 
   .details-type {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     color: var(--fm-muted);
   }
 
@@ -147,9 +150,4 @@
   }
 }
 
-// No room beside the files on small screens
-@media (max-width: 760px) {
-  .details-pane {
-    display: none;
-  }
-}
+// Small screens show it as a bottom sheet instead (see FileManager/Mobile.scss)

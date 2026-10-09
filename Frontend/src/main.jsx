@@ -6,6 +6,7 @@ import Login from "./pages/Login/Login";
 import Register from "./pages/Register/Register";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import Settings from "./pages/Settings/Settings";
+import Admin from "./pages/Admin/Admin";
 import ErrorPage from "./pages/Error/Errorpage";
 import SharePage from "./pages/Share/SharePage";
 import SharedLinks from "./pages/SharedLinks/SharedLinks";
@@ -90,6 +91,14 @@ const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <Settings />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: "admin",
+                element: (
+                    <ProtectedRoute>
+                        <Admin />
                     </ProtectedRoute>
                 ),
             },

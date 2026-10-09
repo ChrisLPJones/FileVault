@@ -256,6 +256,75 @@ END
 GO
 
 PRINT 'Recursive delete trigger created.';
+GO
+
+------------------------------------------------------------
+-- IMAGE THUMBNAILS
+------------------------------------------------------------
+-- One row per image file that has been thumbnailed. The thumbnail itself is
+-- stored encrypted on disk (StorageRoot/thumbnails/<file GUID>) and doesn't
+-- count towards the quota. WrappedKey NULL means the image couldn't be
+-- thumbnailed, so it isn't retried on every request. The API removes a file's
+-- row after deleting the file. There's deliberately no ON DELETE CASCADE
+-- foreign key or trigger: both deadlocked with concurrent deletes and the
+-- recursive delete trigger. A row left behind is harmless (lookups join Files,
+-- and GUIDs aren't reused).
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'FileThumbnails')
+BEGIN
+    CREATE TABLE FileThumbnails
+    (
+        FileGuid NVARCHAR(100) NOT NULL,
+        WrappedKey NVARCHAR(200) NULL,
+        Size BIGINT NULL,
+        MimeType NVARCHAR(50) NULL,
+        CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT PK_FileThumbnails PRIMARY KEY CLUSTERED (FileGuid)
+    );
+    PRINT 'Table "FileThumbnails" created.';
+END
+ELSE
+BEGIN
+    PRINT 'Table "FileThumbnails" already exists.';
+END
+GO
+
+-- Earlier development versions of this table had a cascading foreign key and a trigger
+IF EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_FileThumbnails_Files')
+    ALTER TABLE FileThumbnails DROP CONSTRAINT FK_FileThumbnails_Files;
+DROP TRIGGER IF EXISTS TR_Files_DeleteThumbnails;
+GO
+
+------------------------------------------------------------
+-- FAVOURITES AND RECENT FILES (added to existing databases too)
+------------------------------------------------------------
+-- Starred items, and when a file was last previewed or downloaded (UTC)
+IF COL_LENGTH('Files', 'Favourite') IS NULL
+BEGIN
+    ALTER TABLE Files ADD Favourite BIT NOT NULL CONSTRAINT DF_Files_Favourite DEFAULT 0;
+    PRINT 'Column "Files.Favourite" added.';
+END
+GO
+
+IF COL_LENGTH('Files', 'LastOpenedAt') IS NULL
+BEGIN
+    ALTER TABLE Files ADD LastOpenedAt DATETIME2 NULL;
+    PRINT 'Column "Files.LastOpenedAt" added.';
+END
+GO
+
+------------------------------------------------------------
+-- ADMINISTRATORS (added to existing databases too)
+------------------------------------------------------------
+-- Can use the admin page (/admin). Set from the API's Admin:Emails setting
+-- when it starts and when a user logs in (see AdminService).
+IF COL_LENGTH('Users', 'IsAdmin') IS NULL
+BEGIN
+    ALTER TABLE Users ADD IsAdmin BIT NOT NULL CONSTRAINT DF_Users_IsAdmin DEFAULT 0;
+    PRINT 'Column "Users.IsAdmin" added.';
+END
+GO
 
 ------------------------------------------------------------
 -- SHARE LINKS

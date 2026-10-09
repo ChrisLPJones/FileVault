@@ -1,5 +1,6 @@
 import { MdClear } from "react-icons/md";
 import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
+import FavouriteToggle from "../../components/FavouriteToggle/FavouriteToggle";
 import { useDetailsPane } from "../../contexts/DetailsPaneContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
 import { getFileExtension } from "../../utils/getFileExtension";
@@ -45,7 +46,10 @@ export default function DetailsPane({ file, formatDate, filePreviewComponent }) 
           <FileTypeIcon name={file.name} path={file.path} size={64} />
         </div>
         <div className="details-name" title={file.name}>{file.name}</div>
-        <div className="details-type">{typeLabel(file.name)}</div>
+        <div className="details-type">
+          {typeLabel(file.name)}
+          <FavouriteToggle file={file} size={18} className="details-favourite" />
+        </div>
       </div>
 
       <dl className="details-info">

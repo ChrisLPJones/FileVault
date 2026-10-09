@@ -10,6 +10,7 @@ import {
 import { BiRename } from "react-icons/bi";
 import { FaListUl, FaRegPaste } from "react-icons/fa6";
 import LayoutToggler from "./LayoutToggler";
+import ToolbarOverflow from "./ToolbarOverflow";
 import SearchBox from "./SearchBox";
 import { useRecycleBin } from "../../contexts/RecycleBinContext";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
@@ -25,7 +26,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
   const { currentFolder } = useFileNavigation();
   const { selectedFiles, setSelectedFiles, handleDownload } = useSelection();
   const { clipBoard, setClipBoard, handleCutCopy, handlePasting } = useClipBoard();
-  const { activeLayout } = useLayout();
+  const { activeLayout, setActiveLayout } = useLayout();
   const { isBinOpen } = useRecycleBin();
   const t = useTranslation();
 
@@ -48,6 +49,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
       text: t("paste"),
       permission: !!clipBoard,
       onClick: handleFilePasting,
+      secondary: true,
     },
   ];
 
@@ -76,14 +78,35 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
     setSelectedFiles([]);
   };
 
+  // Narrow screens: the less-used actions (marked "secondary-action") move into a "⋯" menu.
+  // Binned items can't be cut, copied, pasted or renamed, so the bin only gets view and refresh.
+  const selecting = selectedFiles.length > 0 && !isBinOpen;
+  const changeLayout = (layout) => {
+    setActiveLayout(layout);
+    onLayoutChange(layout);
+  };
+  const overflowItems = [
+    selecting && permissions.move && { text: t("cut"), icon: <BsScissors size={17} />, onClick: () => handleCutCopy(true) },
+    selecting && permissions.copy && { text: t("copy"), icon: <BsCopy size={16} />, onClick: () => handleCutCopy(false) },
+    !isBinOpen && clipBoard?.files?.length > 0 && { text: t("paste"), icon: <FaRegPaste size={17} />, onClick: handleFilePasting },
+    selecting && selectedFiles.length === 1 && permissions.rename &&
+      { text: t("rename"), icon: <BiRename size={18} />, onClick: () => triggerAction.show("rename") },
+    { text: t("grid"), icon: <BsGridFill size={16} />, onClick: () => changeLayout("grid"), checked: activeLayout === "grid", divider: true },
+    { text: t("list"), icon: <FaListUl size={16} />, onClick: () => changeLayout("list"), checked: activeLayout === "list" },
+    { text: t("refresh"), icon: <FiRefreshCw size={16} />, onClick: toolbarRightItems[1].onClick, divider: true },
+  ].filter(Boolean);
+  // The first item after the file actions starts a new group
+  overflowItems[0] = { ...overflowItems[0], divider: false };
+
   // Search, view and refresh: on the right in both toolbars
   const rightGroup = (
     <div>
       <SearchBox />
+      <ToolbarOverflow items={overflowItems} />
       {toolbarRightItems.map((item, index) => (
         <div key={index} className="toolbar-left-items">
           <button
-            className="item-action icon-only"
+            className="item-action icon-only secondary-action"
             title={item.title}
             onClick={item.onClick}
           >
@@ -120,20 +143,20 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
         <div className="fm-toolbar file-action-container">
           <div>
             {permissions.move && (
-              <button className="item-action file-action" title={t("cut")} onClick={() => handleCutCopy(true)}>
+              <button className="item-action file-action secondary-action" title={t("cut")} onClick={() => handleCutCopy(true)}>
                 <BsScissors size={18} />
                 <span>{t("cut")}</span>
               </button>
             )}
             {permissions.copy && (
-              <button className="item-action file-action" title={t("copy")} onClick={() => handleCutCopy(false)}>
+              <button className="item-action file-action secondary-action" title={t("copy")} onClick={() => handleCutCopy(false)}>
                 <BsCopy strokeWidth={0.1} size={17} />
                 <span>{t("copy")}</span>
               </button>
             )}
             {clipBoard?.files?.length > 0 && (
               <button
-                className="item-action file-action"
+                className="item-action file-action secondary-action"
                 title={t("paste")}
                 onClick={handleFilePasting}
                 // disabled={!clipBoard}
@@ -144,7 +167,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
             )}
             {selectedFiles.length === 1 && permissions.rename && (
               <button
-                className="item-action file-action"
+                className="item-action file-action secondary-action"
                 title={t("rename")}
                 onClick={() => triggerAction.show("rename")}
               >
@@ -193,7 +216,7 @@ const Toolbar = ({ onLayoutChange, onRefresh, triggerAction, permissions }) => {
           {toolbarLeftItems
             .filter((item) => item.permission)
             .map((item, index) => (
-              <button className="item-action" key={index} title={item.text} onClick={item.onClick}>
+              <button className={`item-action ${item.secondary ? "secondary-action" : ""}`} key={index} title={item.text} onClick={item.onClick}>
                 {item.icon}
                 <span>{item.text}</span>
               </button>

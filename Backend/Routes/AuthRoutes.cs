@@ -76,6 +76,7 @@ namespace Backend.Routes
                 HttpContext http,
                 AuthServices auth,
                 DatabaseServices db,
+                AdminService admins,
                 TwoFactorService twoFactor) =>
             {
                 var login = await ReadJsonAsync<LoginModel>(http.Request);
@@ -92,6 +93,11 @@ namespace Backend.Routes
                 // Only after the password matched, so this doesn't reveal anything about other accounts
                 if (!await db.IsEmailVerifiedAsync(userRecord.Id.ToString()))
                     return Results.Json(new { error = "Please confirm your email address first", emailNotVerified = true }, statusCode: 403);
+
+                // Admin:Emails decides who is an administrator (see AdminService). Before the two-factor
+                // step, so it applies however the login finishes; it only updates the IsAdmin flag.
+                await admins.SyncAsync(db, userRecord.Id.ToString());
+
                 // With two-factor on, the password only earns a short-lived challenge for POST /user/login/2fa
                 if ((await db.GetTwoFactorStateAsync(userRecord.Id.ToString()))?.Enabled == true)
                     return Results.Ok(new TwoFactorChallengeResponse(true,

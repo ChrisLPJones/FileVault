@@ -1,0 +1,292 @@
+// Phones and tablets. The breakpoint matches NARROW_QUERY in hooks/useMediaQuery.js:
+// the folder tree becomes a drawer, the details pane a bottom sheet, and the less-used
+// toolbar actions move into a "⋯" menu.
+
+// Only shown on narrow screens
+.toolbar-overflow {
+  display: none;
+  position: relative;
+}
+
+.nav-drawer-toggle {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  // Top bar: drawer button, then the toolbar
+  .nav-drawer-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    margin: 0 4px 0 -8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--fv-header-text);
+    cursor: pointer;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.14);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--fv-focus-ring);
+    }
+  }
+
+  .toolbar .secondary-action {
+    display: none !important;
+  }
+
+  .toolbar-overflow {
+    display: flex;
+  }
+
+  .toolbar-overflow-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 50;
+    min-width: 200px;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    border: 1px solid var(--fv-border);
+    border-radius: 10px;
+    background-color: var(--fv-surface);
+    color: var(--fv-text);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+
+    li.divider-above {
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px solid var(--fv-border);
+    }
+
+    button {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 44px;
+      padding: 0 12px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: inherit;
+      font: inherit;
+      font-size: 15px;
+      text-align: left;
+      cursor: pointer;
+
+      &:hover,
+      &:focus-visible {
+        outline: none;
+        background-color: var(--fv-track);
+      }
+    }
+
+    .toolbar-overflow-icon {
+      display: inline-flex;
+      width: 20px;
+      justify-content: center;
+    }
+
+    .toolbar-overflow-check {
+      margin-left: auto;
+    }
+  }
+
+  // Folder tree: a drawer that slides in from the left over the files
+  .file-explorer .files-container .navigation-pane.nav-drawer {
+    position: fixed;
+    top: var(--fv-header-height);
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: min(300px, 85vw);
+    padding-top: 8px;
+    box-sizing: border-box;
+    background-color: var(--fm-bg);
+    border-right: 1px solid var(--fm-border);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
+    transform: translateX(-105%);
+    visibility: hidden;
+    transition: transform 0.22s ease, visibility 0s linear 0.22s;
+
+    &.drawer-open {
+      transform: none;
+      visibility: visible;
+      transition: transform 0.22s ease;
+    }
+  }
+
+  // The top-bar button opens and closes the drawer, so it doesn't need its own
+  .navigation-pane.nav-drawer .nav-toggle {
+    display: none;
+  }
+
+  .nav-drawer-backdrop {
+    position: fixed;
+    inset: var(--fv-header-height) 0 0 0;
+    z-index: 35;
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+
+  // Details pane: a sheet over the bottom of the screen
+  .file-explorer .details-pane {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    max-height: min(80dvh, 640px);
+    padding: 22px 16px calc(16px + env(safe-area-inset-bottom));
+    border-left: none;
+    border-top: 1px solid var(--fm-border);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.3);
+
+    // Grab handle
+    &::before {
+      content: "";
+      position: absolute;
+      top: 7px;
+      left: 50%;
+      width: 36px;
+      height: 4px;
+      margin-left: -18px;
+      border-radius: 2px;
+      background-color: var(--fm-border);
+    }
+
+    .details-close {
+      top: 6px;
+      right: 6px;
+      width: 40px;
+      height: 40px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .details-preview {
+      margin-top: 0;
+      min-height: 120px;
+
+      img,
+      video {
+        max-height: 34dvh;
+      }
+
+      iframe {
+        height: 40dvh;
+      }
+
+      pre {
+        max-height: 30dvh;
+      }
+    }
+  }
+}
+
+// Phones: slightly narrower grid tiles (three across at 390px), and the list view drops the
+// Modified column so names have room
+@media (max-width: 600px) {
+  .files:not(.list) .file-item {
+    width: 108px;
+
+    .file-name {
+      max-width: 96px;
+    }
+  }
+
+  .files.list {
+    .files-header .file-date,
+    .modified-date {
+      display: none;
+    }
+
+    .files-header .file-name {
+      width: calc(75% - 35px);
+    }
+
+    .file-item {
+      width: calc(80% - 30px);
+    }
+
+    .files-header .file-size,
+    .size {
+      width: 20%;
+      white-space: nowrap;
+    }
+  }
+}
+
+// Touch screens: bigger targets, and selection checkboxes always visible (there's no hover)
+@media (pointer: coarse) {
+  .nav-center .toolbar .item-action {
+    min-width: 44px;
+    height: 44px;
+    justify-content: center;
+  }
+
+  .nav-center .toolbar .item-action.icon-only {
+    width: 44px;
+    height: 44px;
+  }
+
+  .sb-folders-list .sb-folders-list-item {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .sb-folders-list .nav-toggle {
+    width: 44px;
+    height: 44px;
+  }
+
+  .quick-access .quick-access-item {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .quick-access .quick-access-heading {
+    min-height: 36px;
+  }
+
+  .fm-context-menu .file-context-menu-list ul li {
+    padding: 10px 16px;
+  }
+
+  .files .file-item-container {
+    -webkit-touch-callout: none;
+  }
+
+  .files .file-item .selection-checkbox.hidden {
+    visibility: visible;
+  }
+
+  .files.list .file-item {
+    padding-top: 20px;
+    padding-bottom: 20px;
+
+    .selection-checkbox {
+      top: 17px;
+    }
+  }
+
+  .favourite-toggle {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .details-pane .details-close {
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+  }
+}

@@ -37,14 +37,15 @@ const ContextMenu = ({ filesViewRef, contextMenuRef, menuItems, visible, clickPo
       setSubMenuPosition("right");
     } else if (left) {
       // Location: -width of the context menu from cursor's position i.e. left side
-      setLeft(`${leftToCursor - menuWidth}px`);
+      // ...but not past the left edge (narrow screens)
+      setLeft(`${Math.max(4, leftToCursor - menuWidth)}px`);
       setSubMenuPosition("left");
     }
 
     if (top) {
       setTop(`${topToCursor + container.scrollTop}px`);
     } else if (bottom) {
-      setTop(`${topToCursor + container.scrollTop - menuHeight}px`);
+      setTop(`${Math.max(container.scrollTop + 4, topToCursor + container.scrollTop - menuHeight)}px`);
     }
   };
 

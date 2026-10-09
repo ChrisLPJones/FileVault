@@ -158,7 +158,7 @@ public partial class DatabaseServices
         command.Parameters.AddWithValue("@GUID", fileId);
         command.Parameters.AddWithValue("@UserId", userId);
 
-        await command.ExecuteNonQueryAsync();
+        await RetryOnDeadlockAsync(() => command.ExecuteNonQueryAsync());
     }
 
 
@@ -394,7 +394,7 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string query = "SELECT Id, FileName, FilePath, UpdatedAt, ISNULL(CreatedAt, UpdatedAt) AS CreatedAt, GUID, isDirectory, Size FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId AND DeletedAt IS NULL";
+        string query = "SELECT Id, FileName, FilePath, UpdatedAt, ISNULL(CreatedAt, UpdatedAt) AS CreatedAt, GUID, isDirectory, Size, Favourite, LastOpenedAt FROM Files WHERE FileName IS NOT NULL AND UserId = @UserId AND DeletedAt IS NULL";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -411,7 +411,9 @@ public partial class DatabaseServices
                 UpdatedAt = Convert.ToDateTime(reader["UpdatedAt"]),
                 CreatedAt = Convert.ToDateTime(reader["CreatedAt"]),
                 Size = Convert.ToInt64(reader["Size"]),
-                IsDirectory = Convert.ToBoolean(reader["isDirectory"])
+                IsDirectory = Convert.ToBoolean(reader["isDirectory"]),
+                IsFavourite = Convert.ToBoolean(reader["Favourite"]),
+                LastOpenedAt = reader["LastOpenedAt"] is DateTime opened ? DateTime.SpecifyKind(opened, DateTimeKind.Utc) : null
             });
         }
 
@@ -548,7 +550,10 @@ public partial class DatabaseServices
 
 
     // Remove user and all file metadata from database and delete files from storage
-    public async Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs)
+    public Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs) =>
+        RetryOnDeadlockAsync(() => DeleteUserAndFilesOnceAsync(userId, fs));
+
+    private async Task<HttpReturnResult> DeleteUserAndFilesOnceAsync(string userId, FileServices fs)
     {
         var files = new List<string>();
 
@@ -582,7 +587,7 @@ public partial class DatabaseServices
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not SqlException { Number: DeadlockErrorNumber }) // retried by the caller
         {
             await transaction.RollbackAsync();
             _logger.LogError(ex, "Failed to delete user {UserId} and their files", userId);
@@ -590,6 +595,7 @@ public partial class DatabaseServices
         }
 
         // Remove all user's files from storage after successful DB transaction
+        await DeleteThumbnailRecordsAsync(files);
         await fs.DeleteAllFilesFromUser(files);
 
         return new HttpReturnResult(true, "User's files and account deleted");

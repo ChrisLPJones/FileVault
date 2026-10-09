@@ -1,0 +1,134 @@
+@use "../../styles/variables" as *;
+
+// Favourites and Recent above the folder tree (see QuickAccess.jsx)
+.quick-access {
+  margin-bottom: 2px;
+
+  button,
+  .quick-access-heading {
+    box-sizing: border-box;
+  }
+
+  .quick-access-heading {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+    margin: 6px 0 2px;
+    padding: 4px 4px 4px 2px;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--fm-muted);
+    font: inherit;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      background-color: $item-hover-color;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--fv-focus-ring);
+    }
+  }
+
+  .folders-heading {
+    cursor: default;
+    padding-left: 22px;
+    margin-top: 10px;
+
+    &:hover {
+      background: none;
+    }
+  }
+
+  .quick-access-arrow {
+    flex-shrink: 0;
+    transition: transform 0.2s ease-in-out;
+
+    &.open {
+      transform: rotate(90deg);
+    }
+  }
+
+  .quick-access-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .quick-access-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 2px;
+    padding: 5px 6px 5px 9px;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 0.88em;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      background-color: $item-hover-color;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--fv-focus-ring);
+      outline-offset: -2px;
+    }
+
+    span {
+      min-width: 0;
+    }
+  }
+
+  .quick-access-empty {
+    margin: 2px 8px 6px 22px;
+    color: var(--fm-muted);
+    font-size: 0.75em;
+    line-height: 1.35;
+  }
+
+  // Icons only: one button per section, which expands the tree
+  &.compact {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--fm-border);
+
+    .quick-access-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      margin-left: 2px;
+      border: none;
+      border-radius: 4px;
+      background: none;
+      color: var(--fm-muted);
+      cursor: pointer;
+
+      &:hover {
+        background-color: $item-hover-color;
+        color: var(--fm-text);
+      }
+
+      &:first-child {
+        color: var(--fv-favourite);
+      }
+    }
+  }
+}

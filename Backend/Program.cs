@@ -118,6 +118,9 @@ namespace Backend
             builder.Services.AddSingleton<ShareSecrets>();
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<AvatarService>();
+            builder.Services.AddSingleton<ThumbnailService>();
+            builder.Services.AddSingleton<AdminService>();
+            builder.Services.AddHostedService<AdminSyncOnStartup>();
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();
             builder.Services.AddScoped<ShareService>();
@@ -212,6 +215,9 @@ namespace Backend
             app.MapFileRoutes();
             app.MapHealthCheckRoutes();
             app.MapAuthRoutes();
+            app.MapThumbnailRoutes();
+            app.MapFavouriteRoutes();
+            app.MapAdminRoutes();
             app.MapShareRoutes();
             app.MapTrashRoutes();
             app.MapAccountEmailRoutes();
