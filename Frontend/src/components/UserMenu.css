@@ -18,7 +18,7 @@
 
 .user-menu-button:hover,
 .user-menu-button[aria-expanded="true"] {
-    border-color: rgba(255, 255, 255, 0.55);
+    border-color: var(--fv-header-ring);
 }
 
 .user-menu-button:focus-visible {

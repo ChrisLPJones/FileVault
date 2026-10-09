@@ -96,7 +96,7 @@ RecoveryCodes.propTypes = {
 };
 
 // "Two-factor authentication" card in Settings: set up, turn off, new recovery codes
-function TwoFactorCard() {
+function TwoFactorCard({ email = "" }) {
     const [twoFactor, setTwoFactor] = useState(null); // { enabled, recoveryCodesLeft }
     // idle | password (setup step 1) | scan (step 2) | codes | disable | regenerate
     const [mode, setMode] = useState("idle");
@@ -235,6 +235,7 @@ function TwoFactorCard() {
 
             {mode === "password" && (
                 <form onSubmit={startSetup}>
+                    <input type="text" name="username" autoComplete="username" value={email} readOnly hidden />
                     <p className="settings-hint">Enter your password to start.</p>
                     <div className="form-group">
                         <label htmlFor="two-factor-password">Password</label>
@@ -298,6 +299,7 @@ function TwoFactorCard() {
 
             {mode === "disable" && (
                 <form onSubmit={disable}>
+                    <input type="text" name="username" autoComplete="username" value={email} readOnly hidden />
                     <div className="form-group">
                         <label htmlFor="two-factor-disable-password">Password</label>
                         <input
@@ -346,5 +348,9 @@ function TwoFactorCard() {
         </section>
     );
 }
+
+TwoFactorCard.propTypes = {
+    email: PropTypes.string,
+};
 
 export default TwoFactorCard;

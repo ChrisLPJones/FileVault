@@ -168,7 +168,7 @@ function SharedLinks() {
             <h1 className="settings-title">Shared links</h1>
             <section className="settings-card shared-links-card" aria-label="Your shared links">
                 <p className="settings-hint">
-                    Anyone with one of these links can download the item (and its password, if it has one). Revoke a link to stop it working.
+                    Anyone with one of these links can download the item. Links with a password also need the password. Revoke a link to stop it working.
                 </p>
 
                 {status && (

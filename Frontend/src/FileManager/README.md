@@ -27,6 +27,9 @@ Copied from the package and then modified for FileVault:
 - Desktop-style file and folder icons (`components/FileTypeIcon`)
 - Collapsible folder tree with the account menu at the bottom (`NavigationPane/NavUser.jsx`)
 - Colours come from the app's light/dark theme and accent colour (`src/styles/theme.css`)
+- The top bar follows the theme (light bar in light mode), so the toolbar and search box in it use the
+  `--fv-header-*` variables (`Mobile.scss`, `Search/SearchResults.scss`)
+- Recycle bin: tooltips on "Delete permanently" and "Empty bin" (`RecycleBin/`)
 - Removed the unused `filePreviewPath` prop
 
 Some of this code still syncs state from props inside effects, which

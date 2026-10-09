@@ -12,6 +12,8 @@ const Layout = () => {
     // Re-render on navigation so the links follow the login state
     const { pathname } = useLocation();
     const loggedIn = isAuthenticated();
+    // The login and register pages already link to each other, so the bar stays empty there
+    const onAuthPage = pathname === "/" || pathname === "/login" || pathname === "/register";
     // Middle of the top bar; the dashboard renders the file toolbar into it
     const [headerSlot, setHeaderSlot] = useState(null);
 
@@ -27,7 +29,7 @@ const Layout = () => {
                                 Back to files
                             </NavLink>
                         )}
-                        {!loggedIn && (
+                        {!loggedIn && !onAuthPage && (
                             <>
                                 <NavLink to="/register" className={navClass}>
                                     Register

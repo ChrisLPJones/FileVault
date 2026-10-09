@@ -336,6 +336,7 @@ function Settings() {
             <section className="settings-card" aria-labelledby="password-heading">
                 <h2 id="password-heading">Change password</h2>
                 <form onSubmit={handlePasswordSubmit}>
+                    <input type="text" name="username" autoComplete="username" value={savedEmail} readOnly hidden />
                     <div className="form-group">
                         <label htmlFor="current-password">Current password</label>
                         <input
@@ -390,7 +391,7 @@ function Settings() {
                     Manage shared links
                 </Link>
             </section>
-            <TwoFactorCard />
+            <TwoFactorCard email={savedEmail} />
 
             <SessionsCard />
 
