@@ -10,8 +10,10 @@ const FolderTree = ({ folder, onFileOpen }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isActive, setIsActive] = useState(false);
   const { currentPath, setCurrentPath, onFolderChange } = useFileNavigation();
-  const { clearSearch } = useSearch();
-  const { closeBin } = useRecycleBin();
+  const { term, clearSearch } = useSearch();
+  const { isBinOpen, closeBin } = useRecycleBin();
+  // The recycle bin and search results aren't in any folder, so none is highlighted then
+  const showActive = isActive && !isBinOpen && !term;
 
   const handleFolderSwitch = () => {
     clearSearch(); // opening a folder from the tree ends a search
@@ -30,23 +32,18 @@ const FolderTree = ({ folder, onFileOpen }) => {
   useEffect(() => {
     setIsActive(currentPath === folder.path); //Setting isActive to a folder if its path matches currentPath
 
-    // Auto expand parent folder if its child is accessed via file navigation
-    // Explanation: Checks if the current folder's parent path matches with any folder path i.e. Folder's parent
-    // then expand that parent.
-    const currentPathArray = currentPath.split("/");
-    currentPathArray.pop(); //splits with '/' and pops to remove last element to get current folder's parent path
-    const currentFolderParentPath = currentPathArray.join("/");
-    if (currentFolderParentPath === folder.path) {
+    // Open this folder when the current folder is anywhere inside it (a deep link or a search
+    // result can open a folder several levels down)
+    if (folder.path && currentPath.startsWith(`${folder.path}/`)) {
       setIsOpen(true);
     }
-    //
   }, [currentPath]);
 
   if (folder.subDirectories.length > 0) {
     return (
       <>
         <div
-          className={`sb-folders-list-item ${isActive ? "active-list-item" : ""}`}
+          className={`sb-folders-list-item ${showActive ? "active-list-item" : ""}`}
           onClick={handleFolderSwitch}
           title={folder.name}
         >
@@ -57,7 +54,7 @@ const FolderTree = ({ folder, onFileOpen }) => {
             />
           </span>
           <div className="sb-folder-details">
-            <FileTypeIcon name={folder.name} path={folder.path} isDirectory open={isOpen || isActive} size={22} />
+            <FileTypeIcon name={folder.name} path={folder.path} isDirectory open={isOpen || showActive} size={22} />
             <span className="sb-folder-name" title={folder.name}>
               {folder.name}
             </span>
@@ -75,13 +72,13 @@ const FolderTree = ({ folder, onFileOpen }) => {
   } else {
     return (
       <div
-        className={`sb-folders-list-item ${isActive ? "active-list-item" : ""}`}
+        className={`sb-folders-list-item ${showActive ? "active-list-item" : ""}`}
         onClick={handleFolderSwitch}
         title={folder.name}
       >
         <span className="non-expanable"></span>
         <div className="sb-folder-details">
-          <FileTypeIcon name={folder.name} path={folder.path} isDirectory open={isActive} size={22} />
+          <FileTypeIcon name={folder.name} path={folder.path} isDirectory open={showActive} size={22} />
           <span className="sb-folder-name" title={folder.name}>
             {folder.name}
           </span>

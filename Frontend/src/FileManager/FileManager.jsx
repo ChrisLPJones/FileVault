@@ -15,8 +15,9 @@ import { ClipBoardProvider } from "../contexts/ClipboardContext";
 import { LayoutProvider } from "../contexts/LayoutContext";
 import { DetailsPaneProvider, useDetailsPane } from "../contexts/DetailsPaneContext";
 import { SearchProvider, SearchReveal } from "../contexts/SearchContext";
+import LocationSync from "../contexts/LocationSync";
 import { SearchSwitch } from "./Search/SearchResults";
-import { RecycleBinProvider } from "../contexts/RecycleBinContext";
+import { RecycleBinProvider, useRecycleBin } from "../contexts/RecycleBinContext";
 import { RecycleBinSwitch } from "./RecycleBin/RecycleBin";
 import { useTriggerAction } from "../hooks/useTriggerAction";
 import { useColumnResize } from "../hooks/useColumnResize";
@@ -32,12 +33,17 @@ import NavDrawerToggle from "./NavigationPane/NavDrawerToggle";
 import "./Mobile.scss";
 import "./FileManager.scss";
 
-// The details pane: shown while it is switched on and a single file (not a folder) is selected
-const DetailsPaneSlot = (props) => {
+// The details pane: only the toolbar toggle opens it. While on it shows the selected file (a single
+// file, not a folder), or a "Select a file" note so the layout doesn't jump. It isn't used for the
+// recycle bin, and on phones (where it is a sheet over the list) only appears with a file.
+const DetailsPaneSlot = ({ enabled, ...props }) => {
   const { isDetailsOpen } = useDetailsPane();
   const { selectedFiles } = useSelection();
+  const { isBinOpen } = useRecycleBin();
+  const isNarrow = useIsNarrow();
   const file = selectedFiles.length === 1 && !selectedFiles[0].isDirectory ? selectedFiles[0] : null;
-  return isDetailsOpen && file ? <DetailsPane file={file} {...props} /> : null;
+  if (!enabled || !isDetailsOpen || isBinOpen || (!file && isNarrow)) return null;
+  return <DetailsPane file={file} {...props} />;
 };
 
 const FileManager = ({
@@ -122,6 +128,7 @@ const FileManager = ({
                 <RecycleBinProvider>
                 <SearchProvider>
                   <SearchReveal />
+                  <LocationSync isLoading={isLoading} source={files} />
                   {/* The toolbar can live elsewhere (the app header) but stays inside these providers */}
                   {toolbarContainer
                     ? createPortal(
@@ -132,6 +139,7 @@ const FileManager = ({
                             onRefresh={onRefresh}
                             triggerAction={triggerAction}
                             permissions={permissions}
+                            enableFilePreview={enableFilePreview}
                           />
                         </>,
                         toolbarContainer
@@ -141,6 +149,7 @@ const FileManager = ({
                       onRefresh={onRefresh}
                       triggerAction={triggerAction}
                       permissions={permissions}
+                      enableFilePreview={enableFilePreview}
                     />}
                   <section
                     ref={containerRef}
@@ -196,7 +205,7 @@ const FileManager = ({
                       </RecycleBinSwitch>
                     </div>
 
-                    <DetailsPaneSlot formatDate={formatDate} filePreviewComponent={filePreviewComponent} />
+                    <DetailsPaneSlot enabled={enableFilePreview} formatDate={formatDate} filePreviewComponent={filePreviewComponent} />
                   </section>
 
                   <Actions

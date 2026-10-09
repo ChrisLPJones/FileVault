@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE_URL, getErrorMessage } from "../../api/api";
-import { getUsageAPI } from "../../api/accountAPI";
 import { markOpenedAPI, setFavouriteAPI } from "../../api/favouritesAPI";
+import { UsageProvider, useUsage } from "../../contexts/UsageContext";
 import { FileActionsProvider } from "../../contexts/FileActionsContext";
 import { createFolderAPI } from "../../api/createFolderAPI";
 import { deleteAPI } from "../../api/deleteAPI";
@@ -22,14 +22,15 @@ const fileUploadConfig = {
     url: `${API_BASE_URL}/upload`,
 };
 
-function Dashboard() {
+function DashboardPage() {
     // The file toolbar goes in the middle of the top bar
     const headerSlot = useHeaderSlot();
     const [isLoading, setIsLoading] = useState(true);
     const [files, setFiles] = useState([]);
-    const [currentPath, setCurrentPath] = useState("");
     const [error, setError] = useState(null);
-    const [maxFileSize, setMaxFileSize] = useState(DEFAULT_MAX_FILE_BYTES);
+    const { usage, refreshUsage } = useUsage();
+    // The server's upload limit (the space left in the quota is checked when files are chosen)
+    const maxFileSize = usage ? usage.maxFileBytes ?? usage.maxUploadBytes : DEFAULT_MAX_FILE_BYTES;
     // Short confirmation (e.g. "Moved ... to the recycle bin") that hides itself
     const [notice, setNotice] = useState(null);
 
@@ -48,15 +49,15 @@ function Dashboard() {
             .catch((err) => !cancelled && setError(getErrorMessage(err, "Could not load files")))
             .finally(() => !cancelled && setIsLoading(false));
 
-        // Use the server's upload limit (quota is checked by the server on upload)
-        getUsageAPI()
-            .then((usage) => !cancelled && setMaxFileSize(usage.maxFileBytes ?? usage.maxUploadBytes))
-            .catch(() => {});
-
         return () => {
             cancelled = true;
         };
     }, []);
+
+    // Usage changes whenever the list is reloaded: after uploads, deletes, emptying the recycle bin...
+    useEffect(() => {
+        if (!isLoading) refreshUsage();
+    }, [isLoading, refreshUsage]);
 
     // Run an API action with the loader shown, then reload the file list.
     // Failures are shown in the error banner instead of leaving the loader stuck.
@@ -181,14 +182,20 @@ function Dashboard() {
                         maxFileSize={maxFileSize}
                         height="100%"
                         width="100%"
-                        initialPath={currentPath}
-                        onFolderChange={setCurrentPath}
                         onFileOpen={handleOpened}
                         toolbarContainer={headerSlot}
                     />
                 </FileActionsProvider>
             </div>
         </div>
+    );
+}
+
+function Dashboard() {
+    return (
+        <UsageProvider>
+            <DashboardPage />
+        </UsageProvider>
     );
 }
 

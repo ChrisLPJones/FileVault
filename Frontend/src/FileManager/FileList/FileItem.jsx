@@ -11,7 +11,6 @@ import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { useSelection } from "../../contexts/SelectionContext";
 import { useClipBoard } from "../../contexts/ClipboardContext";
 import { useLayout } from "../../contexts/LayoutContext";
-import { useDetailsPane } from "../../contexts/DetailsPaneContext";
 import Checkbox from "../../components/Checkbox/Checkbox";
 
 const dragIconSize = 44;
@@ -21,7 +20,6 @@ const FileItem = ({
   file,
   onCreateFolder,
   onRename,
-  enableFilePreview,
   onFileOpen,
   filesViewRef,
   selectedFileIndexes,
@@ -41,7 +39,6 @@ const FileItem = ({
   const iconSize = activeLayout === "grid" ? 50 : 19;
   const { setCurrentPath, currentPathFiles, onFolderChange } = useFileNavigation();
   const { setSelectedFiles } = useSelection();
-  const { setDetailsOpen } = useDetailsPane();
   const { clipBoard, handleCutCopy, setClipBoard, handlePasting } = useClipBoard();
   const dragIconRef = useRef(null);
 
@@ -55,9 +52,6 @@ const FileItem = ({
       setCurrentPath(file.path);
       onFolderChange?.(file.path);
       setSelectedFiles([]);
-    } else {
-      // Files open in the details pane on the right, like Explorer's preview pane
-      enableFilePreview && setDetailsOpen(true);
     }
   };
 
@@ -96,9 +90,6 @@ const FileItem = ({
     if (file.isEditing || longPress.wasLongPress()) return;
 
     handleFileRangeSelection(e.shiftKey, e.ctrlKey);
-    // Clicking a file shows it in the details pane (folders don't open it)
-    if (!file.isDirectory && enableFilePreview) setDetailsOpen(true);
-
     const currentTime = new Date().getTime();
     if (currentTime - lastClickTime < 300) {
       handleFileAccess();

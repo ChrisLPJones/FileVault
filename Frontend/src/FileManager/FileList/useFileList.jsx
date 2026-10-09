@@ -11,12 +11,11 @@ import { useLayout } from "../../contexts/LayoutContext";
 import { useFileNavigation } from "../../contexts/FileNavigationContext";
 import { duplicateNameHandler } from "../../utils/duplicateNameHandler";
 import { validateApiCallback } from "../../utils/validateApiCallback";
-import { useDetailsPane } from "../../contexts/DetailsPaneContext";
 import { useFileActions } from "../../contexts/FileActionsContext";
 import { useFiles } from "../../contexts/FilesContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
 
-const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, onFileOpen) => {
+const useFileList = (onRefresh, triggerAction, permissions, onFileOpen) => {
   const [selectedFileIndexes, setSelectedFileIndexes] = useState([]);
   const [visible, setVisible] = useState(false);
   const [isSelectionCtx, setIsSelectionCtx] = useState(false);
@@ -29,7 +28,6 @@ const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, o
     useFileNavigation();
   const { activeLayout, setActiveLayout } = useLayout();
   const t = useTranslation();
-  const { setDetailsOpen } = useDetailsPane();
   const { setFavourite } = useFileActions();
   const { files } = useFiles();
 
@@ -41,9 +39,6 @@ const useFileList = (onRefresh, enableFilePreview, triggerAction, permissions, o
       onFolderChange?.(lastSelectedFile.path);
       setSelectedFileIndexes([]);
       setSelectedFiles([]);
-    } else {
-      // Files open in the details pane on the right, like Explorer's preview pane
-      enableFilePreview && setDetailsOpen(true);
     }
     setVisible(false);
   };
