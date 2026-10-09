@@ -3,6 +3,13 @@ using Microsoft.Data.SqlClient;
 
 namespace Backend.Services;
 
+// The admin-membership lock was lost as a deadlock victim; the whole action is safe to run again
+// (RetryOnDeadlockAsync does)
+public sealed class AdminLockDeadlockException(string message) : Exception(message);
+
+// The admin-membership lock couldn't be had in time; the API answers 503
+public sealed class AdminLockTimeoutException(string message) : Exception(message);
+
 // The admin page: who is an administrator, every user's usage, quotas and totals
 public partial class DatabaseServices
 {
@@ -23,27 +30,178 @@ public partial class DatabaseServices
 
 
 
-    // Make the listed emails administrators and everyone else not; with userId, only that user
-    public async Task SyncAdminsAsync(IReadOnlyCollection<string> adminEmails, string? userId = null)
+    // Every change that can add or remove an administrator (registering the first account, granting
+    // or removing admin, deleting an account) takes this application lock first, in the same
+    // transaction as its write, so two of them can never both act on a stale view of who the
+    // administrators are. The lock is released when that transaction ends.
+    private const string AdminMembershipLock = "fv-admin-membership";
+
+    // What counts as an administrator for the "at least one" rule. Account suspension is meant to
+    // be added here, so a suspended admin stops counting.
+    private const string EffectiveAdminPredicate = "IsAdmin = 1";
+
+    public const string LastAdminMessage = "There must always be at least one administrator";
+
+    // Wait for the admin-membership lock. SQL Server returns < 0 when it can't be had:
+    // -1 timeout, -2 cancelled, -3 deadlock victim, -999 error. A deadlock victim throws
+    // AdminLockDeadlockException, which RetryOnDeadlockAsync retries like a SQL deadlock, so every
+    // caller of this runs inside RetryOnDeadlockAsync. A timeout throws AdminLockTimeoutException
+    // (the API answers 503).
+    private async Task TakeAdminMembershipLockAsync(SqlConnection connection, SqlTransaction transaction)
+    {
+        await using var command = new SqlCommand(@"
+            DECLARE @Result INT;
+            EXEC @Result = sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive',
+                 @LockOwner = 'Transaction', @LockTimeout = 10000;
+            SELECT @Result;", connection, transaction);
+        command.Parameters.AddWithValue("@Resource", AdminMembershipLock);
+        var result = Convert.ToInt32(await command.ExecuteScalarAsync());
+        if (result >= 0)
+            return;
+
+        _logger.LogError("Could not take the admin membership lock (sp_getapplock returned {Result})", result);
+        throw result switch
+        {
+            -3 => new AdminLockDeadlockException("Chosen as a deadlock victim waiting for the admin membership lock"),
+            -1 => new AdminLockTimeoutException("Timed out waiting for the admin membership lock"),
+            _ => new InvalidOperationException($"Could not take the admin membership lock (sp_getapplock returned {result})")
+        };
+    }
+
+    // The INITIAL_ADMIN_EMAIL setting (Admin:InitialEmail), trimmed and lower-cased like emails
+    // elsewhere; null when it isn't set. When set, the first account is NOT made admin at
+    // registration; that email becomes admin when it is confirmed (see ConfirmEmailAsync).
+    public string? InitialAdminEmail { get; }
+
+    public static string? NormaliseInitialAdminEmail(string? email) =>
+        string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant();
+
+    // Confirm an email address. With INITIAL_ADMIN_EMAIL set, if this is that account and no
+    // effective administrator exists, it becomes one in the same transaction, under the admin
+    // membership lock. Returns whether it was promoted.
+    //
+    // distrustPasswordIfPromoted is for the confirmation-link flow: whoever registered the account
+    // chose its password, but the link went to the mailbox owner, who may not be them (anyone can
+    // register someone else's address first). Opening the link proves the mailbox, not the
+    // password, so a promoted account's password is replaced by an unusable one and the owner
+    // chooses theirs with "Forgot password". Resetting a password proves both, so that flow
+    // passes false. Neither flow ever promotes an account whose email was changed after
+    // sign-up (Users.EmailChanged): someone signed in could have set it to the owner's address.
+    // Emails are compared byte for byte (BIN2), not under the database's accent/width-folding
+    // collation, so look-alike addresses (ss/ß, ae/æ) never match.
+    public Task<bool> ConfirmEmailAsync(string userId, bool distrustPasswordIfPromoted) =>
+        RetryOnDeadlockAsync(() => ConfirmEmailOnceAsync(userId, distrustPasswordIfPromoted));
+
+    private async Task<bool> ConfirmEmailOnceAsync(string userId, bool distrustPasswordIfPromoted)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
-        // The list goes in as JSON so any number of emails is one parameter
-        // Only rows that change are written, so this doesn't lock every account
-        const string query = @"
-            WITH Target AS (
-                SELECT Id, IsAdmin,
-                       CASE WHEN LOWER(Email) IN (SELECT LOWER(value) FROM OPENJSON(@Emails)) THEN 1 ELSE 0 END AS ShouldBeAdmin
-                FROM Users
-                WHERE @UserId IS NULL OR Id = @UserId
-            )
-            UPDATE Target SET IsAdmin = ShouldBeAdmin WHERE IsAdmin <> ShouldBeAdmin";
+        if (InitialAdminEmail != null)
+            await TakeAdminMembershipLockAsync(connection, transaction);
 
-        await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@Emails", System.Text.Json.JsonSerializer.Serialize(adminEmails));
-        command.Parameters.AddWithValue("@UserId", (object?)userId ?? DBNull.Value);
-        await command.ExecuteNonQueryAsync();
+        await using (var confirm = new SqlCommand("UPDATE Users SET EmailVerified = 1 WHERE Id = @UserId", connection, transaction))
+        {
+            confirm.Parameters.AddWithValue("@UserId", userId);
+            await confirm.ExecuteNonQueryAsync();
+        }
+
+        var promoted = InitialAdminEmail != null
+            && await PromoteInitialAdminInTransactionAsync(connection, transaction, userId, distrustPasswordIfPromoted);
+
+        await transaction.CommitAsync();
+        return promoted;
+    }
+
+    // Make the INITIAL_ADMIN_EMAIL account an administrator if it is confirmed and there is no
+    // effective administrator. Call with the admin membership lock held.
+    private async Task<bool> PromoteInitialAdminInTransactionAsync(SqlConnection connection, SqlTransaction transaction,
+        string userId, bool replacePassword)
+    {
+        await using var command = new SqlCommand($@"
+            UPDATE Users SET IsAdmin = 1{(replacePassword ? ", PasswordHash = @UnusableHash" : "")}
+            WHERE Id = @UserId AND Email COLLATE Latin1_General_BIN2 = @Email AND EmailVerified = 1 AND IsAdmin = 0
+              AND EmailChanged = 0
+              AND NOT EXISTS (SELECT 1 FROM Users WHERE {EffectiveAdminPredicate})", connection, transaction);
+        command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@Email", InitialAdminEmail!);
+        if (replacePassword)
+            command.Parameters.AddWithValue("@UnusableHash", UnusablePasswordHash());
+        return await command.ExecuteNonQueryAsync() > 0;
+    }
+
+    // A password hash nobody knows the password for (the hash of a random value)
+    private static string UnusablePasswordHash() =>
+        BCrypt.Net.BCrypt.HashPassword(Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
+
+    // Run when the API starts: an install that has accounts but no administrator gets one.
+    // With INITIAL_ADMIN_EMAIL set, that account (once confirmed) is the only candidate;
+    // otherwise it is the oldest account with a confirmed email. Nothing changes when an
+    // administrator exists, so every start is safe. (This used to be in init.sql, which can't see
+    // the setting.) Returns the email promoted, if any.
+    public Task<string?> EnsureAdministratorAtStartupAsync() => RetryOnDeadlockAsync(async () =>
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+
+        await TakeAdminMembershipLockAsync(connection, transaction);
+
+        await using var command = new SqlCommand($@"
+            DECLARE @Id UNIQUEIDENTIFIER;
+            IF NOT EXISTS (SELECT 1 FROM Users WHERE {EffectiveAdminPredicate})
+                SELECT TOP 1 @Id = Id FROM Users
+                WHERE EmailVerified = 1 AND (@InitialEmail IS NULL OR (Email COLLATE Latin1_General_BIN2 = @InitialEmail AND EmailChanged = 0))
+                ORDER BY CASE WHEN CreatedAt IS NULL THEN 1 ELSE 0 END, CreatedAt, Email;
+            IF @Id IS NOT NULL
+                UPDATE Users SET IsAdmin = 1 OUTPUT inserted.Email WHERE Id = @Id;", connection, transaction);
+        command.Parameters.AddWithValue("@InitialEmail", (object?)InitialAdminEmail ?? DBNull.Value);
+        var email = await command.ExecuteScalarAsync() as string;
+
+        await transaction.CommitAsync();
+        return email;
+    });
+
+    // Grant or remove admin for a user. Removing it from the last administrator is refused.
+    public Task<HttpReturnResult> SetAdminAsync(string userId, bool isAdmin) =>
+        RetryOnDeadlockAsync(() => SetAdminOnceAsync(userId, isAdmin));
+
+    private async Task<HttpReturnResult> SetAdminOnceAsync(string userId, bool isAdmin)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+
+        await TakeAdminMembershipLockAsync(connection, transaction);
+
+        bool? current;
+        await using (var read = new SqlCommand("SELECT IsAdmin FROM Users WHERE Id = @UserId", connection, transaction))
+        {
+            read.Parameters.AddWithValue("@UserId", userId);
+            current = await read.ExecuteScalarAsync() as bool?;
+        }
+        if (current == null)
+            return HttpReturnResult.NotFound("User not found");
+
+        if (!isAdmin && current == true)
+        {
+            await using var others = new SqlCommand(
+                $"SELECT COUNT(*) FROM Users WHERE {EffectiveAdminPredicate} AND Id <> @UserId", connection, transaction);
+            others.Parameters.AddWithValue("@UserId", userId);
+            if (Convert.ToInt32(await others.ExecuteScalarAsync()) == 0)
+                return HttpReturnResult.Conflict(LastAdminMessage); // rolled back (nothing written) when disposed
+        }
+
+        await using (var update = new SqlCommand("UPDATE Users SET IsAdmin = @IsAdmin WHERE Id = @UserId", connection, transaction))
+        {
+            update.Parameters.AddWithValue("@IsAdmin", isAdmin);
+            update.Parameters.AddWithValue("@UserId", userId);
+            await update.ExecuteNonQueryAsync();
+        }
+
+        await transaction.CommitAsync();
+        return new HttpReturnResult(true, isAdmin ? "Administrator rights granted" : "Administrator rights removed");
     }
 
 

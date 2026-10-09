@@ -2,12 +2,13 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Admin from "./Admin";
-import { getAdminStatsAPI, getAdminUsersAPI, setUserQuotaAPI } from "../../api/adminAPI";
+import { getAdminStatsAPI, getAdminUsersAPI, setUserAdminAPI, setUserQuotaAPI } from "../../api/adminAPI";
 
 vi.mock("../../api/adminAPI", () => ({
     getAdminStatsAPI: vi.fn(),
     getAdminUsersAPI: vi.fn(),
     setUserQuotaAPI: vi.fn(async () => ({})),
+    setUserAdminAPI: vi.fn(async () => ({})),
 }));
 
 const GB = 1024 ** 3;
@@ -25,6 +26,8 @@ const stats = { userCount: 2, adminCount: 1, fileCount: 49, folderCount: 9, tota
 const row = (email) => screen.getByText(email).closest("tr");
 
 beforeEach(() => {
+    setUserAdminAPI.mockReset();
+    setUserAdminAPI.mockResolvedValue({});
     getAdminUsersAPI.mockResolvedValue(users);
     getAdminStatsAPI.mockResolvedValue(stats);
 });
@@ -83,6 +86,69 @@ describe("Admin page", () => {
         expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
         await userEvent.type(input, "-1");
         expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    });
+
+    it("makes a user an admin straight away and reloads", async () => {
+        render(<Admin />);
+        await userEvent.click(await screen.findByRole("button", { name: "Make sam@example.com an admin" }));
+
+        expect(setUserAdminAPI).toHaveBeenCalledWith("u2", true);
+        expect(getAdminUsersAPI).toHaveBeenCalledTimes(2);
+    });
+
+    it("asks before removing admin, and does nothing if cancelled", async () => {
+        render(<Admin />);
+        await userEvent.click(await screen.findByRole("button", { name: "Remove admin from alex@example.com" }));
+
+        const confirm = screen.getByRole("group", { name: "Confirm removing admin from alex@example.com" });
+        expect(setUserAdminAPI).not.toHaveBeenCalled();
+        await userEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+
+        expect(setUserAdminAPI).not.toHaveBeenCalled();
+        expect(screen.getByRole("button", { name: "Remove admin from alex@example.com" })).toBeInTheDocument();
+    });
+
+    it("removes admin once confirmed", async () => {
+        render(<Admin />);
+        await userEvent.click(await screen.findByRole("button", { name: "Remove admin from alex@example.com" }));
+        await userEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+        expect(setUserAdminAPI).toHaveBeenCalledWith("u1", false);
+        expect(getAdminUsersAPI).toHaveBeenCalledTimes(2);
+    });
+
+    it("shows the server's message when the last admin can't be removed", async () => {
+        setUserAdminAPI.mockRejectedValue(Object.assign(new Error("Conflict"), {
+            response: { status: 409, data: { error: "There must always be at least one administrator" } },
+        }));
+        render(<Admin />);
+        await userEvent.click(await screen.findByRole("button", { name: "Remove admin from alex@example.com" }));
+        await userEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+        expect(await within(row("alex@example.com")).findByRole("alert"))
+            .toHaveTextContent("There must always be at least one administrator");
+        expect(getAdminUsersAPI).toHaveBeenCalledTimes(1);
+        // Back to the normal button, so it can be tried again
+        expect(screen.getByRole("button", { name: "Remove admin from alex@example.com" })).toBeInTheDocument();
+    });
+
+    it("clears a row's refusal message once the list reloads after another row's change", async () => {
+        setUserAdminAPI.mockImplementation(async (id) => {
+            if (id === "u1")
+                throw Object.assign(new Error("Conflict"), {
+                    response: { status: 409, data: { error: "There must always be at least one administrator" } },
+                });
+            return {};
+        });
+        render(<Admin />);
+        await userEvent.click(await screen.findByRole("button", { name: "Remove admin from alex@example.com" }));
+        await userEvent.click(screen.getByRole("button", { name: "Remove" }));
+        expect(await within(row("alex@example.com")).findByRole("alert")).toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole("button", { name: "Make sam@example.com an admin" }));
+
+        await vi.waitFor(() => expect(getAdminUsersAPI).toHaveBeenCalledTimes(2));
+        expect(within(row("alex@example.com")).queryByRole("alert")).not.toBeInTheDocument();
     });
 
     it("tells non-admins the page isn't for them", async () => {

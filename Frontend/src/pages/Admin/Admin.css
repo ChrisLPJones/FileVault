@@ -230,3 +230,48 @@
     outline: 2px solid var(--fv-focus-ring);
     outline-offset: 1px;
 }
+
+/* Admin rights: the action, or a confirmation before removing them */
+.admin-rights {
+    min-width: 120px;
+}
+
+.admin-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 220px;
+}
+
+.admin-confirm-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.admin-button.danger {
+    background-color: var(--fv-danger);
+    color: #fff;
+}
+
+.admin-button.danger:hover:not(:disabled) {
+    background-color: var(--fv-danger-hover);
+}
+
+.admin-rights .admin-error {
+    margin-top: 6px;
+}
+
+/* A long message in this column (e.g. the last-administrator refusal) wraps inside it instead of
+   widening it, which squeezed the Quota column so that its Change link wrapped */
+.admin-rights {
+    max-width: 220px;
+}
+
+.admin-rights .admin-error {
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+}
+
+.admin-link-button {
+    white-space: nowrap;
+}

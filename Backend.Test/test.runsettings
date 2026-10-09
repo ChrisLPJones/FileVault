@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Used by `dotnet test` for this project (see RunSettingsFilePath in Backend.Test.csproj).
+     FILEVAULT_TEST_DB=1 tells the tests that the database in the connection string is a test
+     database, so they may add a sentinel administrator to it (see SentinelAdmin in TestAdmins.cs). -->
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <FILEVAULT_TEST_DB>1</FILEVAULT_TEST_DB>
+    </EnvironmentVariables>
+  </RunConfiguration>
+</RunSettings>

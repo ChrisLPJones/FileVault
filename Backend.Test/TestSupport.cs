@@ -108,6 +108,10 @@ namespace Backend.Test
             await command.ExecuteNonQueryAsync();
         }
 
+        // Grant or remove admin rights directly in the database (bypassing the API's last-admin rule)
+        public static Task SetAdminAsync(WebApplicationFactory<Program> factory, string userId, bool isAdmin) =>
+            ExecuteAsync(factory, "UPDATE Users SET IsAdmin = @IsAdmin WHERE Id = @Id", ("@IsAdmin", isAdmin), ("@Id", userId));
+
         // New accounts must confirm their email before logging in; tests that register and log
         // straight in mark the address confirmed, as if the emailed link had been opened
         public static Task MarkEmailVerifiedAsync(WebApplicationFactory<Program> factory, string email) =>

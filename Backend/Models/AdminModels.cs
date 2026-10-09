@@ -24,6 +24,12 @@ namespace Backend.Models
         public long? QuotaBytes { get; set; }
     }
 
+    // PUT /admin/users/{id}/admin
+    public class AdminUpdateRequest
+    {
+        public bool? IsAdmin { get; set; }
+    }
+
     // GET /admin/stats. Disk figures are null if the server can't read them.
     public record AdminStats(
         int UserCount,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getErrorMessage } from "../../api/api";
-import { getAdminStatsAPI, getAdminUsersAPI, setUserQuotaAPI } from "../../api/adminAPI";
+import { getAdminStatsAPI, getAdminUsersAPI, setUserAdminAPI, setUserQuotaAPI } from "../../api/adminAPI";
 import { formatBytes } from "../../utils/formatBytes";
 import "./Admin.css";
 
@@ -94,12 +94,73 @@ function QuotaCell({ user, onSave }) {
     );
 }
 
+// One user's admin rights: Make admin, or Remove admin after a confirmation. The server refuses
+// to remove the last administrator (409); its message is shown here.
+function AdminCell({ user, onChange }) {
+    const [confirming, setConfirming] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState(null);
+
+    const change = async (isAdmin) => {
+        setSaving(true);
+        setError(null);
+        try {
+            await onChange(user, isAdmin);
+            setConfirming(false);
+        } catch (err) {
+            setConfirming(false);
+            setError(getErrorMessage(err, "Could not change administrator rights"));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="admin-rights">
+            {confirming ? (
+                <div className="admin-confirm" role="group" aria-label={`Confirm removing admin from ${user.email}`}>
+                    <span>Remove admin rights from {user.email}?</span>
+                    <div className="admin-confirm-actions">
+                        <button type="button" className="admin-button danger" disabled={saving} onClick={() => change(false)}>
+                            Remove
+                        </button>
+                        <button type="button" className="admin-button secondary" disabled={saving} onClick={() => setConfirming(false)}>
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            ) : user.isAdmin ? (
+                <button
+                    type="button"
+                    className="admin-link-button"
+                    aria-label={`Remove admin from ${user.email}`}
+                    disabled={saving}
+                    onClick={() => { setError(null); setConfirming(true); }}
+                >
+                    Remove admin
+                </button>
+            ) : (
+                <button
+                    type="button"
+                    className="admin-link-button"
+                    aria-label={`Make ${user.email} an admin`}
+                    disabled={saving}
+                    onClick={() => change(true)}
+                >
+                    Make admin
+                </button>
+            )}
+            {error && <div className="admin-error" role="alert">{error}</div>}
+        </div>
+    );
+}
+
 // For the server owner: every account with its usage and quota, and totals for the server.
 // The API only answers administrators (checked on every request).
 export default function Admin() {
     const [data, setData] = useState(null); // { users, stats }
     const [error, setError] = useState(null);
-    const [version, setVersion] = useState(0); // bumped to reload
+    const [version, setVersion] = useState(0); // bumped to reload (also resets the rows' admin-rights messages)
 
     useEffect(() => {
         let cancelled = false;
@@ -122,6 +183,11 @@ export default function Admin() {
 
     const saveQuota = useCallback(async (user, quotaBytes) => {
         await setUserQuotaAPI(user.id, quotaBytes);
+        setVersion((v) => v + 1);
+    }, []);
+
+    const changeAdmin = useCallback(async (user, isAdmin) => {
+        await setUserAdminAPI(user.id, isAdmin);
         setVersion((v) => v + 1);
     }, []);
 
@@ -176,6 +242,7 @@ export default function Admin() {
                                 <th scope="col" className="numeric">Files</th>
                                 <th scope="col">Storage used</th>
                                 <th scope="col">Quota</th>
+                                <th scope="col">Admin rights</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -207,6 +274,7 @@ export default function Admin() {
                                             </div>
                                         </td>
                                         <td><QuotaCell user={user} onSave={saveQuota} /></td>
+                                        <td><AdminCell key={`${user.id}:${version}`} user={user} onChange={changeAdmin} /></td>
                                     </tr>
                                 );
                             })}

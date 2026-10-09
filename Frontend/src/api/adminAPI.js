@@ -13,3 +13,7 @@ export const getAdminStatsAPI = async () => (await api.get("/admin/stats")).data
 // quotaBytes: a number of bytes, or null for the server's default
 export const setUserQuotaAPI = (userId, quotaBytes) =>
     api.patch(`/admin/users/${encodeURIComponent(userId)}/quota`, { quotaBytes });
+
+// Grant or remove administrator rights. Removing them from the last administrator is a 409.
+export const setUserAdminAPI = (userId, isAdmin) =>
+    api.put(`/admin/users/${encodeURIComponent(userId)}/admin`, { isAdmin });

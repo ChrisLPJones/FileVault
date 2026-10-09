@@ -119,7 +119,7 @@ To open the database in a GUI tool (SSMS, Azure Data Studio, VS Code SQLTools), 
 
 New accounts confirm their email address before they can log in, and "Forgot password?" sends a reset link. To send those emails, set the `SMTP_*` settings in `.env`. Without them the API writes each email, link included, to its log instead, so on a local setup you can find the link with `docker compose logs api`.
 
-To use the admin page (`/admin`: every account's storage use and quota, and server totals), set `ADMIN_EMAILS` in `.env` to a comma-separated list of account emails and restart; those accounts get an Admin link in the account menu.
+The first account registered on a new install becomes the administrator and gets an Admin link in the account menu (`/admin`: every account's storage use and quota, server totals, and who else is an administrator). On a public install, register straight after the first start, or set `INITIAL_ADMIN_EMAIL` in `.env` to your address so only that account can become the administrator, once its email is confirmed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Administrators can grant or remove admin rights on the Admin page; there is always at least one.
 
 The frontend bundle has the API URL compiled in. If the browser reaches the API somewhere other than `http://localhost:3000`, set `API_URL` (and `FRONTEND_URL` for CORS) in `.env` and rebuild.
 
@@ -217,7 +217,7 @@ To try protected endpoints, call `POST /user/login`, then click **Authorize** an
 - **Uploads**: chunked, resumable uploads for big files
 - **Recycle bin**: list, restore, delete for good, empty
 - **Shares**: create, list and revoke share links, and the public endpoints a link uses
-- **Admin**: every account's usage and quota, change quotas, server totals
+- **Admin**: every account's usage and quota, change quotas, grant or remove admin rights, server totals
 - **Health**: `/ping` and `/pingsql`
 
 ## Project layout

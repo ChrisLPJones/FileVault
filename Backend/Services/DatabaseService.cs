@@ -11,6 +11,7 @@ public partial class DatabaseServices
 
     public DatabaseServices(IConfiguration config, ILogger<DatabaseServices> logger)
     {
+        InitialAdminEmail = NormaliseInitialAdminEmail(config["Admin:InitialEmail"]);
         _connectionString = config.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not set.");
         _logger = logger;
@@ -446,22 +447,35 @@ public partial class DatabaseServices
 
 
 
-    // Insert a new user (the caller has already checked the email is free)
-    public async Task RegisterUser(UserModel user)
-    {
-        using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+    // Insert a new user (the caller has already checked the email is free). The first account on a
+    // new install (no rows in Users) becomes an administrator, unless INITIAL_ADMIN_EMAIL is set:
+    // then nobody is admin at registration (that email is promoted when it is confirmed). The
+    // check and the insert share one transaction under the admin-membership lock, so two
+    // simultaneous first registrations can't both be admin.
+    public Task RegisterUser(UserModel user) => RetryOnDeadlockAsync(() => RegisterUserOnceAsync(user));
 
-        string query = "INSERT INTO Users (FirstName, LastName, Email, PasswordHash) VALUES (@FirstName, @LastName, @Email, @PasswordHash)";
-        using var command = new SqlCommand(query, connection);
+    private async Task RegisterUserOnceAsync(UserModel user)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+
+        await TakeAdminMembershipLockAsync(connection, transaction);
+
+        const string query = @"
+            INSERT INTO Users (FirstName, LastName, Email, PasswordHash, IsAdmin)
+            SELECT @FirstName, @LastName, @Email, @PasswordHash,
+                   CASE WHEN @FirstAccountIsAdmin = 1 AND NOT EXISTS (SELECT 1 FROM Users) THEN 1 ELSE 0 END";
+        await using var command = new SqlCommand(query, connection, transaction);
 
         command.Parameters.AddWithValue("@FirstName", user.FirstName.Trim());
         command.Parameters.AddWithValue("@LastName", user.LastName.Trim());
-        command.Parameters.AddWithValue("@Email", user.Email.Trim().ToLower());
+        command.Parameters.AddWithValue("@Email", user.Email.Trim().ToLowerInvariant());
         command.Parameters.AddWithValue("@PasswordHash", user.Password);
+        command.Parameters.AddWithValue("@FirstAccountIsAdmin", InitialAdminEmail == null);
 
         await command.ExecuteNonQueryAsync();
-
+        await transaction.CommitAsync();
     }
 
 
@@ -521,7 +535,7 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = "UPDATE Users SET FirstName = @FirstName, LastName = @LastName, Email = @Email WHERE Id = @UserId";
+        const string query = "UPDATE Users SET FirstName = @FirstName, LastName = @LastName, EmailChanged = CASE WHEN Email COLLATE Latin1_General_BIN2 <> @Email THEN 1 ELSE EmailChanged END, Email = @Email WHERE Id = @UserId";
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@FirstName", firstName);
         command.Parameters.AddWithValue("@LastName", lastName);
@@ -586,6 +600,24 @@ public partial class DatabaseServices
 
         try
         {
+            // Serialised with every other change to who the administrators are, and taken before
+            // touching Files so the lock order is always the same
+            await TakeAdminMembershipLockAsync(connection, (SqlTransaction)transaction);
+
+            // Never delete the last administrator
+            await using (var lastAdmin = new SqlCommand($@"
+                SELECT CASE WHEN EXISTS (SELECT 1 FROM Users WHERE Id = @UserId AND {EffectiveAdminPredicate})
+                             AND NOT EXISTS (SELECT 1 FROM Users WHERE {EffectiveAdminPredicate} AND Id <> @UserId)
+                            THEN 1 ELSE 0 END", connection, (SqlTransaction)transaction))
+            {
+                lastAdmin.Parameters.AddWithValue("@UserId", userId);
+                if (Convert.ToInt32(await lastAdmin.ExecuteScalarAsync()) == 1)
+                {
+                    await transaction.RollbackAsync();
+                    return HttpReturnResult.Conflict(LastAdminMessage);
+                }
+            }
+
             // Get all GUIDs of files for this user
             var commandGetFiles = new SqlCommand("SELECT GUID FROM Files WHERE UserId = @UserId", connection, (SqlTransaction)transaction);
             commandGetFiles.Parameters.AddWithValue("@UserId", userId);
@@ -609,7 +641,7 @@ public partial class DatabaseServices
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex) when (ex is not SqlException { Number: DeadlockErrorNumber }) // retried by the caller
+        catch (Exception ex) when (!IsDeadlock(ex) && ex is not AdminLockTimeoutException) // deadlocks are retried by the caller; a lock timeout becomes a 503
         {
             await transaction.RollbackAsync();
             _logger.LogError(ex, "Failed to delete user {UserId} and their files", userId);

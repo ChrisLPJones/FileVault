@@ -58,9 +58,11 @@ namespace Backend.Routes
                 await db.UpdatePasswordHashAsync(use.UserId, auth.GeneratePasswordHash(request.NewPassword));
                 await db.RevokeAllRefreshTokensAsync(use.UserId);
 
-                // The link was opened from the account's inbox, which confirms the address
+                // The link was opened from the account's inbox, which confirms the address. The
+                // password is one the owner just chose, so if this is the INITIAL_ADMIN_EMAIL
+                // account and there is no administrator, it becomes one.
                 if (string.Equals(use.Email, user.Email, StringComparison.OrdinalIgnoreCase))
-                    await db.SetEmailVerifiedAsync(use.UserId, true);
+                    await db.ConfirmEmailAsync(use.UserId, distrustPasswordIfPromoted: false);
 
                 return Results.Ok(new { success = "Password changed. You can log in with your new password." });
             })
@@ -82,8 +84,13 @@ namespace Backend.Routes
                 if (use == null || user == null || !string.Equals(use.Email, user.Email, StringComparison.OrdinalIgnoreCase))
                     return Results.BadRequest(new { error = "This confirmation link is invalid or has expired." });
 
-                await db.SetEmailVerifiedAsync(use.UserId, true);
-                return Results.Ok(new { success = "Email address confirmed" });
+                // For the INITIAL_ADMIN_EMAIL account with no administrator this also makes it the
+                // administrator and replaces its password: the link proves the mailbox, not who
+                // chose the password (see ConfirmEmailAsync), so the owner sets it with Forgot password.
+                var promoted = await db.ConfirmEmailAsync(use.UserId, distrustPasswordIfPromoted: true);
+                if (promoted)
+                    await db.RevokeAllRefreshTokensAsync(use.UserId);
+                return Results.Ok(new { success = "Email address confirmed", passwordReset = promoted });
             })
                 .WithTags("Account")
                 .WithSummary("Confirm the email address with the token from a verification email")

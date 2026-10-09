@@ -118,14 +118,13 @@ namespace Backend
             builder.Services.AddScoped<FileServices>();
             builder.Services.AddScoped<AvatarService>();
             builder.Services.AddSingleton<ThumbnailService>();
-            builder.Services.AddSingleton<AdminService>();
-            builder.Services.AddHostedService<AdminSyncOnStartup>();
             builder.Services.AddScoped<DatabaseServices>();
             builder.Services.AddScoped<AuthServices>();
             builder.Services.AddScoped<ShareService>();
             builder.Services.AddScoped<TrashService>();
             builder.Services.AddScoped<ChunkedUploadService>();
             builder.Services.AddHostedService<StorageCleanupService>();
+            builder.Services.AddHostedService<AdminBootstrapOnStartup>();
             builder.Services.AddEmail(builder.Configuration);
             builder.Services.AddSingleton<SecretProtector>();
             builder.Services.AddSingleton(TimeProvider.System);
@@ -165,6 +164,14 @@ namespace Backend
 
             var app = builder.Build();
 
+            // Administrators are managed on the admin page now; the old setting does nothing
+            var legacyAdminEmails = builder.Configuration.GetSection("Admin:Emails");
+            if (legacyAdminEmails.Value is { Length: > 0 } || legacyAdminEmails.GetChildren().Any())
+                app.Logger.LogWarning("Admin:Emails (ADMIN_EMAILS) is no longer used and is ignored. " +
+                    "Without INITIAL_ADMIN_EMAIL the first account created is the administrator; with it set, " +
+                    "that email's account becomes the administrator when confirmed. " +
+                    "Administrators are managed on the admin page.");
+
             // Behind an HTTPS reverse proxy: take the client's IP and the original scheme from the
             // X-Forwarded-* headers (for rate limits, the sessions list and the Secure cookie flag).
             // Only turn this on when the API can't be reached except through the proxy. See docs/DEPLOYMENT.md.
@@ -190,6 +197,14 @@ namespace Backend
             app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
             {
                 var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+                if (error is AdminLockTimeoutException)
+                {
+                    app.Logger.LogError(error, "Timed out on {Method} {Path}", context.Request.Method, context.Request.Path);
+                    context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                    context.Response.Headers.RetryAfter = "5";
+                    await context.Response.WriteAsJsonAsync(new { error = "The server is busy. Please try again in a moment." });
+                    return;
+                }
                 app.Logger.LogError(error, "Unhandled error on {Method} {Path}", context.Request.Method, context.Request.Path);
 
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;

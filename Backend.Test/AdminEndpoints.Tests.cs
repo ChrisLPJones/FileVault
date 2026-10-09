@@ -12,17 +12,22 @@ namespace Backend.Test
 {
     public class AdminEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
     {
-        // This class's admin, listed in Admin:Emails (in capitals: matching ignores case)
-        private readonly string _adminEmail = $"admin_{Guid.NewGuid():N}@example.test";
         private readonly WebApplicationFactory<Program> _factory;
 
         public AdminEndpointsTests(WebApplicationFactory<Program> factory)
         {
-            _factory = TestAccounts.WithoutLoginLimit(factory)
-                .WithWebHostBuilder(builder => builder.UseSetting("Admin:Emails:0", _adminEmail.ToUpperInvariant()));
+            _factory = TestAccounts.WithoutLoginLimit(factory);
         }
 
-        private Task<TestAccounts.Account> NewAdminAsync() => TestAccounts.CreateAsync(_factory, "admin", _adminEmail);
+        // A new account made an administrator directly in the database (the shared test database
+        // always has the sentinel admin, so the new account is never the first or the last)
+        private async Task<TestAccounts.Account> NewAdminAsync()
+        {
+            var account = await TestAccounts.CreateAsync(_factory, "admin");
+            await TestDatabase.SetAdminAsync(_factory, account.UserId, true);
+            return account;
+        }
+
         private Task<TestAccounts.Account> NewUserAsync() => TestAccounts.CreateAsync(_factory, "plain");
 
         private static async Task<JsonElement> GetJsonAsync(HttpClient client, string url)
@@ -72,7 +77,7 @@ namespace Backend.Test
         }
 
         [Fact]
-        public async Task ListedEmail_BecomesAdmin_AndSeesEveryUsersUsage()
+        public async Task Admin_SeesEveryUsersUsage()
         {
             var admin = await NewAdminAsync();
             var user = await NewUserAsync();
@@ -195,48 +200,27 @@ namespace Backend.Test
                 (await admin.Client.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.OK);
 
                 // Revoke in the database; the same (still valid) access token no longer works
-                using (var scope = _factory.Services.CreateScope())
-                    await scope.ServiceProvider.GetRequiredService<DatabaseServices>().SyncAdminsAsync([], admin.UserId);
+                await TestDatabase.SetAdminAsync(_factory, admin.UserId, false);
 
                 (await admin.Client.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
                 (await GetJsonAsync(admin.Client, "/admin/me")).GetProperty("isAdmin").GetBoolean().Should().BeFalse();
 
-                // Logging in again applies Admin:Emails, which still lists them
-                var again = await TestAccounts.LoginAsync(_factory.CreateClient(), _adminEmail);
-                (await again.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.OK);
-            }
-            finally
-            {
-                await admin.Client.DeleteAsync("/user");
-            }
-        }
-
-        [Fact]
-        public async Task AdminEmails_CanBeOneCommaSeparatedValue_LikeTheDockerEnvironmentVariable()
-        {
-            var email = $"envadmin_{Guid.NewGuid():N}@example.test";
-            var envFactory = TestAccounts.WithoutLoginLimit(new WebApplicationFactory<Program>())
-                .WithWebHostBuilder(builder => builder.UseSetting("Admin:Emails", $"someone@elsewhere.test, {email} ;"));
-            var admin = await TestAccounts.CreateAsync(envFactory, "envadmin", email);
-            var other = await TestAccounts.CreateAsync(envFactory, "envplain");
-            try
-            {
+                await TestDatabase.SetAdminAsync(_factory, admin.UserId, true);
                 (await admin.Client.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.OK);
-                (await other.Client.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
             }
             finally
             {
                 await admin.Client.DeleteAsync("/user");
-                await other.Client.DeleteAsync("/user");
-                await envFactory.DisposeAsync();
             }
         }
 
         [Fact]
-        public async Task WithoutAdminEmails_NobodyIsMadeAdmin()
+        public async Task AdminEmailsSetting_IsIgnored_AndAnOrdinaryAccountIsNotAdmin()
         {
-            var plainFactory = TestAccounts.WithoutLoginLimit(new WebApplicationFactory<Program>());
-            var user = await TestAccounts.CreateAsync(plainFactory, "noadmin");
+            var email = $"listed_{Guid.NewGuid():N}@example.test";
+            var listedFactory = TestAccounts.WithoutLoginLimit(new WebApplicationFactory<Program>())
+                .WithWebHostBuilder(builder => builder.UseSetting("Admin:Emails", $"someone@elsewhere.test, {email} ;"));
+            var user = await TestAccounts.CreateAsync(listedFactory, "listed", email);
             try
             {
                 (await GetJsonAsync(user.Client, "/admin/me")).GetProperty("isAdmin").GetBoolean().Should().BeFalse();
@@ -245,7 +229,71 @@ namespace Backend.Test
             finally
             {
                 await user.Client.DeleteAsync("/user");
-                await plainFactory.DisposeAsync();
+                await listedFactory.DisposeAsync();
+            }
+        }
+
+        private static Task<HttpResponseMessage> SetAdminAsync(HttpClient client, string userId, bool isAdmin) =>
+            client.PutAsJsonAsync($"/admin/users/{userId}/admin", new { isAdmin });
+
+        [Fact]
+        public async Task Admin_CanGrantAndRemoveAdmin_AndTheNewAdminCanUseTheAdminPage()
+        {
+            var admin = await NewAdminAsync();
+            var user = await NewUserAsync();
+            try
+            {
+                (await user.Client.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+                (await SetAdminAsync(admin.Client, user.UserId, true)).StatusCode.Should().Be(HttpStatusCode.OK);
+                (await UserRowAsync(admin.Client, user.UserId)).GetProperty("isAdmin").GetBoolean().Should().BeTrue();
+                (await user.Client.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+                // Granting again is harmless
+                (await SetAdminAsync(admin.Client, user.UserId, true)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+                (await SetAdminAsync(admin.Client, user.UserId, false)).StatusCode.Should().Be(HttpStatusCode.OK);
+                (await UserRowAsync(admin.Client, user.UserId)).GetProperty("isAdmin").GetBoolean().Should().BeFalse();
+                (await user.Client.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            }
+            finally
+            {
+                await admin.Client.DeleteAsync("/user");
+                await user.Client.DeleteAsync("/user");
+            }
+        }
+
+        [Fact]
+        public async Task AdminChanges_AreValidated_AndNonAdminsCannotMakeThem()
+        {
+            var admin = await NewAdminAsync();
+            var user = await NewUserAsync();
+            var other = await NewUserAsync();
+            try
+            {
+                // A non-admin can't make themselves or anyone else an admin
+                (await SetAdminAsync(user.Client, user.UserId, true)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+                (await SetAdminAsync(user.Client, other.UserId, true)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+                (await SetAdminAsync(_factory.CreateClient(), other.UserId, true)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+                (await GetJsonAsync(admin.Client, "/admin/users")).EnumerateArray()
+                    .Where(u => u.GetProperty("id").GetString() == user.UserId || u.GetProperty("id").GetString() == other.UserId)
+                    .Should().OnlyContain(u => !u.GetProperty("isAdmin").GetBoolean());
+
+                (await SetAdminAsync(admin.Client, Guid.NewGuid().ToString(), true)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+                (await SetAdminAsync(admin.Client, "not-a-guid", true)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+                (await admin.Client.PutAsJsonAsync($"/admin/users/{user.UserId}/admin", new { })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+                var noBody = new HttpRequestMessage(HttpMethod.Put, $"/admin/users/{user.UserId}/admin")
+                {
+                    Content = new StringContent("not json", Encoding.UTF8, "application/json")
+                };
+                (await admin.Client.SendAsync(noBody)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            }
+            finally
+            {
+                await admin.Client.DeleteAsync("/user");
+                await user.Client.DeleteAsync("/user");
+                await other.Client.DeleteAsync("/user");
             }
         }
     }
