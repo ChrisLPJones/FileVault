@@ -5,7 +5,6 @@ import Layout from "./Layout";
 import { isAuthenticated } from "../../utils/auth";
 
 vi.mock("../../utils/auth", () => ({ isAuthenticated: vi.fn() }));
-vi.mock("../../components/UserMenu", () => ({ default: () => null }));
 
 const renderAt = (pathname) =>
     render(
@@ -19,20 +18,37 @@ const renderAt = (pathname) =>
     );
 
 describe("Layout top bar when logged out", () => {
-    it.each(["/", "/login", "/register"])("has no Register or Login links on %s", (pathname) => {
+    it.each([
+        "/", "/login", "/login/", "/register", "/forgot-password",
+        "/reset-password", "/verify-email", "/s/abc",
+    ])("has no top bar on %s", (pathname) => {
         isAuthenticated.mockReturnValue(false);
-        renderAt(pathname);
+        const { container } = renderAt(pathname);
 
         expect(screen.getByText("Page body")).toBeInTheDocument();
-        expect(screen.queryByRole("link", { name: "Register" })).not.toBeInTheDocument();
-        expect(screen.queryByRole("link", { name: "Login" })).not.toBeInTheDocument();
+        expect(container.querySelector("header")).not.toBeInTheDocument();
+        expect(container.querySelector(".page").style.getPropertyValue("--fv-header-height")).toBe("0px");
     });
+});
 
-    it("keeps the links on other logged-out pages", () => {
-        isAuthenticated.mockReturnValue(false);
-        renderAt("/forgot-password");
+describe("Layout top bar when logged in", () => {
+    it.each(["/s/abc", "/verify-email", "/settings", "/settings/", "/shared-links", "/admin"])(
+        "has Back to files and no account menu on %s",
+        (pathname) => {
+            isAuthenticated.mockReturnValue(true);
+            const { container } = renderAt(pathname);
 
-        expect(screen.getByRole("link", { name: "Register" })).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: "Login" })).toBeInTheDocument();
+            expect(container.querySelector("header")).toBeInTheDocument();
+            expect(screen.getByRole("link", { name: "Back to files" })).toBeInTheDocument();
+            expect(screen.queryByText("Account menu")).not.toBeInTheDocument();
+            expect(container.querySelector(".page").style.getPropertyValue("--fv-header-height")).toBe("");
+        }
+    );
+
+    it("has no Back to files on the file list", () => {
+        isAuthenticated.mockReturnValue(true);
+        renderAt("/dashboard");
+
+        expect(screen.queryByRole("link", { name: "Back to files" })).not.toBeInTheDocument();
     });
 });

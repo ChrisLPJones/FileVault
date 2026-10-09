@@ -28,7 +28,7 @@ html, body {
     width: 100%;
     display: flex;
     align-items: center;
-    justify-content: space-between; /* pushes left items left, logout right */
+    justify-content: space-between; /* back link on the left, toolbar fills the rest */
 }
 
 /* Left group of links */
@@ -43,31 +43,19 @@ html, body {
     text-decoration: none;
 }
 
-.link-style.active {
-    text-decoration: underline;
-    text-underline-offset: 4px;
-}
-
-.nav-right {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
 .link-style:focus-visible {
     outline: 2px solid var(--fv-focus-ring);
     outline-offset: 2px;
 }
 
-/* Keep the header above the page so dropdowns that open from it (view switcher, account
-   menu) aren't covered by the file area */
+/* Keep the header above the page so the dropdown that opens from it (view switcher)
+   isn't covered by the file area */
 .header-style {
     position: relative;
     z-index: 20;
 }
 
-.nav-left,
-.nav-right {
+.nav-left {
     flex: 0 0 auto;
 }
 

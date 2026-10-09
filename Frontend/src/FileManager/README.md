@@ -30,6 +30,7 @@ Copied from the package and then modified for FileVault:
 - The top bar follows the theme (light bar in light mode), so the toolbar and search box in it use the
   `--fv-header-*` variables (`Mobile.scss`, `Search/SearchResults.scss`)
 - Recycle bin: tooltips on "Delete permanently" and "Empty bin" (`RecycleBin/`)
+- Folder pane order: "Folders" heading and tree first, then Favourites and Recent; Shared links and then the recycle bin at the bottom (`NavigationPane/NavigationPane.jsx`)
 - Removed the unused `filePreviewPath` prop
 
 Some of this code still syncs state from props inside effects, which

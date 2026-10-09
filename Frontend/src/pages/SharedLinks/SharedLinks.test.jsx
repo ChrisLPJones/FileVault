@@ -11,15 +11,11 @@ vi.mock("../../api/shareAPI", () => ({
 }));
 
 describe("Shared links page", () => {
-    it("explains who can open a link and that a password is also needed", async () => {
+    it("has no explanatory note above the list", async () => {
         getSharesAPI.mockResolvedValue([]);
-        render(<SharedLinks />);
+        const { container } = render(<SharedLinks />);
 
-        expect(
-            screen.getByText(
-                "Anyone with one of these links can download the item. Links with a password also need the password. Revoke a link to stop it working."
-            )
-        ).toBeInTheDocument();
         await screen.findByRole("heading", { name: "Shared links" });
+        expect(container.querySelector(".shared-links-card .settings-hint")).not.toBeInTheDocument();
     });
 });

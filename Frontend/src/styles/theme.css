@@ -11,7 +11,6 @@
     --fv-header-border: #d0d5db; /* line under the top bar */
     --fv-header-hover: rgba(0, 0, 0, 0.07); /* hovered buttons on the bar */
     --fv-header-separator: rgba(0, 0, 0, 0.2);
-    --fv-header-ring: rgba(0, 0, 0, 0.45); /* outline of the hovered account button */
     --fv-header-field-bg: rgba(0, 0, 0, 0.05); /* search box */
     --fv-header-field-bg-focus: rgba(0, 0, 0, 0.09);
     --fv-header-field-border: rgba(0, 0, 0, 0.25);
@@ -83,7 +82,6 @@
     --fv-header-border: transparent;
     --fv-header-hover: rgba(255, 255, 255, 0.14);
     --fv-header-separator: rgba(255, 255, 255, 0.25);
-    --fv-header-ring: rgba(255, 255, 255, 0.55);
     --fv-header-field-bg: rgba(255, 255, 255, 0.1);
     --fv-header-field-bg-focus: rgba(255, 255, 255, 0.16);
     --fv-header-field-border: rgba(255, 255, 255, 0.2);
