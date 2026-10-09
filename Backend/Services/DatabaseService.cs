@@ -269,7 +269,7 @@ public partial class DatabaseServices
         {
             const string updateItem = @"
                 UPDATE Files
-                SET FileName = @Name, FilePath = @Path, ParentId = @ParentId, UpdatedAt = GETDATE()
+                SET FileName = @Name, FilePath = @Path, ParentId = @ParentId, UpdatedAt = SYSUTCDATETIME()
                 WHERE GUID = @GUID AND UserId = @UserId";
 
             await using (var command = new SqlCommand(updateItem, connection, transaction))
@@ -408,8 +408,9 @@ public partial class DatabaseServices
                 _id = (string)reader["GUID"],
                 Name = (string)reader["FileName"],
                 Path = reader["FilePath"] as string ?? "",
-                UpdatedAt = Convert.ToDateTime(reader["UpdatedAt"]),
-                CreatedAt = Convert.ToDateTime(reader["CreatedAt"]),
+                // Stored in UTC; marked as such so the JSON carries a "Z" and browsers show local time
+                UpdatedAt = DateTime.SpecifyKind(Convert.ToDateTime(reader["UpdatedAt"]), DateTimeKind.Utc),
+                CreatedAt = DateTime.SpecifyKind(Convert.ToDateTime(reader["CreatedAt"]), DateTimeKind.Utc),
                 Size = Convert.ToInt64(reader["Size"]),
                 IsDirectory = Convert.ToBoolean(reader["isDirectory"]),
                 IsFavourite = Convert.ToBoolean(reader["Favourite"]),

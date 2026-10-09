@@ -8,7 +8,8 @@ public partial class DatabaseServices
 
     // Run a database action again if SQL Server picked it as a deadlock victim. Deletes can
     // deadlock with each other when several users delete at once (the delete triggers walk the
-    // Files table); the victim's work is rolled back, so trying again is safe.
+    // Files table), and reads across every user's files (the admin page) with those deletes;
+    // the victim's work is rolled back, so trying again is safe.
     private async Task<T> RetryOnDeadlockAsync<T>(Func<Task<T>> action, int attempts = 4)
     {
         for (var attempt = 1; ; attempt++)
