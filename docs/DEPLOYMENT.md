@@ -317,6 +317,7 @@ The job runs with the hourly storage cleanup. These settings go in `appsettings.
 | `Hosted:InactiveDays` | 30 | Days without sign-in or use before removal |
 | `Hosted:WarningDays` | 7 | Days of warning before removal (kept below `InactiveDays`) |
 | `Hosted:MaxRemovalsPerRun` | 50 | Most accounts warned, and most removed, per run |
+| `Hosted:MaxRemovalsPerDay` | 200 | Most accounts removed in any 24 hours (a safety brake; counted per API process) |
 
 **Switching an existing install to hosted**
 
