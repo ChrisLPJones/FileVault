@@ -9,5 +9,5 @@ namespace Backend.Models
 
     public record TokenUpdateResponse(string Success, string Token);
 
-    public record UserInfoResponse(string FirstName, string LastName, string Email, DateTime? AvatarUpdatedAt, bool EmailVerified);
+    public record UserInfoResponse(string FirstName, string LastName, string Email, DateTime? AvatarUpdatedAt, bool EmailVerified, string IconTheme = "default");
 }

@@ -42,3 +42,6 @@ export const deleteAvatarAPI = async () => {
     await api.delete("/user/avatar");
     notifyProfileChanged();
 };
+
+// "default" | "windows" | "macos" | "ubuntu"; saved on the account
+export const setIconThemeAPI = async (iconTheme) => (await api.put("/user/icon-theme", { iconTheme })).data;
