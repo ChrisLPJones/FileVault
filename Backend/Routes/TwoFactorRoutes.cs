@@ -36,7 +36,10 @@ namespace Backend.Routes
                 if ((await db.GetUserAuthStateAsync(user.Id.ToString())).Suspended)
                     return Results.Json(new { error = AuthServices.SuspendedMessage, suspended = true }, statusCode: 403);
 
-                await auth.IssueRefreshTokenAsync(user.Id.ToString(), db, http);
+                // Null means the token was refused: suspended after the check above
+                if (await auth.IssueRefreshTokenAsync(user.Id.ToString(), db, http) == null)
+                    return Results.Json(new { error = AuthServices.SuspendedMessage, suspended = true }, statusCode: 403);
+
                 return Results.Ok(new { Success = auth.GetJWTToken(user) });
             })
                 .WithTags("Account")

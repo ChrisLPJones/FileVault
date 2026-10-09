@@ -55,6 +55,36 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task StoreRefreshToken_IsRefused_ForASuspendedUser_EvenWithoutTheGuard()
+        {
+            var account = await TestAccounts.CreateAsync(_factory, "racesusp");
+            try
+            {
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<DatabaseServices>();
+                var sessionId = await db.CreateSessionAsync(account.UserId, "test", "127.0.0.1");
+                var expires = DateTime.UtcNow.AddDays(1);
+
+                // A login suspended between its check and the issue
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET SuspendedAt = SYSUTCDATETIME() WHERE Id = @Id", ("@Id", account.UserId));
+
+                var hash = "race-susp-" + Guid.NewGuid();
+                (await db.StoreRefreshTokenAsync(account.UserId, sessionId, hash, expires)).Should().BeFalse();
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE TokenHash = @H", ("@H", hash)))
+                    .Should().Be(0);
+
+                // Unsuspended: stored again
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET SuspendedAt = NULL WHERE Id = @Id", ("@Id", account.UserId));
+                (await db.StoreRefreshTokenAsync(account.UserId, sessionId, "race-unsusp-" + Guid.NewGuid(), expires)).Should().BeTrue();
+            }
+            finally
+            {
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET SuspendedAt = NULL WHERE Id = @Id", ("@Id", account.UserId));
+                (await account.Client.DeleteAsync("/user")).Dispose();
+            }
+        }
+
+        [Fact]
         public async Task Gate_DoesNotCacheAStateReadBeforeAnEvict()
         {
             using var cache = new MemoryCache(new MemoryCacheOptions());

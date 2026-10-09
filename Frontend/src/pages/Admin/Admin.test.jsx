@@ -289,6 +289,17 @@ describe("Admin page", () => {
             expect(await screen.findByRole("status")).toHaveTextContent("sam@example.com is suspended");
         });
 
+        it("labels a suspended administrator as Admin (suspended)", async () => {
+            getAdminUsersAPI.mockResolvedValue([users[0], { ...users[1], isAdmin: true, suspendedAt: "2026-05-01T10:00:00Z" }]);
+            render(<Admin />);
+            await screen.findByText("sam@example.com");
+
+            const samRow = within(row("sam@example.com"));
+            expect(samRow.getByText("Admin (suspended)")).toBeInTheDocument();
+            expect(samRow.getByText("Suspended")).toBeInTheDocument();
+            expect(within(row("alex@example.com")).getByText("Admin")).toBeInTheDocument();
+        });
+
         it("offers Unsuspend for a suspended account and lifts the suspension", async () => {
             getAdminUsersAPI.mockResolvedValue(suspendedUsers);
             render(<Admin />);

@@ -740,7 +740,8 @@ public partial class DatabaseServices
     // TokensValidAfter as read before the old token was consumed (RefreshTokenUse): the new
     // token is stored only if that value is unchanged, so a refresh that was in flight while an
     // administrator set the password can't leave a live session behind. Returns false if it was
-    // refused for that reason (or the user is gone).
+    // refused for that reason, or because the user is suspended (checked on every insert so a login
+    // in flight when a suspension commits can't leave a token behind), or the user is gone.
     public async Task<bool> StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
         bool requireUnchangedTokensValidAfter = false, DateTime? seenTokensValidAfter = null)
     {
@@ -751,9 +752,9 @@ public partial class DatabaseServices
             DELETE FROM RefreshTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
             INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt)
             SELECT @UserId, @SessionId, @TokenHash, @ExpiresAt
-            WHERE @Guard = 0 OR EXISTS (
-                SELECT 1 FROM Users WHERE Id = @UserId
-                AND ((TokensValidAfter IS NULL AND @Seen IS NULL) OR TokensValidAfter = @Seen));
+            WHERE EXISTS (
+                SELECT 1 FROM Users WHERE Id = @UserId AND SuspendedAt IS NULL
+                AND (@Guard = 0 OR (TokensValidAfter IS NULL AND @Seen IS NULL) OR TokensValidAfter = @Seen));
             DECLARE @Stored INT = @@ROWCOUNT;
             DELETE FROM Sessions WHERE UserId = @UserId
                 AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);

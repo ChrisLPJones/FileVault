@@ -397,7 +397,7 @@ export default function Admin() {
                                                 <div className="admin-person-text">
                                                     <div className="admin-name">
                                                         {`${user.firstName} ${user.lastName}`.trim()}
-                                                        {user.isAdmin && <span className="admin-badge">Admin</span>}
+                                                        {user.isAdmin && <span className="admin-badge">{user.suspendedAt ? "Admin (suspended)" : "Admin"}</span>}
                                                         {user.isPermanent && <span className="admin-badge permanent">Permanent</span>}
                                                         {user.suspendedAt && <span className="admin-badge suspended">Suspended</span>}
                                                     </div>

@@ -102,7 +102,9 @@ namespace Backend.Routes
                     return Results.Ok(new TwoFactorChallengeResponse(true,
                         await twoFactor.CreateLoginChallengeAsync(userRecord.Id.ToString())));
 
-                await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
+                // Null means the token was refused: suspended after the check above
+                if (await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http) == null)
+                    return Results.Json(new { error = AuthServices.SuspendedMessage, suspended = true }, statusCode: 403);
 
                 return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
             })
