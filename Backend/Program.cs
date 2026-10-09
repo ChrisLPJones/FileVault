@@ -127,6 +127,10 @@ namespace Backend
             builder.Services.AddHostedService<AdminBootstrapOnStartup>();
             builder.Services.AddEmail(builder.Configuration);
             builder.Services.AddSingleton<SecretProtector>();
+            // Optional local GeoLite2 Country database for the admin page's login countries
+            builder.Services.AddSingleton(sp => new GeoIpService(
+                sp.GetRequiredService<IConfiguration>()["GeoIp:DatabasePath"],
+                sp.GetRequiredService<ILogger<GeoIpService>>()));
             builder.Services.AddSingleton(TimeProvider.System);
             builder.Services.AddScoped<TwoFactorService>();
             builder.Services.AddAuthorization();

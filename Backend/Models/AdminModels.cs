@@ -16,7 +16,10 @@ namespace Backend.Models
         int FileCount,
         long Quota,
         long? QuotaOverride,
-        bool IsAdmin);
+        bool IsAdmin,
+        string? LastLoginIp = null,
+        string? LastLoginCountryCode = null,
+        string? LastLoginCountry = null);
 
     // PATCH /admin/users/{id}/quota. Null puts the user back on the default quota.
     public class QuotaUpdateRequest

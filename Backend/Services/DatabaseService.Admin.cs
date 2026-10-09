@@ -219,12 +219,12 @@ public partial class DatabaseServices
         await connection.OpenAsync();
 
         const string query = @"
-            SELECT u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin,
+            SELECT u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin, u.LastLoginIp,
                    COALESCE(SUM(CASE WHEN f.IsDirectory = 0 THEN f.Size END), 0) AS BytesUsed,
                    COUNT(CASE WHEN f.IsDirectory = 0 THEN 1 END) AS FileCount
             FROM Users u
             LEFT JOIN Files f ON f.UserId = u.Id
-            GROUP BY u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin
+            GROUP BY u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin, u.LastLoginIp
             ORDER BY u.CreatedAt, u.Email";
 
         await using var command = new SqlCommand(query, connection);
@@ -239,11 +239,12 @@ public partial class DatabaseServices
                 reader.GetString(3),
                 reader.IsDBNull(4) ? null : DateTime.SpecifyKind(reader.GetDateTime(4), DateTimeKind.Utc),
                 reader.IsDBNull(5) ? null : DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc),
-                reader.GetInt64(8),
-                reader.GetInt32(9),
+                reader.GetInt64(9),
+                reader.GetInt32(10),
                 quotaOverride ?? defaultQuota,
                 quotaOverride,
-                reader.GetBoolean(7)));
+                reader.GetBoolean(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8)));
         }
 
         return users;

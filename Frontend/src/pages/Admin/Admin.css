@@ -275,3 +275,7 @@
 .admin-link-button {
     white-space: nowrap;
 }
+
+.admin-footnote {
+    margin: 12px 0 0;
+}

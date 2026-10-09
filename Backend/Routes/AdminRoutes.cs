@@ -35,9 +35,15 @@ namespace Backend.Routes
                 });
 
             // Every account with its usage and quota
-            admin.MapGet("/users", async (DatabaseServices db, IConfiguration config) =>
-                Results.Ok(await db.GetUsersForAdminAsync(DefaultQuota(config))))
-                .WithSummary("List users: name, email, created, last login, bytes used, file count and quota (admins only)")
+            admin.MapGet("/users", async (DatabaseServices db, IConfiguration config, GeoIpService geoIp) =>
+            {
+                // The country is looked up now, not stored, so it always reflects the current database
+                var users = await db.GetUsersForAdminAsync(DefaultQuota(config));
+                return Results.Ok(users.Select(u => geoIp.TryCountry(u.LastLoginIp) is var (code, name)
+                    ? u with { LastLoginCountryCode = code, LastLoginCountry = name }
+                    : u).ToList());
+            })
+                .WithSummary("List users: name, email, created, last login (with address and country), bytes used, file count and quota (admins only)")
                 .Produces<List<AdminUser>>()
                 .Produces<ErrorResponse>(403);
 

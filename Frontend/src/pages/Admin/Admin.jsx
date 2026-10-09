@@ -239,6 +239,7 @@ export default function Admin() {
                                 <th scope="col">Name</th>
                                 <th scope="col">Created</th>
                                 <th scope="col">Last login</th>
+                                <th scope="col">Login location</th>
                                 <th scope="col" className="numeric">Files</th>
                                 <th scope="col">Storage used</th>
                                 <th scope="col">Quota</th>
@@ -259,6 +260,16 @@ export default function Admin() {
                                         </td>
                                         <td>{formatWhen(user.createdAt)}</td>
                                         <td>{formatWhen(user.lastLogin)}</td>
+                                        <td>
+                                            {user.lastLoginIp ? (
+                                                <>
+                                                    <div>{user.lastLoginIp}</div>
+                                                    <div className="admin-muted">{user.lastLoginCountry || "Unknown"}</div>
+                                                </>
+                                            ) : (
+                                                <span className="admin-muted">Unknown</span>
+                                            )}
+                                        </td>
                                         <td className="numeric">{user.fileCount.toLocaleString()}</td>
                                         <td>
                                             <div>{formatBytes(user.bytesUsed)}</div>
@@ -281,6 +292,10 @@ export default function Admin() {
                         </tbody>
                     </table>
                 </div>
+                <p className="admin-muted admin-footnote">
+                    Login countries use GeoLite2 data created by MaxMind, available from{" "}
+                    <a href="https://www.maxmind.com" target="_blank" rel="noopener noreferrer">maxmind.com</a>.
+                </p>
             </section>
         </div>
     );
