@@ -37,7 +37,10 @@ public partial class DatabaseServices
 
     // The user's bin entries (the items they deleted), most recently deleted first.
     // Size is the total of the files that went into the bin with the entry.
-    public async Task<List<(FileRecord item, DateTime deletedAt, long size)>> GetTrashAsync(string userId)
+    public Task<List<(FileRecord item, DateTime deletedAt, long size)>> GetTrashAsync(string userId) =>
+        RetryOnDeadlockAsync(() => GetTrashOnceAsync(userId));
+
+    private async Task<List<(FileRecord item, DateTime deletedAt, long size)>> GetTrashOnceAsync(string userId)
     {
         var entries = new List<(FileRecord, DateTime, long)>();
 
@@ -98,6 +101,10 @@ public partial class DatabaseServices
         try
         {
             const string query = @"
+                -- Lock the bin entry first so the lock order is always root, then descendants, whatever the
+                -- query plan; this avoids crossing locks with other tree updates
+                SELECT 1 FROM Files WITH (UPDLOCK, ROWLOCK) WHERE GUID = @GUID AND UserId = @UserId;
+
                 WITH Tree AS (
                     SELECT GUID FROM Files WHERE ParentId = @GUID AND UserId = @UserId
                     UNION ALL

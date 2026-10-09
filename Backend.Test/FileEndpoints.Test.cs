@@ -575,6 +575,7 @@ namespace Backend.Test
     }
 
     // Rename and move run in a transaction; if SQL Server picks them as a deadlock victim they must be retried
+    [Collection(DeadlockCollection.Name)]
     public class MoveRenameDeadlockTests(WebApplicationFactory<Program> factory) : IntegrationTestBase(factory)
     {
         [Fact]

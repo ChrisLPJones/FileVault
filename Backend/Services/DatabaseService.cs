@@ -116,7 +116,10 @@ public partial class DatabaseServices
 
 
     // Get the storage GUIDs of every file (not folder) at or below the given item
-    public async Task<List<string>> GetFileGuidsInTreeAsync(string guid, string userId)
+    public Task<List<string>> GetFileGuidsInTreeAsync(string guid, string userId) =>
+        RetryOnDeadlockAsync(() => GetFileGuidsInTreeOnceAsync(guid, userId));
+
+    private async Task<List<string>> GetFileGuidsInTreeOnceAsync(string guid, string userId)
     {
         var guids = new List<string>();
 
@@ -197,7 +200,10 @@ public partial class DatabaseServices
 
 
     // Get an item and everything below it, parents before children (skipping anything in the recycle bin)
-    public async Task<List<FileRecord>> GetTreeAsync(string guid, string userId)
+    public Task<List<FileRecord>> GetTreeAsync(string guid, string userId) =>
+        RetryOnDeadlockAsync(() => GetTreeOnceAsync(guid, userId));
+
+    private async Task<List<FileRecord>> GetTreeOnceAsync(string guid, string userId)
     {
         var items = new List<FileRecord>();
 
@@ -230,7 +236,10 @@ public partial class DatabaseServices
 
 
     // Get the names already used in a folder (null parentId = root), optionally ignoring one item
-    public async Task<HashSet<string>> GetNamesInFolderAsync(string? parentId, string userId, string? excludeGuid = null)
+    public Task<HashSet<string>> GetNamesInFolderAsync(string? parentId, string userId, string? excludeGuid = null) =>
+        RetryOnDeadlockAsync(() => GetNamesInFolderOnceAsync(parentId, userId, excludeGuid));
+
+    private async Task<HashSet<string>> GetNamesInFolderOnceAsync(string? parentId, string userId, string? excludeGuid)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -393,7 +402,10 @@ public partial class DatabaseServices
 
 
     // Retrieve all files and folders that belong to a specific user (not those in the recycle bin)
-    public async Task<List<FileModel>> GetFilesFromDb(string userId)
+    public Task<List<FileModel>> GetFilesFromDb(string userId) =>
+        RetryOnDeadlockAsync(() => GetFilesFromDbOnceAsync(userId));
+
+    private async Task<List<FileModel>> GetFilesFromDbOnceAsync(string userId)
     {
         var filesList = new List<FileModel>();
 
@@ -536,7 +548,10 @@ public partial class DatabaseServices
 
 
     // Bytes stored by the user, and their quota override (null = use the default)
-    public async Task<(long used, long? quota)> GetStorageUsageAsync(string userId)
+    public Task<(long used, long? quota)> GetStorageUsageAsync(string userId) =>
+        RetryOnDeadlockAsync(() => GetStorageUsageOnceAsync(userId));
+
+    private async Task<(long used, long? quota)> GetStorageUsageOnceAsync(string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -612,7 +627,10 @@ public partial class DatabaseServices
 
 
     // Retrieve user details by their user ID
-    public async Task<UserModel?> GetUserByUserId(string userId)
+    public Task<UserModel?> GetUserByUserId(string userId) =>
+        RetryOnDeadlockAsync(() => GetUserByUserIdOnceAsync(userId));
+
+    private async Task<UserModel?> GetUserByUserIdOnceAsync(string userId)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();

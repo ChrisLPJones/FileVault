@@ -264,3 +264,16 @@ namespace Backend.Test
         }
     }
 }
+
+namespace Backend.Test
+{
+    // The deadlock tests hold row locks and force SQL Server to break a deadlock; any other test
+    // running at the same time could be blocked by those locks or picked as a victim of that
+    // deadlock (plain reads aren't retried). Collections that disable parallelization run alone,
+    // after the parallel ones have finished.
+    [CollectionDefinition(Name, DisableParallelization = true)]
+    public class DeadlockCollection
+    {
+        public const string Name = "Deadlock tests (run alone)";
+    }
+}
