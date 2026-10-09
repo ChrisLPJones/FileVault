@@ -6,25 +6,39 @@
 
 **Files**
 - Upload, download (single files or zips), rename, move, copy and delete files and folders
-- Desktop-style file and folder icons, grid and list views, sortable columns
+- Big files upload in 8 MB chunks that resume after a dropped connection (up to 2 GB each by default); whole folders can be uploaded too
+- Desktop-style file and folder icons, image thumbnails, grid and list views, sortable columns
 - Details pane with name, type, size, created/modified dates and a preview (images, video, audio, PDF and text)
+- Search every file and folder by name from the top bar
+- Favourites and recently opened files at the top of the folder tree
+- Recycle bin: deleted items can be restored, and are removed for good after 30 days
 - A name that's already taken gets a number, like Windows Explorer: `report (1).pdf`
 - New accounts start with Documents, Pictures, Music and Videos folders
+- Works on phones and tablets: the folder tree becomes a drawer and the details pane a bottom sheet
+
+**Sharing**
+- Share links to a file or folder, with an optional expiry date and password; folders download as a zip
+- A Shared links page to copy links, show their passwords again and revoke them
 
 **Security**
-- Files encrypted at rest with AES-256-GCM, each with its own key
+- Files encrypted at rest with AES-256-GCM, each with its own key; share link secrets and authenticator keys are encrypted too
+- Two-factor authentication with an authenticator app, plus single-use recovery codes
+- See every device you're logged in on, and sign any of them out
+- Email confirmation before the first login, and password reset by email
 - Short-lived access tokens with a rotating, httpOnly refresh-token cookie
 - Password rules, rate limiting and per-user storage quotas
+- Strict Content-Security-Policy and security headers; ready to run behind an HTTPS reverse proxy
 
 **Account and appearance**
 - Log in with email; first and last name, profile picture, password change, account deletion
 - Light, dark and system themes, and a choice of accent colour
+- An admin page for the server owner: every account's storage use and quota, and server totals
 
 **Tooling**
 - Interactive API docs (Swagger) at `/swagger` in development, or with `SWAGGER_ENABLED=true`
 - Desktop app (Electron) for Windows, macOS and Linux
 - Runs with one command using Docker Compose
-- CI on every push: backend build and tests, frontend build and lint, Docker images
+- CI on every push: backend build and integration tests, frontend lint and tests (Vitest), Docker images
 
 ## Screenshots
 
@@ -44,11 +58,29 @@ List view, with sortable columns and a star to add items to Favourites:
 
 ![File manager in list view](docs/screenshots/files-list.png)
 
-Logging in, and the Settings page (storage, theme and accent colour, profile):
+Searching every folder from the top bar, and the recycle bin:
+
+![Search results](docs/screenshots/search.png)
+
+![Recycle bin](docs/screenshots/recycle-bin.png)
+
+Share links: the Shared links page, where a link's password can be shown again, and what someone opening a folder link sees:
+
+![Shared links page](docs/screenshots/shared-links.png)
+
+![Public page for a shared folder](docs/screenshots/share-page.png)
+
+Logging in, and the Settings page (storage, theme and accent colour, profile; two-factor authentication and the devices you're logged in on):
 
 ![Login page](docs/screenshots/login.png)
 
 ![Settings page](docs/screenshots/settings.png)
+
+![Two-factor authentication and active sessions in Settings](docs/screenshots/settings-security.png)
+
+The admin page, for the server owner:
+
+![Admin page](docs/screenshots/admin.png)
 
 On a phone, the folder tree opens as a drawer and the less-used toolbar actions move into a menu:
 
@@ -84,6 +116,8 @@ Then open http://localhost:5173 (the API is on http://localhost:3000). Compose s
 Data lives in two named volumes, `filevault_sql_data` and `filevault_file_storage` (the encrypted files). Back both up together with `ENCRYPTION_MASTER_KEY`. `docker compose down` keeps them; `docker compose down -v` deletes them.
 
 To open the database in a GUI tool (SSMS, Azure Data Studio, VS Code SQLTools), copy `docker-compose.override.example.yml` to `docker-compose.override.yml` and restart with `docker compose up -d`. SQL Server is then reachable from this machine only at `127.0.0.1,1434`, user `sa`, with `MSSQL_SA_PASSWORD` from `.env`. Use `127.0.0.1` rather than `localhost`, which some tools resolve to IPv6 and then time out. To look at the stored files, run `docker compose exec api ls -l /data/storage`. They are encrypted, so download them through the app to read them.
+
+New accounts confirm their email address before they can log in, and "Forgot password?" sends a reset link. To send those emails, set the `SMTP_*` settings in `.env`. Without them the API writes each email, link included, to its log instead, so on a local setup you can find the link with `docker compose logs api`.
 
 To use the admin page (`/admin`: every account's storage use and quota, and server totals), set `ADMIN_EMAILS` in `.env` to a comma-separated list of account emails and restart; those accounts get an Admin link in the account menu.
 
@@ -145,7 +179,9 @@ npm run dev
 
 ```bash
 dotnet test                     # backend integration tests (needs the SQL Server from step 1)
-cd Frontend && npm run lint     # frontend lint
+cd Frontend
+npm run lint                    # frontend lint
+npm test                        # frontend tests (Vitest and Testing Library)
 ```
 
 The integration tests create their own throwaway accounts and delete them afterwards. If tests fail with server errors after pulling new code, re-run `docker compose up -d` in `Backend/Docker` to apply any new database changes.
@@ -174,8 +210,14 @@ Interactive API docs are served at `/swagger` on the API, and the OpenAPI docume
 
 To try protected endpoints, call `POST /user/login`, then click **Authorize** and paste the returned access token (it lasts 15 minutes). Endpoints are grouped as:
 
-- **Account**: register, login, refresh, logout, profile, password, avatar, storage usage, delete account
-- **Files**: upload, folders, list, download (single file or zip), rename, move, copy, delete
+- **Account**: register, login, refresh, logout, profile, password, avatar, email confirmation, password reset, storage usage, delete account
+- **Two-factor authentication**: set up, turn on and off, log in with a code, new recovery codes
+- **Sessions**: list the devices you're logged in on, sign one or all others out
+- **Files**: upload, folders, list, download (single file or zip), rename, move, copy, delete, thumbnails, favourites, recently opened
+- **Uploads**: chunked, resumable uploads for big files
+- **Recycle bin**: list, restore, delete for good, empty
+- **Shares**: create, list and revoke share links, and the public endpoints a link uses
+- **Admin**: every account's usage and quota, change quotas, server totals
 - **Health**: `/ping` and `/pingsql`
 
 ## Project layout
@@ -184,9 +226,9 @@ To try protected endpoints, call `POST /user/login`, then click **Authorize** an
 |---|---|
 | `Backend/` | .NET 8 API: routes, services, models, `Docker/` (dev SQL Server and `init.sql`) |
 | `Backend.Test/` | xUnit integration tests |
-| `Frontend/` | React app; the file manager UI is in `src/FileManager` ([credits](Frontend/src/FileManager/README.md)) |
+| `Frontend/` | React app and its Vitest tests; the file manager UI is in `src/FileManager` ([credits](Frontend/src/FileManager/README.md)) |
 | `Desktop/` | Electron desktop app |
-| `docs/` | [Roadmap](docs/ROADMAP.md) and the original [codebase review](docs/CODEBASE_REVIEW.md) |
+| `docs/` | [Deployment guide](docs/DEPLOYMENT.md), [roadmap](docs/ROADMAP.md), screenshots and the original [codebase review](docs/CODEBASE_REVIEW.md) |
 
 ## Roadmap
 
