@@ -92,17 +92,22 @@ const RecycleBin = ({ onRefresh }) => {
           <button type="button" className="fm-button fm-button-secondary" disabled={busy || !selected.length} onClick={handleRestore}>
             <MdOutlineRestore size={18} /> Restore
           </button>
-          <button
-            type="button"
-            className="fm-button fm-button-secondary"
-            disabled={busy || !selected.length}
-            onClick={() => setConfirm("delete")}
-          >
-            <MdDeleteForever size={18} /> Delete permanently
-          </button>
-          <button type="button" className="fm-button fm-button-danger" disabled={busy || !items?.length} onClick={() => setConfirm("empty")}>
-            Empty bin
-          </button>
+          {/* The wrapper carries the tooltip so it still shows while the button is disabled */}
+          <span className="fm-bin-tip" title="Delete the selected items for good. This can't be undone.">
+            <button
+              type="button"
+              className="fm-button fm-button-secondary"
+              disabled={busy || !selected.length}
+              onClick={() => setConfirm("delete")}
+            >
+              <MdDeleteForever size={18} /> Delete permanently
+            </button>
+          </span>
+          <span className="fm-bin-tip" title="Delete everything in the bin for good. This can't be undone.">
+            <button type="button" className="fm-button fm-button-danger" disabled={busy || !items?.length} onClick={() => setConfirm("empty")}>
+              Empty bin
+            </button>
+          </span>
         </div>
       </div>
 

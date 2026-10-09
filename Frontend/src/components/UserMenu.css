@@ -16,11 +16,6 @@
     border-color: transparent;
 }
 
-.user-menu-button:hover,
-.user-menu-button[aria-expanded="true"] {
-    border-color: rgba(255, 255, 255, 0.55);
-}
-
 .user-menu-button:focus-visible {
     outline: 2px solid var(--fv-focus-ring);
     outline-offset: 2px;

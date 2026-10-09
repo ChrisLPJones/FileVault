@@ -167,10 +167,6 @@ function SharedLinks() {
         <div className="settings-page">
             <h1 className="settings-title">Shared links</h1>
             <section className="settings-card shared-links-card" aria-label="Your shared links">
-                <p className="settings-hint">
-                    Anyone with one of these links can download the item (and its password, if it has one). Revoke a link to stop it working.
-                </p>
-
                 {status && (
                     <div className={`settings-alert ${status.type}`} role={status.type === "danger" ? "alert" : "status"}>
                         {status.message}

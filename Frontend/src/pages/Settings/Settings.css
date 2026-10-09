@@ -360,3 +360,8 @@ a.settings-button.settings-link-button {
     color: var(--fv-text-muted);
     font-weight: normal;
 }
+
+/* The hidden username fields in the password forms must stay hidden despite the input styles above */
+.settings-card input[hidden] {
+    display: none;
+}

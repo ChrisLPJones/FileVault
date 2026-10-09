@@ -53,7 +53,8 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
         <MdMenu size={20} />
       </button>
       <div className="sb-folders-scroll">
-        <QuickAccess compact={compact} onExpand={onToggleCompact} onFileOpen={onFileOpen} />
+        {/* Heading for the tree (and its empty state); the icons-only pane has none */}
+        {!compact && <div className="folders-heading" role="heading" aria-level={2}>Folders</div>}
         {foldersTree?.length > 0 ? (
           <>
             {foldersTree?.map((folder, index) => {
@@ -63,7 +64,18 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
         ) : (
           <div className="empty-nav-pane">{t("nothingHereYet")}</div>
         )}
+        <QuickAccess compact={compact} onExpand={onToggleCompact} onFileOpen={onFileOpen} />
       </div>
+      {/* Its own page: every link shared, to copy, check the password of or revoke */}
+      <button
+        type="button"
+        className="sb-recycle-bin sb-shared-links"
+        title="Shared links"
+        onClick={() => navigate("/shared-links")}
+      >
+        <MdLink size={22} aria-hidden="true" />
+        <span>Shared links</span>
+      </button>
       <button
         type="button"
         className={`sb-recycle-bin ${isBinOpen ? "active" : ""}`}
@@ -76,16 +88,6 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
       >
         <MdOutlineDelete size={22} aria-hidden="true" />
         <span>Recycle bin</span>
-      </button>
-      {/* Its own page: every link shared, to copy, check the password of or revoke */}
-      <button
-        type="button"
-        className="sb-recycle-bin sb-shared-links"
-        title="Shared links"
-        onClick={() => navigate("/shared-links")}
-      >
-        <MdLink size={22} aria-hidden="true" />
-        <span>Shared links</span>
       </button>
       <NavUser compact={compact} />
     </div>

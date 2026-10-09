@@ -55,6 +55,15 @@
     }
   }
 
+  .fm-bin-tip {
+    display: inline-flex;
+
+    // Disabled buttons don't pass hover on in every browser; let the wrapper's tooltip show
+    .fm-button:disabled {
+      pointer-events: none;
+    }
+  }
+
   .fm-bin-confirm {
     padding: 10px 14px;
     border-bottom: 1px solid $border-color;

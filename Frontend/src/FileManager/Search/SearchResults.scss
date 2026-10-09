@@ -124,21 +124,21 @@
   color: var(--fv-header-text);
 
   .fm-search-input {
-    border-color: rgba(255, 255, 255, 0.2);
-    background-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--fv-header-field-border);
+    background-color: var(--fv-header-field-bg);
     color: var(--fv-header-text);
 
     &::placeholder {
-      color: rgba(255, 255, 255, 0.65);
+      color: var(--fv-header-placeholder);
     }
 
     &:focus {
-      background-color: rgba(255, 255, 255, 0.16);
+      background-color: var(--fv-header-field-bg-focus);
     }
   }
 
   .fm-search-clear:hover {
-    background-color: rgba(255, 255, 255, 0.16);
+    background-color: var(--fv-header-hover);
   }
 }
 

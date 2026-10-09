@@ -1,6 +1,6 @@
 @use "../../styles/variables" as *;
 
-// Favourites and Recent above the folder tree (see QuickAccess.jsx)
+// Favourites and Recent below the folder tree (see QuickAccess.jsx)
 .quick-access {
   margin-bottom: 2px;
 
@@ -34,16 +34,6 @@
 
     &:focus-visible {
       outline: 2px solid var(--fv-focus-ring);
-    }
-  }
-
-  .folders-heading {
-    cursor: default;
-    padding-left: 22px;
-    margin-top: 10px;
-
-    &:hover {
-      background: none;
     }
   }
 
@@ -104,9 +94,9 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding-bottom: 6px;
-    margin-bottom: 6px;
-    border-bottom: 1px solid var(--fm-border);
+    padding-top: 6px;
+    margin-top: 6px;
+    border-top: 1px solid var(--fm-border);
 
     .quick-access-icon {
       display: flex;

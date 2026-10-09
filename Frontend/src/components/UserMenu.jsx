@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { FiLink, FiLogOut, FiSettings, FiShield } from "react-icons/fi";
+import { FiLogOut, FiSettings, FiShield } from "react-icons/fi";
 import { logout } from "../api/api";
 import Avatar from "./Avatar";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -10,7 +10,7 @@ import "./UserMenu.css";
 // Button that opens a menu with the account's name, Settings and Log out.
 // `children` is the button's content (default: the avatar). The menu is drawn in a portal so it
 // isn't clipped by the folder tree; it opens upwards from a button low on the screen and
-// downwards (right-aligned) from one near the top, like the header.
+// downwards (right-aligned) from one near the top of the screen.
 export default function UserMenu({ children, className = "", title }) {
     const [open, setOpen] = useState(false);
     const user = useUserProfile();
@@ -139,15 +139,6 @@ export default function UserMenu({ children, className = "", title }) {
                     >
                         <FiSettings aria-hidden="true" />
                         Settings
-                    </Link>
-                    <Link
-                        to="/shared-links"
-                        role="menuitem"
-                        className={`user-menu-item ${pathname === "/shared-links" ? "current" : ""}`}
-                        onClick={close}
-                    >
-                        <FiLink aria-hidden="true" />
-                        Shared links
                     </Link>
                     {user.isAdmin && (
                         <Link
