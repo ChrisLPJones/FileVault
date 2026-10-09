@@ -86,21 +86,32 @@ namespace Backend.Routes
                 .Produces<ErrorResponse>(409)
                 .Produces<ErrorResponse>(429).RequireAuthorization().RequireRateLimiting("two-factor");
 
-            // Step 2 of setup: confirm a code from the app, which turns 2FA on
+            // Step 2 of setup: confirm a code from the app, which turns 2FA on and signs out every
+            // other session (they were started without a code). This device stays logged in.
             app.MapPost("/user/2fa/enable", async (
+                HttpContext http,
                 ClaimsPrincipal user,
                 TwoFactorCodeRequest? request,
-                TwoFactorService twoFactor) =>
+                TwoFactorService twoFactor,
+                DatabaseServices db,
+                AuthServices auth) =>
             {
-                var codes = await twoFactor.EnableAsync(user.GetUserId(), request?.Code);
+                var userId = user.GetUserId();
+                var codes = await twoFactor.EnableAsync(userId, request?.Code);
                 if (codes == null)
                     return Results.BadRequest(new { error = "That code isn't valid. Check the time on your device and try again." });
 
-                return Results.Ok(new RecoveryCodesResponse(codes));
+                // Without a refresh cookie we can't tell which session is this one, so all are signed out
+                var current = await auth.CurrentSessionIdAsync(db, http);
+                var others = (await db.GetActiveSessionsAsync(userId)).Count(s => s.Id != current);
+                await db.RevokeOtherSessionsAsync(userId, current);
+
+                return Results.Ok(new TwoFactorEnabledResponse(codes, others));
             })
                 .WithTags("Two-factor authentication")
-                .WithSummary("Turn on two-factor authentication by confirming a code; returns 10 single-use recovery codes (shown once)")
-                .Produces<RecoveryCodesResponse>()
+                .WithSummary("Turn on two-factor authentication by confirming a code; signs out every other session " +
+                    "and returns 10 single-use recovery codes (shown once)")
+                .Produces<TwoFactorEnabledResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(429).RequireAuthorization().RequireRateLimiting("two-factor");
 

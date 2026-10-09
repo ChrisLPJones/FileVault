@@ -19,4 +19,7 @@ namespace Backend.Models
     public record TwoFactorSetupResponse(string Secret, string OtpAuthUri);
 
     public record RecoveryCodesResponse(List<string> RecoveryCodes);
+
+    // POST /user/2fa/enable: the recovery codes, and how many other sessions were signed out
+    public record TwoFactorEnabledResponse(List<string> RecoveryCodes, int OtherSessionsSignedOut);
 }

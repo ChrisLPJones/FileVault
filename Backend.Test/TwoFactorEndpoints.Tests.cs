@@ -247,6 +247,73 @@ namespace Backend.Test
                 .StatusCode.Should().Be(HttpStatusCode.BadRequest);
         }
 
+        // Log in again as an existing user; returns the access token and "fv_refresh=..." cookie
+        private static async Task<(string token, string cookie)> LoginWithCookieAsync(HttpClient client, string email)
+        {
+            var login = await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password });
+            login.StatusCode.Should().Be(HttpStatusCode.OK);
+            var cookie = login.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("fv_refresh=")).Split(';')[0];
+            return ((await JsonAsync(login)).GetProperty("success").GetString()!, cookie);
+        }
+
+        private static async Task<HttpStatusCode> RefreshStatusAsync(HttpClient client, string cookie)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "/user/refresh");
+            request.Headers.Add("Cookie", cookie);
+            return (await client.SendAsync(request)).StatusCode;
+        }
+
+        private static async Task<int> SessionCountAsync(HttpClient client, string token)
+        {
+            var sessions = await client.SendAsync(Authed(HttpMethod.Get, "/user/sessions", token));
+            sessions.StatusCode.Should().Be(HttpStatusCode.OK);
+            return (await JsonAsync(sessions)).GetArrayLength();
+        }
+
+        [Fact]
+        public async Task TurningOn_SignsOutOtherSessions_AndKeepsThisOne()
+        {
+            var (client, clock) = NewApp();
+            var (email, _) = await NewUserAsync(client);
+            var (token, thisDevice) = await LoginWithCookieAsync(client, email);
+            var (_, laptop) = await LoginWithCookieAsync(client, email);
+            var (_, phone) = await LoginWithCookieAsync(client, email);
+            var before = await SessionCountAsync(client, token);
+            before.Should().BeGreaterThanOrEqualTo(4, "the first login plus the three here");
+
+            var secret = await StartSetupAsync(client, token);
+            var enable = Authed(HttpMethod.Post, "/user/2fa/enable", token, new { code = CodeNow(secret, clock) });
+            enable.Headers.Add("Cookie", thisDevice);
+            var response = await client.SendAsync(enable);
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await JsonAsync(response)).GetProperty("otherSessionsSignedOut").GetInt32().Should().Be(before - 1);
+
+            (await RefreshStatusAsync(client, laptop)).Should().Be(HttpStatusCode.Unauthorized);
+            (await RefreshStatusAsync(client, phone)).Should().Be(HttpStatusCode.Unauthorized);
+            (await RefreshStatusAsync(client, thisDevice)).Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public async Task TurningOn_WithAWrongCode_SignsNothingOut()
+        {
+            var (client, clock) = NewApp();
+            var (email, _) = await NewUserAsync(client);
+            var (token, thisDevice) = await LoginWithCookieAsync(client, email);
+            var (_, laptop) = await LoginWithCookieAsync(client, email);
+            var before = await SessionCountAsync(client, token);
+
+            var secret = await StartSetupAsync(client, token);
+            var enable = Authed(HttpMethod.Post, "/user/2fa/enable", token,
+                new { code = Totp.Code(secret, Totp.CurrentStep(clock.GetUtcNow()) + 5) });
+            enable.Headers.Add("Cookie", thisDevice);
+            (await client.SendAsync(enable)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+            (await SessionCountAsync(client, token)).Should().Be(before);
+            (await RefreshStatusAsync(client, laptop)).Should().Be(HttpStatusCode.OK);
+            (await RefreshStatusAsync(client, thisDevice)).Should().Be(HttpStatusCode.OK);
+        }
+
         [Fact]
         public async Task Login_WithTwoFactor_NeedsTheCode_ThenWorksLikeANormalLogin()
         {

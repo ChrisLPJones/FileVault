@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { MdComputer, MdPhoneIphone } from "react-icons/md";
 import { getErrorMessage } from "../../api/api";
-import { getSessionsAPI, revokeOtherSessionsAPI, revokeSessionAPI } from "../../api/securityAPI";
+import { SESSIONS_CHANGED_EVENT, getSessionsAPI, revokeOtherSessionsAPI, revokeSessionAPI } from "../../api/securityAPI";
 import SettingsStatus from "./SettingsStatus";
 import "./SecurityCards.css";
 
@@ -28,14 +28,18 @@ function SessionsCard() {
 
     const reload = async () => setSessions(await getSessionsAPI());
 
+    // Load now, and again when another card signs sessions out (e.g. turning on 2FA)
     useEffect(() => {
         let cancelled = false;
-        getSessionsAPI()
+        const load = () => getSessionsAPI()
             .then((data) => !cancelled && setSessions(data))
             .catch((err) => !cancelled &&
                 setStatus({ type: "danger", message: getErrorMessage(err, "Could not load your sessions") }));
+        load();
+        window.addEventListener(SESSIONS_CHANGED_EVENT, load);
         return () => {
             cancelled = true;
+            window.removeEventListener(SESSIONS_CHANGED_EVENT, load);
         };
     }, []);
 

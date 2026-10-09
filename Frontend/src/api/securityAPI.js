@@ -8,8 +8,17 @@ export const getTwoFactorStatusAPI = async () => (await api.get("/user/2fa")).da
 // { secret, otpAuthUri } for the QR code
 export const startTwoFactorSetupAPI = async (password) => (await api.post("/user/2fa/setup", { password })).data;
 
-// Turns 2FA on; returns the recovery codes (only ever shown once)
-export const enableTwoFactorAPI = async (code) => (await api.post("/user/2fa/enable", { code })).data.recoveryCodes;
+// Fired when sessions were signed out elsewhere on the page, so the sessions list reloads
+export const SESSIONS_CHANGED_EVENT = "fv-sessions-change";
+export const notifySessionsChanged = () => window.dispatchEvent(new Event(SESSIONS_CHANGED_EVENT));
+
+// Turns 2FA on and signs out every other session.
+// Returns { recoveryCodes (only ever shown once), otherSessionsSignedOut }
+export const enableTwoFactorAPI = async (code) => {
+    const data = (await api.post("/user/2fa/enable", { code })).data;
+    notifySessionsChanged();
+    return data;
+};
 
 // Needs the password and either a code or a recovery code
 export const disableTwoFactorAPI = async (password, { code, recoveryCode }) =>

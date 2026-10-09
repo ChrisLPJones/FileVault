@@ -154,10 +154,16 @@ function TwoFactorCard() {
     });
 
     const confirmSetup = run("Could not turn on two-factor authentication", async () => {
-        const codes = await enableTwoFactorAPI(code.trim());
+        const { recoveryCodes: codes, otherSessionsSignedOut } = await enableTwoFactorAPI(code.trim());
         reset("codes");
         setRecoveryCodes(codes);
-        setStatus({ type: "success", message: "Two-factor authentication is on" });
+        setStatus({
+            type: "success",
+            message: otherSessionsSignedOut > 0
+                ? `Two-factor authentication is on. You've been signed out on ${otherSessionsSignedOut} other ` +
+                  `${otherSessionsSignedOut === 1 ? "device" : "devices"}.`
+                : "Two-factor authentication is on",
+        });
         await refresh();
     });
 
