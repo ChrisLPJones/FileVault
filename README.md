@@ -85,6 +85,8 @@ Data lives in two named volumes, `filevault_sql_data` and `filevault_file_storag
 
 To open the database in a GUI tool (SSMS, Azure Data Studio, VS Code SQLTools), copy `docker-compose.override.example.yml` to `docker-compose.override.yml` and restart with `docker compose up -d`. SQL Server is then reachable from this machine only at `127.0.0.1,1434`, user `sa`, with `MSSQL_SA_PASSWORD` from `.env`. Use `127.0.0.1` rather than `localhost`, which some tools resolve to IPv6 and then time out. To look at the stored files, run `docker compose exec api ls -l /data/storage`. They are encrypted, so download them through the app to read them.
 
+To use the admin page (`/admin`: every account's storage use and quota, and server totals), set `ADMIN_EMAILS` in `.env` to a comma-separated list of account emails and restart; those accounts get an Admin link in the account menu.
+
 The frontend bundle has the API URL compiled in. If the browser reaches the API somewhere other than `http://localhost:3000`, set `API_URL` (and `FRONTEND_URL` for CORS) in `.env` and rebuild.
 
 ## Local development

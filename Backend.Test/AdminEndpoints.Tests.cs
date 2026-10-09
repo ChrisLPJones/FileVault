@@ -212,6 +212,27 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task AdminEmails_CanBeOneCommaSeparatedValue_LikeTheDockerEnvironmentVariable()
+        {
+            var email = $"envadmin_{Guid.NewGuid():N}@example.test";
+            var envFactory = TestAccounts.WithoutLoginLimit(new WebApplicationFactory<Program>())
+                .WithWebHostBuilder(builder => builder.UseSetting("Admin:Emails", $"someone@elsewhere.test, {email} ;"));
+            var admin = await TestAccounts.CreateAsync(envFactory.CreateClient(), "envadmin", email);
+            var other = await TestAccounts.CreateAsync(envFactory.CreateClient(), "envplain");
+            try
+            {
+                (await admin.Client.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.OK);
+                (await other.Client.GetAsync("/admin/stats")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            }
+            finally
+            {
+                await admin.Client.DeleteAsync("/user");
+                await other.Client.DeleteAsync("/user");
+                await envFactory.DisposeAsync();
+            }
+        }
+
+        [Fact]
         public async Task WithoutAdminEmails_NobodyIsMadeAdmin()
         {
             var plainFactory = TestAccounts.WithoutLoginLimit(new WebApplicationFactory<Program>());

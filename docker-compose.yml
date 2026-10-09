@@ -52,6 +52,8 @@ services:
       Jwt__Key: ${JWT_KEY:?Set JWT_KEY in .env (see .env.example)}
       Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:?Set ENCRYPTION_MASTER_KEY in .env (see .env.example)}
       Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:5173}
+      # Comma-separated emails of the accounts that can use the admin page
+      Admin__Emails: ${ADMIN_EMAILS:-}
     ports:
       - "3000:8080"
     volumes:

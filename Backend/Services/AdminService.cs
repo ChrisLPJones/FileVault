@@ -6,11 +6,20 @@ namespace Backend.Services;
 // Users.IsAdmin is left alone (so it can be managed in the database instead).
 public class AdminService(IConfiguration config, ILogger<AdminService> logger)
 {
-    public IReadOnlyCollection<string> AdminEmails =>
-        (config.GetSection("Admin:Emails").Get<string[]>() ?? [])
-            .Select(email => email.Trim())
-            .Where(email => email.Length > 0)
-            .ToArray();
+    // A list in appsettings ("Emails": ["a@x", ...]), or one comma-separated value such as the
+    // Admin__Emails environment variable that docker-compose.yml sets from ADMIN_EMAILS
+    public IReadOnlyCollection<string> AdminEmails
+    {
+        get
+        {
+            var section = config.GetSection("Admin:Emails");
+            var values = section.GetChildren().Select(child => child.Value).Append(section.Value);
+            return values
+                .SelectMany(value => (value ?? "").Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+    }
 
     // Apply the list to one user (after logging in) or to everyone (userId null, at startup)
     public async Task SyncAsync(DatabaseServices db, string? userId = null)
