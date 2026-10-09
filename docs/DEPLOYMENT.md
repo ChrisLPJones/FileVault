@@ -303,7 +303,9 @@ In hosted mode:
   accounts are never removed (mark an account permanent on the Admin page).
 - 7 days before the removal a warning email is sent, only to an address that was confirmed and only
   if SMTP is set up (the `SMTP_*` settings). Without SMTP no warning is sent, but the removal still
-  happens. A user who signs in again before then keeps the account.
+  happens (the API logs a warning at startup in that case). A user who signs in again before then
+  keeps the account. Unsuspending an account, or removing its admin rights or permanent mark,
+  restarts its clock.
 - New users see a dismissible notice on the dashboard on first login saying unused accounts are
   removed. Administrators and permanent accounts don't see it. `HOSTED_CONTACT_EMAIL` adds the
   address to ask for a permanent account; leave it empty to leave that sentence out.
