@@ -25,7 +25,7 @@ const SECTIONS = [
   { key: "recent", title: "Recent", icon: MdHistory, empty: "Files you open will appear here" },
 ];
 
-// Favourites and Recent, above the folder tree. Clicking a folder opens it; clicking a file opens
+// Favourites and Recent, above the folder tree. Clicking a folder opens it; clicking a file shows
 // its folder with the file selected and shown in the details pane. In the compact (icons only)
 // tree each section is one icon that expands the tree.
 export default function QuickAccess({ compact, onExpand, onFileOpen }) {
@@ -63,9 +63,10 @@ export default function QuickAccess({ compact, onExpand, onFileOpen }) {
     });
   };
 
+  // A folder opens; a file is only selected (it isn't "opened", so Recent doesn't change)
   const open = (item) => {
-    onFileOpen?.(item);
     if (item.isDirectory) {
+      onFileOpen?.(item);
       setCurrentPath(item.path);
       onFolderChange?.(item.path);
       return;

@@ -102,17 +102,15 @@ function Dashboard() {
         }
     }, [updateFiles]);
 
-    // A file was previewed or downloaded: it moves to the top of Recent
+    // A file was opened (double-click, Enter or the context menu's Open) or downloaded: it moves
+    // to the top of Recent. Just selecting a file, which shows it in the details pane, doesn't count.
     const handleOpened = useCallback((file) => {
         if (!file?._id || file.isDirectory) return;
         updateFiles([file._id], { lastOpenedAt: new Date().toISOString() });
         markOpenedAPI(file._id).catch((err) => console.error(err));
     }, [updateFiles]);
 
-    const fileActions = useMemo(
-        () => ({ setFavourite: handleSetFavourite, markOpened: handleOpened }),
-        [handleSetFavourite, handleOpened]
-    );
+    const fileActions = useMemo(() => ({ setFavourite: handleSetFavourite }), [handleSetFavourite]);
 
     const handleDownload = async (filesToDownload) => {
         setError(null);
@@ -163,6 +161,7 @@ function Dashboard() {
                         width="100%"
                         initialPath={currentPath}
                         onFolderChange={setCurrentPath}
+                        onFileOpen={handleOpened}
                         toolbarContainer={headerSlot}
                     />
                 </FileActionsProvider>

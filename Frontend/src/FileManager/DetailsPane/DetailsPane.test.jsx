@@ -23,7 +23,7 @@ const file = {
 };
 
 const renderPane = (item = file, actions = {}) => {
-    const fileActions = { setFavourite: vi.fn(), markOpened: vi.fn(), ...actions };
+    const fileActions = { setFavourite: vi.fn(), ...actions };
     render(
         <TranslationProvider language="en-US">
             <FilesProvider filesData={[item]}>
@@ -79,10 +79,8 @@ describe("DetailsPane", () => {
         await waitFor(() => expect(fetchFileBlob).toHaveBeenCalledWith("f1"));
     });
 
-    it("counts as opening the file, and stars it", async () => {
+    it("stars the file", async () => {
         const actions = renderPane();
-        expect(actions.markOpened).toHaveBeenCalledWith(file);
-
         await userEvent.click(screen.getByRole("button", { name: "Add to favourites" }));
         expect(actions.setFavourite).toHaveBeenCalledWith([expect.objectContaining({ _id: "f1" })], true);
     });
