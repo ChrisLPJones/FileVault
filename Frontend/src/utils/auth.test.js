@@ -38,6 +38,12 @@ describe("access token helpers", () => {
         expect(getToken()).toBeNull();
     });
 
+    it("forgets the last files address when the token is cleared", () => {
+        sessionStorage.setItem("fv-last-files-url", "/dashboard?folder=%2FSecret");
+        clearToken();
+        expect(sessionStorage.getItem("fv-last-files-url")).toBeNull();
+    });
+
     it("treats a token as expiring within 30 seconds of its expiry", () => {
         expect(isTokenExpiring(makeToken({ expiresIn: 600 }))).toBe(false);
         expect(isTokenExpiring(makeToken({ expiresIn: 20 }))).toBe(true);

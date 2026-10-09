@@ -23,6 +23,7 @@ const UploadItem = ({
     onFileUploaded,
     handleFileRemove,
     resolveParentId,
+    checkSpace = () => null, // error message if the file no longer fits in the space left
     runLimited = (task) => task(),
 }) => {
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -181,16 +182,26 @@ const UploadItem = ({
         setUploading(false);
         setIsCanceled(true);
         setUploadProgress(0);
+        // A cancelled file no longer holds space back from the files added after it
+        setFiles((prev) => prev.map((file, i) => (i === index ? { ...file, cancelled: true } : file)));
     };
 
     const handleRetry = () => {
         if (fileData?.file) {
+            // Space may have been used since the file was queued
+            const spaceError = checkSpace();
+            if (spaceError) {
+                setIsCanceled(false);
+                showUploadError(spaceError);
+                return;
+            }
             setFiles((prev) =>
                 prev.map((file, i) => {
                     if (index === i) {
                         return {
                             ...file,
                             error: false,
+                            cancelled: false,
                         };
                     }
                     return file;

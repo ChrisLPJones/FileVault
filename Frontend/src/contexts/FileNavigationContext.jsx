@@ -30,10 +30,10 @@ export const FileNavigationProvider = ({ children, initialPath, onFolderChange }
 
   useEffect(() => {
     if (!isMountRef.current && Array.isArray(files) && files.length > 0) {
-      const activePath = files.some((file) => file.isDirectory && file.path === initialPath)
-        ? initialPath
-        : "";
-      setCurrentPath(activePath);
+      // Without an initialPath the location is left to LocationSync (the address bar)
+      if (initialPath && files.some((file) => file.isDirectory && file.path === initialPath)) {
+        setCurrentPath(initialPath);
+      }
       isMountRef.current = true;
     }
   }, [files]);

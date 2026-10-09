@@ -23,8 +23,14 @@ export const SearchProvider = ({ children }) => {
     setTerm("");
   };
 
+  // Show a search straight away, without the typing delay (restoring one from the address)
+  const setSearchTerm = (value) => {
+    setQuery(value);
+    setTerm(value.trim());
+  };
+
   return (
-    <SearchContext.Provider value={{ query, setQuery, term, clearSearch, revealPath, setRevealPath }}>
+    <SearchContext.Provider value={{ query, setQuery, term, setSearchTerm, clearSearch, revealPath, setRevealPath }}>
       {children}
     </SearchContext.Provider>
   );

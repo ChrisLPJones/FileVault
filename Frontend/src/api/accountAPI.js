@@ -8,7 +8,7 @@ export const notifyProfileChanged = () => window.dispatchEvent(new Event(PROFILE
 // { firstName, lastName, email, avatarUpdatedAt }
 export const getUserInfoAPI = async () => (await api.get("/user/info")).data;
 
-// { used, quota, maxUploadBytes } in bytes
+// { used, quota, maxUploadBytes, maxFileBytes } in bytes; used includes files in the recycle bin
 export const getUsageAPI = async () => (await api.get("/user/usage")).data;
 
 export const updateProfileAPI = async (firstName, lastName, email) => {

@@ -5,6 +5,9 @@ import { useFiles } from "../../contexts/FilesContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
 import NavUser from "./NavUser";
 import QuickAccess from "./QuickAccess";
+import NavSection from "./NavSection";
+import { useNavSections } from "./useNavSections";
+import Collapse from "../../components/Collapse/Collapse";
 import { MdLink, MdMenu, MdOutlineDelete } from "react-icons/md";
 import { useNavigate } from "react-router-dom";
 import { useRecycleBin } from "../../contexts/RecycleBinContext";
@@ -18,6 +21,7 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
   const { isBinOpen, openBin } = useRecycleBin();
   const { setSelectedFiles } = useSelection();
   const navigate = useNavigate();
+  const [expanded, toggleSection] = useNavSections();
 
   const createChildRecursive = (path, foldersStruct) => {
     if (!foldersStruct[path]) return []; // No children for this path (folder)
@@ -42,6 +46,13 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
     }
   }, [files]);
 
+  const tree =
+    foldersTree?.length > 0 ? (
+      foldersTree.map((folder, index) => <FolderTree key={index} folder={folder} onFileOpen={onFileOpen} />)
+    ) : (
+      <div className="empty-nav-pane">{t("nothingHereYet")}</div>
+    );
+
   return (
     <div className={`sb-folders-list ${compact ? "compact" : ""}`}>
       <button
@@ -53,16 +64,13 @@ const NavigationPane = ({ onFileOpen, compact = false, onToggleCompact }) => {
         <MdMenu size={20} />
       </button>
       <div className="sb-folders-scroll">
-        {/* Heading for the tree (and its empty state); the icons-only pane has none */}
-        {!compact && <div className="folders-heading" role="heading" aria-level={2}>Folders</div>}
-        {foldersTree?.length > 0 ? (
-          <>
-            {foldersTree?.map((folder, index) => {
-              return <FolderTree key={index} folder={folder} onFileOpen={onFileOpen} />;
-            })}
-          </>
-        ) : (
-          <div className="empty-nav-pane">{t("nothingHereYet")}</div>
+        {/* The icons-only pane always shows the tree, with no heading; otherwise Folders collapses
+            like Favourites and Recent. The tree stays mounted while collapsed so it keeps opening
+            the parents of the current folder. */}
+        {compact ? tree : (
+          <NavSection title="Folders" expanded={expanded.folders} onToggle={() => toggleSection("folders")}>
+            <Collapse open={expanded.folders}>{tree}</Collapse>
+          </NavSection>
         )}
         <QuickAccess compact={compact} onExpand={onToggleCompact} onFileOpen={onFileOpen} />
       </div>
