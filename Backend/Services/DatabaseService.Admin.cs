@@ -48,8 +48,12 @@ public partial class DatabaseServices
 
 
 
-    // Every account with its storage use and file count, oldest first
-    public async Task<List<AdminUser>> GetUsersForAdminAsync(long defaultQuota)
+    // Every account with its storage use and file count, oldest first. Reads every user's files,
+    // so it can be picked as a deadlock victim by someone's delete; it only reads, so it's retried.
+    public Task<List<AdminUser>> GetUsersForAdminAsync(long defaultQuota) =>
+        RetryOnDeadlockAsync(() => ReadUsersForAdminAsync(defaultQuota));
+
+    private async Task<List<AdminUser>> ReadUsersForAdminAsync(long defaultQuota)
     {
         var users = new List<AdminUser>();
 
@@ -104,8 +108,12 @@ public partial class DatabaseServices
 
 
 
-    // Totals across all users: (users, admins, files, folders, bytes stored)
-    public async Task<(int users, int admins, int files, int folders, long bytes)> GetAdminTotalsAsync()
+    // Totals across all users: (users, admins, files, folders, bytes stored). Retried on a
+    // deadlock, like GetUsersForAdminAsync.
+    public Task<(int users, int admins, int files, int folders, long bytes)> GetAdminTotalsAsync() =>
+        RetryOnDeadlockAsync(ReadAdminTotalsAsync);
+
+    private async Task<(int users, int admins, int files, int folders, long bytes)> ReadAdminTotalsAsync()
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
