@@ -497,3 +497,6 @@ Backend/.vscode/launch.json
 
 # Desktop app build output
 Desktop/dist/
+
+# Roadmap (kept local)
+docs/ROADMAP.md
