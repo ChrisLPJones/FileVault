@@ -287,6 +287,13 @@ public class ChunkedUploadService(
         return stale.Count;
     }
 
+    // Remove a deleted account's unfinished upload chunks (the Uploads rows go with the account)
+    public void DeleteUserTempFiles(string userId)
+    {
+        if (Guid.TryParse(userId, out var id))
+            DeleteDirectory(Path.Combine(TmpRoot, id.ToString()));
+    }
+
     private void DeleteDirectory(string path)
     {
         try

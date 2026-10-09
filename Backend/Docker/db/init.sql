@@ -657,3 +657,24 @@ GO
 -- otherwise the oldest account with a confirmed email. It lives in the API (see
 -- AdminBootstrapOnStartup) because this script can't read app settings, and must not hand
 -- admin to someone else before the setting is applied.
+
+------------------------------------------------------------
+-- ADMIN ACCOUNT MANAGEMENT (added to existing databases too)
+------------------------------------------------------------
+-- Marks an account the inactive-account removal (hosted mode) must never delete.
+IF COL_LENGTH('Users', 'IsPermanent') IS NULL
+BEGIN
+    ALTER TABLE Users ADD IsPermanent BIT NOT NULL CONSTRAINT DF_Users_IsPermanent DEFAULT 0;
+    PRINT 'Column "Users.IsPermanent" added.';
+END
+GO
+
+-- Access tokens issued before this moment (UTC) are refused. Set when an administrator
+-- sets the user's password, so the user is signed out at once rather than when the
+-- 15-minute access token expires. NULL = no token has been invalidated.
+IF COL_LENGTH('Users', 'TokensValidAfter') IS NULL
+BEGIN
+    ALTER TABLE Users ADD TokensValidAfter DATETIME2 NULL;
+    PRINT 'Column "Users.TokensValidAfter" added.';
+END
+GO

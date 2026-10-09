@@ -604,6 +604,16 @@ public partial class DatabaseServices
             // touching Files so the lock order is always the same
             await TakeAdminMembershipLockAsync(connection, (SqlTransaction)transaction);
 
+            await using (var exists = new SqlCommand("SELECT COUNT(1) FROM Users WHERE Id = @UserId", connection, (SqlTransaction)transaction))
+            {
+                exists.Parameters.AddWithValue("@UserId", userId);
+                if (Convert.ToInt32(await exists.ExecuteScalarAsync()) == 0)
+                {
+                    await transaction.RollbackAsync();
+                    return HttpReturnResult.NotFound("User not found");
+                }
+            }
+
             // Never delete the last administrator
             await using (var lastAdmin = new SqlCommand($@"
                 SELECT CASE WHEN EXISTS (SELECT 1 FROM Users WHERE Id = @UserId AND {EffectiveAdminPredicate})

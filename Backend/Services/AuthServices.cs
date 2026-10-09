@@ -74,17 +74,22 @@ namespace Backend.Services
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"] ?? throw new InvalidOperationException("Jwt:Key is not set.")));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
+            var now = DateTime.UtcNow;
             var claims = new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                // Issue time to the millisecond, for AccessTokenGate
+                new Claim(AccessTokenGate.IssuedAtMillisecondsClaim,
+                    new DateTimeOffset(now).ToUnixTimeMilliseconds().ToString(), ClaimValueTypes.Integer64)
             };
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddMinutes(jwtConfig.GetValue("ExpireMinutes", 15)),
+                IssuedAt = now,
+                Expires = now.AddMinutes(jwtConfig.GetValue("ExpireMinutes", 15)),
                 Issuer = jwtConfig["Issuer"],
                 Audience = jwtConfig["Audience"],
                 SigningCredentials = credentials,

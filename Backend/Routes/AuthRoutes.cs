@@ -251,18 +251,15 @@ namespace Backend.Routes
                 HttpContext http,
                 ClaimsPrincipal user,
                 DatabaseServices db,
-                FileServices fs,
-                AvatarService avatars) =>
+                AccountDeletionService deletion) =>
             {
                 var userId = user.GetUserId();
                 if (await db.GetUserByUserId(userId) == null)
                     return Results.NotFound(new { error = "User not found" });
 
-                var response = await db.DeleteUserAndFilesById(userId, fs);
+                var response = await deletion.DeleteAsync(userId);
                 if (!response.Success)
                     return Results.Json(new { error = response.Message }, statusCode: response.StatusCode ?? 500);
-
-                avatars.DeleteFile(userId);
 
                 // Refresh tokens are deleted with the user; clear the cookie too
                 AuthServices.ClearRefreshCookie(http);
