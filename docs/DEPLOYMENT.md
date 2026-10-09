@@ -268,7 +268,8 @@ Admin page ("Admin rights" column). There must always be at least one administra
 last one, or the last administrator deleting their own account, is refused.
 
 Administrators can also create accounts (active immediately, email already confirmed), set a user's
-password (signs them out everywhere), mark accounts permanent, and delete accounts. Each of these
+password (signs them out everywhere), suspend and unsuspend accounts, mark accounts permanent, and
+delete accounts. A suspended administrator doesn't count as an administrator until unsuspended. Each of these
 writes an audit line to the API log under the `Backend.AdminAudit` category, using account ids only
 (no emails or passwords), so you can watch that category for admin activity.
 
