@@ -172,13 +172,15 @@ namespace Backend.Routes
                 var avatar = await db.GetAvatarAsync(userId);
                 var showNotice = hosted.IsHosted && await db.ShouldShowHostedNoticeAsync(userId);
                 var verified = await db.IsEmailVerifiedAsync(userId);
+                var pending = await db.GetPendingEmailAsync(userId);
                 return Results.Ok(showNotice
                     ? new HostedUserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified,
-                        true, hosted.InactiveDays, hosted.ContactEmail)
-                    : new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified));
+                        true, hosted.InactiveDays, hosted.ContactEmail, pending?.Email, pending?.ExpiresAt)
+                    : new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified,
+                        pending?.Email, pending?.ExpiresAt));
             })
                 .WithTags("Account")
-                .WithSummary("Get the current user's name, email, whether it's confirmed and when their profile picture last changed " +
+                .WithSummary("Get the current user's name, email, whether it's confirmed, the email change waiting to be confirmed (pendingEmail, pendingEmailExpiresAt) and when their profile picture last changed " +
                     "(hosted mode adds hostedNotice and hostedContactEmail while the first-login notice is due)")
                 .Produces<UserInfoResponse>()
                 .Produces<ErrorResponse>(404).RequireAuthorization();
@@ -193,53 +195,45 @@ namespace Backend.Routes
                 .WithSummary("Dismiss the hosted-mode notice for the current user")
                 .Produces<SuccessResponse>().RequireAuthorization();
 
-            // Updates the authenticated user's name and email
+            // Updates the authenticated user's name (the email changes through POST /user/email/change)
             app.MapPatch("/user/profile", async (
                 ClaimsPrincipal user,
                 ProfileUpdateRequest request,
                 DatabaseServices db,
-                AuthServices auth,
-                AccountEmailService emails) =>
+                AuthServices auth) =>
             {
                 var firstName = request?.FirstName?.Trim();
                 var lastName = request?.LastName?.Trim() ?? "";
                 var email = request?.Email?.Trim().ToLowerInvariant();
-
-                var validationError = AuthServices.ValidateAccount(firstName, lastName, email);
-                if (validationError != null || firstName is null || email is null)
-                    return Results.BadRequest(new { error = validationError ?? "Invalid JSON" });
 
                 var userId = user.GetUserId();
                 var account = await db.GetUserByUserId(userId);
                 if (account == null)
                     return Results.NotFound(new { error = "User not found" });
 
-                var conflict = await db.FindAccountConflictAsync(email, userId);
-                if (conflict != null)
-                    return Results.Conflict(new { error = conflict });
+                // The email is optional here; if given it must be the current one
+                if (string.IsNullOrEmpty(email))
+                    email = account.Email;
+                else if (!string.Equals(email, account.Email, StringComparison.OrdinalIgnoreCase))
+                    return Results.BadRequest(new { error = "Change your email address with POST /user/email/change" });
 
-                await db.UpdateProfileAsync(userId, firstName, lastName, email);
-                var emailChanged = !string.Equals(account.Email, email, StringComparison.OrdinalIgnoreCase);
+                var validationError = AuthServices.ValidateAccount(firstName, lastName, email);
+                if (validationError != null || firstName is null)
+                    return Results.BadRequest(new { error = validationError ?? "Invalid JSON" });
 
-                // New access token so the email claim is current
+                await db.UpdateNameAsync(userId, firstName, lastName);
+
+                // New access token, as before
                 account.FirstName = firstName;
                 account.LastName = lastName;
-                account.Email = email;
-
-                // A new address needs confirming
-                if (emailChanged)
-                {
-                    await db.SetEmailVerifiedAsync(userId, false);
-                    await emails.SendVerificationAsync(account, db);
-                }
 
                 return Results.Ok(new { Success = "Profile updated", Token = auth.GetJWTToken(account) });
             })
                 .WithTags("Account")
-                .WithSummary("Change name and email (returns a new access token)")
+                .WithSummary("Change first and last name (returns a new access token); the email is optional and must be unchanged, " +
+                    "change it with POST /user/email/change")
                 .Produces<TokenUpdateResponse>()
-                .Produces<ErrorResponse>(400)
-                .Produces<ErrorResponse>(409).RequireAuthorization();
+                .Produces<ErrorResponse>(400).RequireAuthorization();
 
             // Changes the authenticated user's password (requires the current one)
             app.MapPost("/user/password", async (
@@ -263,6 +257,9 @@ namespace Backend.Routes
                     return Results.BadRequest(new { error = passwordError ?? "New password is required" });
 
                 await db.UpdatePasswordHashAsync(userId, auth.GeneratePasswordHash(request.NewPassword));
+
+                // A pending email change was started with the old password: drop it
+                await db.CancelPendingEmailChangeAsync(userId);
 
                 // End every other session, then start a fresh one for this client
                 await db.RevokeAllRefreshTokensAsync(userId);

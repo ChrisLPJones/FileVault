@@ -138,6 +138,12 @@ Other API settings can be passed as environment variables on the `api` service u
 `RateLimiting__auth__PermitLimit` or `TwoFactor__Issuer` (the name shown in authenticator apps).
 See `Backend/appsettings.json` for the full list and defaults.
 
+Changing the email address from Settings is limited per account to `EmailChange__MaxPerDay`
+confirmation links per 24 hours (default 5) and `EmailChange__ResendCooldownSeconds` between them
+(default 60), on top of the per-IP `RateLimiting__email__PermitLimit`. The link goes to the new
+address and must be opened while signed in as that account (it points at `App:FrontendUrl`, like the
+other email links); the old address stays the login until then. No database change is needed.
+
 `Auth__UserStateCacheSeconds` (default 30) is how long the API caches each user's sign-in state when
 checking access tokens. When an administrator sets a user's password or suspends an account, that user's current access
 token stops working immediately; changes made on another API instance or directly in the database can take up
@@ -254,7 +260,8 @@ account with that email becomes one only once its mailbox is proven, by either:
 
 It also happens at API start for an account with that email that is already confirmed. An account
 whose email was changed to this address can never become the first administrator, by the link, at
-start or by a password reset. Emails are compared exactly (look-alike characters don't match).
+start or by a password reset. (Asking to change an email to this address does not occupy it: the new
+address is only pending until confirmed, so the owner can still register it.) Emails are compared exactly (look-alike characters don't match).
 
 Email delivery needs the `SMTP_*` settings (or find the links in `docker compose logs api`).
 

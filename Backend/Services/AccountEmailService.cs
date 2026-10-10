@@ -17,6 +17,11 @@ public partial class AccountEmailService(IConfiguration config, EmailQueue queue
     public static readonly TimeSpan VerifyLifetime = TimeSpan.FromHours(24);
     public static readonly TimeSpan ResetLifetime = TimeSpan.FromHours(1);
 
+    // Changing the email address: the link to the new address, and the "this wasn't me" link to the old one
+    public const string ChangePurpose = "change-email";
+    public const string CancelChangePurpose = "cancel-email-change";
+    public static readonly TimeSpan ChangeLifetime = TimeSpan.FromHours(24);
+
     [GeneratedRegex("^[A-Za-z0-9_-]{43}$")]
     private static partial Regex TokenFormat();
 
@@ -60,6 +65,47 @@ public partial class AccountEmailService(IConfiguration config, EmailQueue queue
             "this email; your password hasn't changed."));
     }
 
+    // Email the NEW address a link to confirm it for this account. Sent to an address the requester
+    // typed, so it carries no user-controlled text (not even their name). Returns when the link expires.
+    public async Task<DateTime> SendEmailChangeConfirmationAsync(UserModel user, string newEmail, DatabaseServices db)
+    {
+        var token = NewToken();
+        var expires = DateTime.UtcNow + ChangeLifetime;
+        await db.StoreAccountTokenAsync(user.Id.ToString(), ChangePurpose, HashToken(token), newEmail, expires);
+
+        queue.Enqueue(new EmailMessage(newEmail, "Confirm your new FileVault email address",
+            "Someone asked to use this email address for their FileVault account.\n\n" +
+            "If that was you, sign in to FileVault with your current details and open this link to confirm it:\n\n" +
+            $"{FrontendUrl}/confirm-email?token={token}\n\n" +
+            "The link expires in 24 hours. If it wasn't you, ignore this email; nothing will change."));
+        return expires;
+    }
+
+    // Tell the OLD address (the caller checks that it is a confirmed one) that a change was asked
+    // for, with a link to cancel it and sign out everywhere
+    public async Task SendEmailChangeRequestedNoticeAsync(UserModel user, string newEmail, DatabaseServices db)
+    {
+        var token = NewToken();
+        await db.StoreAccountTokenAsync(user.Id.ToString(), CancelChangePurpose, HashToken(token), newEmail, DateTime.UtcNow + ChangeLifetime);
+
+        queue.Enqueue(new EmailMessage(user.Email, "FileVault email address change requested",
+            $"Hi {user.FirstName},\n\n" +
+            $"Someone asked to change the email address of your FileVault account to {newEmail}. " +
+            "Nothing changes until that address is confirmed from a signed-in session of your account.\n\n" +
+            "If it was you, there is nothing to do. If it wasn't, open this link to cancel the change " +
+            "and sign out of every device:\n\n" +
+            $"{FrontendUrl}/cancel-email-change?token={token}\n\n" +
+            "We then recommend resetting your password. The link expires in 24 hours."));
+    }
+
+    // Tell the old address its account now uses another one (no link)
+    public void SendEmailChangedNotice(string oldEmail, string firstName, string newEmail) =>
+        queue.Enqueue(new EmailMessage(oldEmail, "Your FileVault email address was changed",
+            $"Hi {firstName},\n\n" +
+            $"The email address of your FileVault account was changed to {newEmail}. " +
+            "You now sign in with the new address.\n\n" +
+            "If this wasn't you, contact your FileVault administrator."));
+
     // Tell a user their account will be removed for inactivity (hosted mode). The address is only
     // emailed if it was confirmed; the caller checks.
     public void SendInactivityWarning(string email, string firstName, DateTime removalDueAt, int inactiveDays, string? contactEmail)
@@ -75,6 +121,10 @@ public partial class AccountEmailService(IConfiguration config, EmailQueue queue
             contact +
             $"{FrontendUrl}/login"));
     }
+
+    // The stored form of a token from a link, or null if it isn't shaped like one
+    public static string? HashIfWellFormed(string? token) =>
+        token != null && TokenFormat().IsMatch(token) ? HashToken(token) : null;
 
     // Use a token: the user (and the email it was sent to), or null if it's unknown, used or expired
     public static async Task<DatabaseServices.AccountTokenUse?> ConsumeAsync(string? token, string purpose, DatabaseServices db) =>

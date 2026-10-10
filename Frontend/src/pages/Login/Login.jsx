@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../Auth/Auth.css";
 import { login } from "../../services/Auth";
 import { startSession } from "../../utils/auth";
+import { returnPathAfterLogin } from "../../utils/returnPath";
 import ServerStatus from "../../components/ServerStatus";
 import { getErrorMessage } from "../../api/api";
 import { resendVerificationByEmailAPI } from "../../api/accountEmailAPI";
@@ -61,7 +62,7 @@ function Login() {
             }
             if (response.status === 200) {
                 startSession(response.data.success);
-                navigate("/dashboard", { replace: true });
+                navigate(returnPathAfterLogin(location.state), { replace: true });
                 return;
             }
             // Right password, but the address hasn't been confirmed yet: offer to resend the link
@@ -89,7 +90,7 @@ function Login() {
                 challengeToken={challengeToken}
                 onSuccess={(token) => {
                     startSession(token);
-                    navigate("/dashboard", { replace: true });
+                    navigate(returnPathAfterLogin(location.state), { replace: true });
                 }}
                 onRestart={() => setChallengeToken(null)}
             />

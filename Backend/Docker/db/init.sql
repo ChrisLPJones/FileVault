@@ -469,8 +469,11 @@ END
 GO
 
 -- Single-use links sent by email. Purpose is 'verify-email' (Email is the
--- address being confirmed) or 'reset-password'. Only a SHA-256 hash of each
--- token is stored.
+-- address being confirmed), 'reset-password', 'change-email' (sent to the new
+-- address; Email is that pending address, so the newest unused, unexpired row
+-- is the user's pending email change) or 'cancel-email-change' (sent to the
+-- old address; Email is the pending address it cancels). Only a SHA-256 hash
+-- of each token is stored.
 IF NOT EXISTS (SELECT *
 FROM INFORMATION_SCHEMA.TABLES
 WHERE TABLE_NAME = 'AccountTokens')

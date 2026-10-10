@@ -36,7 +36,7 @@ namespace Backend.Test
             await _db.DisposeAsync();
         }
 
-        [GeneratedRegex(@"/(verify-email|reset-password)\?token=([A-Za-z0-9_-]{43})")]
+        [GeneratedRegex(@"/(verify-email|reset-password|confirm-email)\?token=([A-Za-z0-9_-]{43})")]
         private static partial Regex LinkPattern();
 
         // The API against the scratch database with the setting (null = not set) and emails captured
@@ -252,55 +252,63 @@ namespace Backend.Test
             (await _db.AdminCountAsync()).Should().Be(1);
         }
 
+        private static Task<HttpResponseMessage> RequestChangeAsync(HttpClient client, string email) =>
+            client.PostAsJsonAsync("/user/email/change", new { email, currentPassword = TestAccounts.Password });
+
         [Fact]
-        public async Task ChangingAnEmailToTheOwnersAddress_NeverPromotes_ByLink_Startup_OrReset()
+        public async Task AskingToChangeToTheOwnersAddress_DoesNotTakeItOrBlockTheOwner_AndTheSquattersLinkIsUseless()
         {
             var api = Api();
-            var user = await TestAccounts.CreateAsync(api, "squat");
+            var squatter = await TestAccounts.CreateAsync(api, "squat");
             (await _db.AdminCountAsync()).Should().Be(0);
 
-            // A signed-in user changes their email to the initial-admin address
-            var change = await user.Client.PatchAsJsonAsync("/user/profile",
-                new { firstName = "Squat", lastName = "Ter", email = Owner });
-            change.StatusCode.Should().Be(HttpStatusCode.OK);
+            // A signed-in user asks for the initial-admin address: it is only pending
+            (await RequestChangeAsync(squatter.Client, Owner)).StatusCode.Should().Be(HttpStatusCode.OK);
+            var squatterLink = await WaitForTokenAsync(Owner, "confirm-email");
 
-            // The owner opens the confirmation link sent to their mailbox
+            // The owner can still register it, and confirming it makes them the administrator
+            await RegisterAsync(api, Owner);
             var verify = await VerifyAsync(api, await WaitForTokenAsync(Owner, "verify-email"));
             verify.StatusCode.Should().Be(HttpStatusCode.OK);
-            (await PasswordResetFlagAsync(verify)).Should().BeFalse();
+            (await _db.IsAdminAsync(Owner)).Should().BeTrue();
+            (await _db.AdminCountAsync()).Should().Be(1);
+            await ResetPasswordAsync(api, Owner, OwnerPassword);
+
+            // Opening the squatter's link signed out does nothing; as the owner it is not their link
+            (await api.CreateClient().PostAsJsonAsync("/user/email/confirm", new { token = squatterLink })).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            var owner = api.CreateClient();
+            await TestAccounts.LoginAsync(owner, Owner, OwnerPassword);
+            (await owner.PostAsJsonAsync("/user/email/confirm", new { token = squatterLink })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+            // The squatter's own attempt finds the address taken and changes nothing
+            (await squatter.Client.PostAsJsonAsync("/user/email/confirm", new { token = squatterLink })).StatusCode.Should().Be(HttpStatusCode.Conflict);
+            (await squatter.Client.GetFromJsonAsync<JsonElement>("/user/info")).GetProperty("email").GetString().Should().Be(squatter.Email);
+            (await squatter.Client.GetAsync("/admin/users")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await _db.AdminCountAsync()).Should().Be(1);
+        }
+
+        [Fact]
+        public async Task ASquatterWhoReallyConfirmsTheOwnersAddress_NeverBecomesAdmin_ByStartupOrReset()
+        {
+            var api = Api();
+            var squatter = await TestAccounts.CreateAsync(api, "squat");
+
+            // The test holds the mailbox, so the squatter can complete the change
+            (await RequestChangeAsync(squatter.Client, Owner)).StatusCode.Should().Be(HttpStatusCode.OK);
+            var confirm = await squatter.Client.PostAsJsonAsync("/user/email/confirm", new { token = await WaitForTokenAsync(Owner, "confirm-email") });
+            confirm.StatusCode.Should().Be(HttpStatusCode.OK);
             (await _db.IsAdminAsync(Owner)).Should().BeFalse();
             (await _db.AdminCountAsync()).Should().Be(0);
-
-            // The user's existing access token gets nowhere near the admin endpoints
-            (await user.Client.GetFromJsonAsync<AdminStatusResponse>("/admin/me"))!.IsAdmin.Should().BeFalse();
-            (await user.Client.GetAsync("/admin/users")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
             // Nor does the next start make them admin
             _db.StartApi(_baseFactory, Owner);
             (await _db.AdminCountAsync()).Should().Be(0);
 
-            // Resetting the password doesn't promote it either, and the signed-in user's token stays powerless
+            // Resetting the password (the mail goes to the squatter's account now) doesn't promote it, and their token stays powerless
             await ResetPasswordAsync(api, Owner, OwnerPassword);
             (await _db.IsAdminAsync(Owner)).Should().BeFalse();
             (await _db.AdminCountAsync()).Should().Be(0);
-            (await user.Client.GetAsync("/admin/users")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        }
-
-        [Fact]
-        public async Task ChangedEmail_ThenOwnerResetsPasswordViaForgotPassword_DoesNotMakeTheSignedInAttackerAdmin()
-        {
-            var api = Api();
-            var attacker = await TestAccounts.CreateAsync(api, "attacker");
-
-            (await attacker.Client.PatchAsJsonAsync("/user/profile",
-                new { firstName = "At", lastName = "Tacker", email = Owner })).StatusCode.Should().Be(HttpStatusCode.OK);
-
-            // The owner uses Forgot password, emailed to the address now on the attacker's account
-            await ResetPasswordAsync(api, Owner, OwnerPassword);
-
-            (await _db.IsAdminAsync(Owner)).Should().BeFalse();
-            (await _db.AdminCountAsync()).Should().Be(0);
-            (await attacker.Client.GetAsync("/admin/users")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await squatter.Client.GetAsync("/admin/users")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         }
 
         [Fact]

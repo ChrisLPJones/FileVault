@@ -9,7 +9,18 @@ namespace Backend.Models
 
     public record TokenUpdateResponse(string Success, string Token);
 
-    public record UserInfoResponse(string FirstName, string LastName, string Email, DateTime? AvatarUpdatedAt, bool EmailVerified);
+    // PendingEmail / PendingEmailExpiresAt (UTC) are left out unless an email change is waiting to be confirmed
+    public record UserInfoResponse(string FirstName, string LastName, string Email, DateTime? AvatarUpdatedAt, bool EmailVerified,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        string? PendingEmail = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        DateTime? PendingEmailExpiresAt = null);
+
+    // POST /user/email/change: the address now waiting to be confirmed, and when its link expires (UTC)
+    public record EmailChangeRequestedResponse(string Success, string PendingEmail, DateTime ExpiresAt);
+
+    // POST /user/email/confirm: the account's new email and a new access token carrying it
+    public record EmailChangeConfirmedResponse(string Success, string Email, string Token);
 
     // GET /user/info in hosted mode while the first-login notice is due: the usual fields plus
     // these two (the contact address is left out when none is set)
@@ -17,6 +28,8 @@ namespace Backend.Models
         bool HostedNotice,
         int HostedInactiveDays,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        string? HostedContactEmail)
-        : UserInfoResponse(FirstName, LastName, Email, AvatarUpdatedAt, EmailVerified);
+        string? HostedContactEmail,
+        string? PendingEmail = null,
+        DateTime? PendingEmailExpiresAt = null)
+        : UserInfoResponse(FirstName, LastName, Email, AvatarUpdatedAt, EmailVerified, PendingEmail, PendingEmailExpiresAt);
 }

@@ -154,14 +154,14 @@ namespace Backend.Test
             await AuthenticateAsync();
 
             var response = await _client.PatchAsJsonAsync("/user/profile",
-                new { firstName = $"Updated{RunId}", lastName = "Person", email = $"updated_{RunId}@example.com" });
+                new { firstName = $"Updated{RunId}", lastName = "Person", email = TestEmail });
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             content.Should().Contain("\"success\":\"Profile updated\"").And.Contain("\"token\":");
 
             var info = await _client.GetStringAsync("/user/info");
-            info.Should().Be($"{{\"firstName\":\"Updated{RunId}\",\"lastName\":\"Person\",\"email\":\"updated_{RunId}@example.com\",\"avatarUpdatedAt\":null,\"emailVerified\":false}}");
+            info.Should().Be($"{{\"firstName\":\"Updated{RunId}\",\"lastName\":\"Person\",\"email\":\"{TestEmail}\",\"avatarUpdatedAt\":null,\"emailVerified\":true}}");
         }
 
         [Fact, TestPriority(5)]

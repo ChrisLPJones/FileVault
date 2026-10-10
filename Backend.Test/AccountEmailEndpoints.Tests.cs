@@ -172,36 +172,24 @@ namespace Backend.Test
         }
 
         [Fact]
-        public async Task ChangingTheEmail_KeepsTheSession_ButTheNewAddressMustBeConfirmedBeforeTheNextLogin()
+        public async Task SavingTheProfile_KeepsTheAddressConfirmed_AndSendsNothing()
         {
             var email = NewEmail();
             var client = await NewUserAsync(_app, email);
-            var oldToken = await WaitForTokenAsync(email, "verify-email");
+            await WaitForTokenAsync(email, "verify-email");
+            var sent = EmailsTo(email);
 
-            var newEmail = NewEmail();
-            (await client.PatchAsJsonAsync("/user/profile", new { firstName = "Core", lastName = "Tester", email = newEmail }))
+            // The email is optional and, if given, must be the current one (any case)
+            (await client.PatchAsJsonAsync("/user/profile", new { firstName = "Renamed", lastName = "", email = email.ToUpperInvariant() }))
                 .StatusCode.Should().Be(HttpStatusCode.OK);
-            var newToken = await WaitForTokenAsync(newEmail, "verify-email");
-
-            // This session carries on; a new login waits for the new address to be confirmed
-            (await client.GetAsync("/files")).StatusCode.Should().Be(HttpStatusCode.OK);
-            (await IsVerifiedAsync(client)).Should().BeFalse();
-            (await LoginStatusAsync(newEmail, Password)).Should().Be(HttpStatusCode.Forbidden);
-
-            var anonymous = Anonymous(_app);
-            (await anonymous.PostAsJsonAsync("/user/verify-email", new { token = oldToken })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
-            (await IsVerifiedAsync(client)).Should().BeFalse();
-            (await anonymous.PostAsJsonAsync("/user/verify-email", new { token = newToken })).StatusCode.Should().Be(HttpStatusCode.OK);
-            (await IsVerifiedAsync(client)).Should().BeTrue();
-            (await LoginStatusAsync(newEmail, Password)).Should().Be(HttpStatusCode.OK);
-
-            // Saving the profile without changing the address keeps it verified and sends nothing
-            var sent = EmailsTo(newEmail);
-            (await client.PatchAsJsonAsync("/user/profile", new { firstName = "Renamed", lastName = "", email = newEmail.ToUpperInvariant() }))
+            (await client.PatchAsJsonAsync("/user/profile", new { firstName = "Renamed Again", lastName = "Tester" }))
                 .StatusCode.Should().Be(HttpStatusCode.OK);
             (await IsVerifiedAsync(client)).Should().BeTrue();
+            var info = await ReadJsonAsync(await client.GetAsync("/user/info"));
+            info.GetProperty("firstName").GetString().Should().Be("Renamed Again");
+            info.GetProperty("email").GetString().Should().Be(email);
             await Task.Delay(300);
-            EmailsTo(newEmail).Should().Be(sent);
+            EmailsTo(email).Should().Be(sent);
         }
 
         [Fact]
@@ -216,18 +204,15 @@ namespace Backend.Test
             // Confirmed: nothing to send
             var sent = EmailsTo(email);
             (await (await client.PostAsync("/user/resend-verification", null)).Content.ReadAsStringAsync()).Should().Contain("already confirmed");
-
-            // After changing the address (still logged in), a new link goes to the new address
-            var newEmail = NewEmail();
-            (await client.PatchAsJsonAsync("/user/profile", new { firstName = "Core", lastName = "Tester", email = newEmail }))
-                .StatusCode.Should().Be(HttpStatusCode.OK);
-            await WaitForTokenAsync(newEmail, "verify-email");
-            (await client.PostAsync("/user/resend-verification", null)).StatusCode.Should().Be(HttpStatusCode.OK);
-            var token = await WaitForTokenAsync(newEmail, "verify-email", alreadySeen: 1);
-            (await Anonymous(_app).PostAsJsonAsync("/user/verify-email", new { token })).StatusCode.Should().Be(HttpStatusCode.OK);
-
             await Task.Delay(300);
             EmailsTo(email).Should().Be(sent);
+
+            // An account whose address is not confirmed (e.g. changed under the old flow) gets a new link
+            await ExecuteSqlAsync("UPDATE Users SET EmailVerified = 0 WHERE Email = @Email", ("@Email", email));
+            (await client.PostAsync("/user/resend-verification", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+            var token = await WaitForTokenAsync(email, "verify-email", alreadySeen: 1);
+            (await Anonymous(_app).PostAsJsonAsync("/user/verify-email", new { token })).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await IsVerifiedAsync(client)).Should().BeTrue();
         }
 
         [Fact]

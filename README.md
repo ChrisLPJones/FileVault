@@ -31,6 +31,7 @@
 
 **Account and appearance**
 - Log in with email; first and last name, profile picture, password change, account deletion
+- Changing your email address needs your password and is confirmed by a link sent to the new address (open it while signed in); until then the current address stays your login, and the old address (if confirmed) gets a "wasn't me" link that cancels the change and signs out every device
 - Light, dark and system themes, and a choice of accent colour
 - An admin page for the server owner: every account's avatar, storage use and quota, each user's last login IP address and country (looked up in a local database, nothing sent to a third party), and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark non-admin accounts permanent (admins are always permanent), suspend and unsuspend accounts (a suspended user is signed out at once and can't sign in; files and shares are kept, share links show "not found" until unsuspended), and delete accounts (type the email to confirm; the last admin can't be deleted)
 - Optional hosted mode (`FILEVAULT_MODE=hosted`) for a public instance: accounts unused for 30 days are removed with their files (after a warning email when SMTP is set up), and new users see a dismissible notice. Administrator, permanent and suspended accounts are never removed. Self-hosted is the default and removes nothing
@@ -43,7 +44,7 @@
 
 ## Screenshots
 
-The file manager, with Favourites and Recent above the folder tree and thumbnails for images:
+The file manager, with the folder tree, Favourites and Recent on the left and thumbnails for images:
 
 ![File manager in grid view, light theme](docs/screenshots/files-grid-light.png)
 
@@ -78,10 +79,6 @@ Logging in, and the Settings page (storage, theme and accent colour, profile; tw
 ![Settings page](docs/screenshots/settings.png)
 
 ![Two-factor authentication and active sessions in Settings](docs/screenshots/settings-security.png)
-
-The admin page, for the server owner:
-
-![Admin page](docs/screenshots/admin.png)
 
 On a phone, the folder tree opens as a drawer and the less-used toolbar actions move into a menu:
 

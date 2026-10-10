@@ -365,3 +365,34 @@ a.settings-button.settings-link-button {
 .settings-card input[hidden] {
     display: none;
 }
+
+/* Email address block in the Profile card */
+.email-address {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--fv-border);
+}
+
+.email-address-heading {
+    margin: 0 0 8px;
+    font-size: 1rem;
+}
+
+.email-address-current {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 12px;
+    overflow-wrap: anywhere;
+}
+
+.email-address-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.email-address-pending {
+    margin-bottom: 12px;
+}

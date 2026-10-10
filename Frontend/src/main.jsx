@@ -13,6 +13,8 @@ import SharedLinks from "./pages/SharedLinks/SharedLinks";
 import ForgotPassword from "./pages/ForgotPassword/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword/ResetPassword";
 import VerifyEmail from "./pages/VerifyEmail/VerifyEmail";
+import ConfirmEmailChange from "./pages/ConfirmEmailChange/ConfirmEmailChange";
+import CancelEmailChange from "./pages/CancelEmailChange/CancelEmailChange";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import PublicRoute from "./components/PublicRoute";
@@ -72,6 +74,15 @@ const router = createBrowserRouter([
             {
                 path: "verify-email",
                 element: <VerifyEmail />,
+            },
+            {
+                // Needs a login as the account that asked, but handles that itself
+                path: "confirm-email",
+                element: <ConfirmEmailChange />,
+            },
+            {
+                path: "cancel-email-change",
+                element: <CancelEmailChange />,
             },
             {
                 // Share links work whether or not the visitor is logged in

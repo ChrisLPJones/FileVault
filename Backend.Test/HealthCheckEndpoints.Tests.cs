@@ -65,6 +65,7 @@ namespace Backend.Test
                 "GET /user/info", "PATCH /user/profile", "POST /user/password", "DELETE /user", "GET /user/usage",
                 "POST /upload", "POST /folder", "GET /files", "GET /download/{fileId}", "POST /download/zip",
                 "PATCH /rename", "PUT /move", "POST /copy", "DELETE /delete/{fileId}", "DELETE /delete",
+                "POST /user/email/change", "POST /user/email/resend", "DELETE /user/email/pending", "POST /user/email/confirm", "POST /user/email/cancel",
                 "GET /ping", "GET /pingsql"
             });
 

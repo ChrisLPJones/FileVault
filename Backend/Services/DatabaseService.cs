@@ -530,17 +530,16 @@ public partial class DatabaseServices
 
 
 
-    // Update a user's name and email
-    public async Task UpdateProfileAsync(string userId, string firstName, string lastName, string email)
+    // Update a user's name (the email changes only through the confirmed flow in DatabaseService.EmailChange.cs)
+    public async Task UpdateNameAsync(string userId, string firstName, string lastName)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = "UPDATE Users SET FirstName = @FirstName, LastName = @LastName, EmailChanged = CASE WHEN Email COLLATE Latin1_General_BIN2 <> @Email THEN 1 ELSE EmailChanged END, Email = @Email WHERE Id = @UserId";
+        const string query = "UPDATE Users SET FirstName = @FirstName, LastName = @LastName WHERE Id = @UserId";
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@FirstName", firstName);
         command.Parameters.AddWithValue("@LastName", lastName);
-        command.Parameters.AddWithValue("@Email", email);
         command.Parameters.AddWithValue("@UserId", userId);
         await command.ExecuteNonQueryAsync();
     }

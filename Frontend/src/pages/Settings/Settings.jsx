@@ -18,6 +18,7 @@ import { MdColorize } from "react-icons/md";
 import { ACCENT_PRESETS, THEME_OPTIONS, setAccent, setThemePreference, useAccent, useTheme } from "../../utils/theme";
 import TwoFactorCard from "./TwoFactorCard";
 import SessionsCard from "./SessionsCard";
+import EmailAddress from "./EmailAddress";
 import "./Settings.css";
 
 const DELETE_CONFIRMATION = "DELETE";
@@ -50,9 +51,10 @@ function Settings() {
     const [loadError, setLoadError] = useState(null);
     const [usage, setUsage] = useState(null);
 
-    const [profile, setProfile] = useState({ firstName: "", lastName: "", email: "" });
+    const [profile, setProfile] = useState({ firstName: "", lastName: "" });
     const [profileStatus, setProfileStatus] = useState(null);
     const [savedEmail, setSavedEmail] = useState("");
+    const [pendingEmail, setPendingEmail] = useState(null);
     const [hasAvatar, setHasAvatar] = useState(false);
     const [savingAvatar, setSavingAvatar] = useState(false);
     const [avatarStatus, setAvatarStatus] = useState(null);
@@ -72,8 +74,9 @@ function Settings() {
         Promise.all([getUserInfoAPI(), getUsageAPI()])
             .then(([info, usageData]) => {
                 if (cancelled) return;
-                setProfile({ firstName: info.firstName, lastName: info.lastName, email: info.email });
+                setProfile({ firstName: info.firstName, lastName: info.lastName });
                 setSavedEmail(info.email);
+                setPendingEmail(info.pendingEmail ? { email: info.pendingEmail, expiresAt: info.pendingEmailExpiresAt } : null);
                 setHasAvatar(!!info.avatarUpdatedAt);
                 setUsage(usageData);
             })
@@ -122,16 +125,8 @@ function Settings() {
         setProfileStatus(null);
         setSavingProfile(true);
         try {
-            await updateProfileAPI(profile.firstName.trim(), profile.lastName.trim(), profile.email.trim());
-            // A new address has to be confirmed; the server emails a link to it
-            const emailChanged = profile.email.trim().toLowerCase() !== savedEmail.toLowerCase();
-            setSavedEmail(profile.email.trim());
-            setProfileStatus({
-                type: "success",
-                message: emailChanged
-                    ? `Profile updated. We've sent a link to ${profile.email.trim()} to confirm the new address.`
-                    : "Profile updated",
-            });
+            await updateProfileAPI(profile.firstName.trim(), profile.lastName.trim());
+            setProfileStatus({ type: "success", message: "Profile updated" });
         } catch (err) {
             setProfileStatus({ type: "danger", message: getErrorMessage(err, "Could not update profile") });
         } finally {
@@ -155,6 +150,7 @@ function Settings() {
         setSavingPassword(true);
         try {
             await changePasswordAPI(passwords.current, passwords.next);
+            setPendingEmail(null); // the server drops a pending email change when the password changes
             setPasswords({ current: "", next: "", confirm: "" });
             setPasswordStatus({ type: "success", message: "Password changed. You've been signed out on other devices." });
         } catch (err) {
@@ -315,22 +311,13 @@ function Settings() {
                             onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
                         />
                     </div>
-                    <div className="form-group">
-                        <label htmlFor="settings-email">Email address</label>
-                        <input
-                            id="settings-email"
-                            type="email"
-                            value={profile.email}
-                            maxLength={100}
-                            required
-                            onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                        />
-                    </div>
                     <button type="submit" className="settings-button" disabled={savingProfile}>
                         {savingProfile ? "Saving…" : "Save profile"}
                     </button>
                     <Status status={profileStatus} />
                 </form>
+
+                <EmailAddress key={pendingEmail?.email ?? "none"} email={savedEmail} pending={pendingEmail} />
             </section>
 
             <section className="settings-card" aria-labelledby="password-heading">
