@@ -12,8 +12,6 @@ jobs:
     env:
       # Throwaway password for the ephemeral CI database container only
       SA_PASSWORD: CiOnly-Str0ng!Pass
-      # Says the database below is a test database, so the tests may seed a sentinel admin in it
-      FILEVAULT_TEST_DB: "1"
 
     services:
       sqlserver:
