@@ -74,17 +74,22 @@ namespace Backend.Services
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"] ?? throw new InvalidOperationException("Jwt:Key is not set.")));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
+            var now = DateTime.UtcNow;
             var claims = new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                // Issue time to the millisecond, for AccessTokenGate
+                new Claim(AccessTokenGate.IssuedAtMillisecondsClaim,
+                    new DateTimeOffset(now).ToUnixTimeMilliseconds().ToString(), ClaimValueTypes.Integer64)
             };
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddMinutes(jwtConfig.GetValue("ExpireMinutes", 15)),
+                IssuedAt = now,
+                Expires = now.AddMinutes(jwtConfig.GetValue("ExpireMinutes", 15)),
                 Issuer = jwtConfig["Issuer"],
                 Audience = jwtConfig["Audience"],
                 SigningCredentials = credentials,
@@ -129,7 +134,8 @@ namespace Backend.Services
         // Create a refresh token for the user and set it as an httpOnly cookie.
         // Without a session ID this is a new login: it starts a new session (see Active sessions)
         // and retires any refresh token this browser already had.
-        public async Task<Guid> IssueRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http, Guid? sessionId = null)
+        public async Task<Guid?> IssueRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http, Guid? sessionId = null,
+            DatabaseServices.RefreshTokenUse? rotatedFrom = null)
         {
             var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
             var expiresAt = DateTime.UtcNow.Add(RefreshLifetime);
@@ -148,7 +154,11 @@ namespace Backend.Services
                 await db.TouchSessionAsync(sessionId.Value, ipAddress);
             }
 
-            await db.StoreRefreshTokenAsync(userId, sessionId.Value, HashToken(token), expiresAt);
+            // When rotating, the token is stored only if no administrator password change landed
+            // since the old one was consumed; null means refused
+            if (!await db.StoreRefreshTokenAsync(userId, sessionId.Value, HashToken(token), expiresAt,
+                    rotatedFrom != null, rotatedFrom?.UserTokensValidAfter))
+                return null;
 
             http.Response.Cookies.Append(RefreshCookieName, token, RefreshCookieOptions(http, expiresAt));
             return sessionId.Value;
@@ -212,10 +222,11 @@ namespace Backend.Services
                 return (null, false);
 
             // Stay in the same session (tokens from before sessions existed start one now)
-            await IssueRefreshTokenAsync(use.UserId, db, http, use.SessionId
+            var issued = await IssueRefreshTokenAsync(use.UserId, db, http, use.SessionId
                 ?? await db.CreateSessionAsync(use.UserId,
-                    DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), DeviceDescription.IpAddress(http)));
-            return (user, false);
+                    DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), DeviceDescription.IpAddress(http)), use);
+            // Refused (the user's tokens were invalidated meanwhile): 401 and clear the cookie
+            return issued == null ? (null, false) : (user, false);
         }
 
         // Revoke the refresh token in the request's cookie (logout)

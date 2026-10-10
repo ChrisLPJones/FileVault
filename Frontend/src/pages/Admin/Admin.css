@@ -275,3 +275,188 @@
 .admin-link-button {
     white-space: nowrap;
 }
+
+/* Users header: the heading and the Create account button */
+.admin-users-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.admin-notice {
+    margin: 8px 0;
+    padding: 10px;
+    border-radius: 4px;
+    background-color: var(--fv-alert-success-bg);
+    color: var(--fv-alert-success-text);
+    overflow-wrap: anywhere;
+}
+
+/* A user in the first column: picture, then name, email and the Actions button */
+.admin-person {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.admin-person-text {
+    min-width: 0;
+}
+
+.admin-name {
+    flex-wrap: wrap;
+}
+
+.admin-email {
+    overflow-wrap: anywhere;
+}
+
+.admin-badge.permanent {
+    background-color: var(--fv-track);
+    color: var(--fv-text);
+}
+
+/* Row actions: shown under the name so they stay on screen when the table scrolls sideways */
+.admin-actions {
+    margin-top: 4px;
+}
+
+.admin-menu {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    margin-top: 4px;
+    padding: 4px;
+    border: 1px solid var(--fv-border);
+    border-radius: 4px;
+    background-color: var(--fv-surface);
+}
+
+.admin-menu button {
+    padding: 6px 8px;
+    border: none;
+    border-radius: 3px;
+    background: none;
+    color: var(--fv-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.admin-menu button:hover {
+    background-color: var(--fv-track);
+}
+
+.admin-menu button.danger {
+    color: var(--fv-error-text);
+}
+
+/* Forms: Create account, and the set password / delete dialogs */
+.admin-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+.admin-field input[type="text"],
+.admin-field input[type="email"],
+.admin-field input[type="password"] {
+    padding: 8px 10px;
+    border: 1px solid var(--fv-border);
+    border-radius: 4px;
+    background-color: var(--fv-input-bg);
+    color: var(--fv-text);
+    font: inherit;
+}
+
+.admin-create {
+    margin: 12px 0;
+    padding: 14px;
+    border: 1px solid var(--fv-border);
+    border-radius: 5px;
+}
+
+.admin-create-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 14px;
+}
+
+.admin-create-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-bottom: 10px;
+}
+
+.admin-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.admin-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.admin-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: none;
+    margin: 0;
+    padding: 16px;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.admin-dialog {
+    width: 100%;
+    max-width: 460px;
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 20px;
+    border-radius: 6px;
+    background-color: var(--fv-surface);
+    color: var(--fv-text);
+    box-shadow: var(--fv-shadow);
+    box-sizing: border-box;
+}
+
+.admin-dialog h2 {
+    margin: 0 0 10px;
+    font-size: 1.1rem;
+    overflow-wrap: anywhere;
+}
+
+.admin-dialog p {
+    margin: 0 0 10px;
+    overflow-wrap: anywhere;
+}
+
+.admin-dialog strong,
+.admin-dialog .admin-field {
+    overflow-wrap: anywhere;
+}
+
+.admin-dialog :is(button, input):focus-visible,
+.admin-create :is(button, input):focus-visible {
+    outline: 2px solid var(--fv-focus-ring);
+    outline-offset: 1px;
+}
+
+@media (max-width: 520px) {
+    .admin-create-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

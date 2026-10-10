@@ -135,6 +135,11 @@ Other API settings can be passed as environment variables on the `api` service u
 `RateLimiting__auth__PermitLimit` or `TwoFactor__Issuer` (the name shown in authenticator apps).
 See `Backend/appsettings.json` for the full list and defaults.
 
+`Auth__UserStateCacheSeconds` (default 30) is how long the API caches each user's sign-in state when
+checking access tokens. When an administrator sets a user's password, that user's current access
+token stops working immediately; changes made on another API instance or directly in the database can take up
+to this many seconds.
+
 Keep the master key somewhere other than the server too, such as a password manager.
 
 ## 3. Backups
@@ -264,6 +269,11 @@ Once there is an administrator, they can grant or remove admin rights for other 
 Admin page ("Admin rights" column). There must always be at least one administrator: removing the
 last one, or the last administrator deleting their own account, is refused.
 
+Administrators can also create accounts (active immediately, email already confirmed), set a user's
+password (signs them out everywhere), mark accounts permanent, and delete accounts. Each of these
+writes an audit line to the API log under the `Backend.AdminAudit` category, using account ids only
+(no emails or passwords), so you can watch that category for admin activity.
+
 **Upgrading an existing install**
 
 - `ADMIN_EMAILS` (`Admin:Emails`) no longer makes anyone an administrator. If it is still set, the
@@ -275,7 +285,7 @@ last one, or the last administrator deleting their own account, is refused.
   confirmed account is promoted, or set `IsAdmin` in the database.
 - An account stored with capital letters by an old version won't match `INITIAL_ADMIN_EMAIL`. For
   that install leave the setting unset, or lower-case the address in the database.
-- The upgrade adds a `Users.EmailChanged` column; re-running `init.sql` (`docker compose up --build -d`)
-  applies it.
+- The upgrade adds `Users.EmailChanged`, `Users.TokensValidAfter` and `Users.IsPermanent` columns;
+  re-running `init.sql` (`docker compose up --build -d`) applies them.
 - Changing admin rights takes a short database lock. If it can't be had in time the API answers
   `503` with a `Retry-After` header; retrying a moment later works.

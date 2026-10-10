@@ -6,6 +6,8 @@
   <RunConfiguration>
     <EnvironmentVariables>
       <FILEVAULT_TEST_DB>1</FILEVAULT_TEST_DB>
+      <!-- No caching of per-user access-token state, so tests see deletions and password changes at once -->
+      <Auth__UserStateCacheSeconds>0</Auth__UserStateCacheSeconds>
     </EnvironmentVariables>
   </RunConfiguration>
 </RunSettings>

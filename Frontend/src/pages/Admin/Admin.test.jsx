@@ -2,34 +2,65 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Admin from "./Admin";
-import { getAdminStatsAPI, getAdminUsersAPI, setUserAdminAPI, setUserQuotaAPI } from "../../api/adminAPI";
+import {
+    createUserAPI,
+    deleteUserAPI,
+    getAdminStatsAPI,
+    getAdminUsersAPI,
+    getUserAvatarBlobAPI,
+    setUserAdminAPI,
+    setUserPasswordAPI,
+    setUserPermanentAPI,
+    setUserQuotaAPI,
+} from "../../api/adminAPI";
 
 vi.mock("../../api/adminAPI", () => ({
     getAdminStatsAPI: vi.fn(),
     getAdminUsersAPI: vi.fn(),
     setUserQuotaAPI: vi.fn(async () => ({})),
     setUserAdminAPI: vi.fn(async () => ({})),
+    createUserAPI: vi.fn(async () => ({})),
+    deleteUserAPI: vi.fn(async () => ({})),
+    setUserPasswordAPI: vi.fn(async () => ({})),
+    setUserPermanentAPI: vi.fn(async () => ({})),
+    getUserAvatarBlobAPI: vi.fn(),
 }));
 
 const GB = 1024 ** 3;
 
 const users = [
     { id: "u1", firstName: "Alex", lastName: "Morgan", email: "alex@example.com", createdAt: "2026-01-02T10:00:00Z",
-        lastLogin: "2026-03-04T09:30:00Z", bytesUsed: 512 * 1024 ** 2, fileCount: 42, quota: GB, quotaOverride: null, isAdmin: true },
+        lastLogin: "2026-03-04T09:30:00Z", bytesUsed: 512 * 1024 ** 2, fileCount: 42, quota: GB, quotaOverride: null, isAdmin: true,
+        isPermanent: false, avatarUpdatedAt: null },
     { id: "u2", firstName: "Sam", lastName: "", email: "sam@example.com", createdAt: "2026-02-01T10:00:00Z",
-        lastLogin: null, bytesUsed: 1.9 * GB, fileCount: 7, quota: 2 * GB, quotaOverride: 2 * GB, isAdmin: false },
+        lastLogin: null, bytesUsed: 1.9 * GB, fileCount: 7, quota: 2 * GB, quotaOverride: 2 * GB, isAdmin: false,
+        isPermanent: true, avatarUpdatedAt: "2026-02-02T10:00:00Z" },
 ];
 
 const stats = { userCount: 2, adminCount: 1, fileCount: 49, folderCount: 9, totalStoredBytes: 2.4 * GB,
-    defaultQuotaBytes: GB, storageBytesOnDisk: 2.5 * GB, diskTotalBytes: 100 * GB, diskFreeBytes: 60 * GB };
+    defaultQuotaBytes: GB, storageBytesOnDisk: 2.5 * GB, diskTotalBytes: 100 * GB, diskFreeBytes: 60 * GB,
+    currentUserId: "u1" };
 
 const row = (email) => screen.getByText(email).closest("tr");
 
+const failure = (status, error) => Object.assign(new Error("Request failed"), { response: { status, data: { error } } });
+
+// Open a row's Actions menu and pick an item
+const chooseAction = async (email, item) => {
+    await userEvent.click(await screen.findByRole("button", { name: `Actions for ${email}` }));
+    await userEvent.click(screen.getByRole("menuitem", { name: item }));
+};
+
 beforeEach(() => {
-    setUserAdminAPI.mockReset();
-    setUserAdminAPI.mockResolvedValue({});
+    [setUserAdminAPI, createUserAPI, deleteUserAPI, setUserPasswordAPI, setUserPermanentAPI, getUserAvatarBlobAPI].forEach((mock) => {
+        mock.mockReset();
+        mock.mockResolvedValue({});
+    });
+    getUserAvatarBlobAPI.mockResolvedValue(new Blob(["png"], { type: "image/png" }));
     getAdminUsersAPI.mockResolvedValue(users);
     getAdminStatsAPI.mockResolvedValue(stats);
+    URL.createObjectURL = vi.fn(() => "blob:avatar-sam");
+    URL.revokeObjectURL = vi.fn();
 });
 
 describe("Admin page", () => {
@@ -159,5 +190,238 @@ describe("Admin page", () => {
 
         expect(await screen.findByRole("alert")).toHaveTextContent("Only administrators can see this page.");
         expect(screen.queryByRole("table")).toBeNull();
+    });
+
+    describe("avatars", () => {
+        it("fetches a picture through the API client and shows it, with initials for users without one", async () => {
+            render(<Admin />);
+
+            expect(await screen.findByRole("img", { name: "Sam's profile picture" })).toHaveAttribute("src", "blob:avatar-sam");
+            expect(getUserAvatarBlobAPI).toHaveBeenCalledTimes(1);
+            expect(getUserAvatarBlobAPI).toHaveBeenCalledWith("u2");
+
+            // Alex has no picture: no request, an initial instead
+            expect(within(row("alex@example.com")).queryByRole("img")).toBeNull();
+            expect(within(row("alex@example.com")).getByText("A", { selector: ".avatar-initial" })).toBeInTheDocument();
+        });
+
+        it("falls back to the initial when the picture can't be loaded", async () => {
+            getUserAvatarBlobAPI.mockRejectedValue(failure(404, "No profile picture"));
+            render(<Admin />);
+
+            await screen.findByText("sam@example.com");
+            await vi.waitFor(() => expect(getUserAvatarBlobAPI).toHaveBeenCalled());
+            expect(screen.queryByRole("img", { name: "Sam's profile picture" })).toBeNull();
+            expect(within(row("sam@example.com")).getByText("S", { selector: ".avatar-initial" })).toBeInTheDocument();
+        });
+    });
+
+    describe("row actions", () => {
+        it("lists set password, permanent and delete for another user", async () => {
+            render(<Admin />);
+            await userEvent.click(await screen.findByRole("button", { name: "Actions for sam@example.com" }));
+
+            const menu = screen.getByRole("menu");
+            expect(within(menu).getByRole("menuitem", { name: "Set password" })).toBeInTheDocument();
+            expect(within(menu).getByRole("menuitem", { name: "Remove permanent" })).toBeInTheDocument();
+            expect(within(menu).getByRole("menuitem", { name: "Delete account" })).toBeInTheDocument();
+        });
+
+        it("keeps only one row's menu open at a time", async () => {
+            render(<Admin />);
+            await userEvent.click(await screen.findByRole("button", { name: "Actions for sam@example.com" }));
+            await userEvent.click(screen.getByRole("button", { name: "Actions for alex@example.com" }));
+            expect(screen.getAllByRole("menu")).toHaveLength(1);
+            expect(screen.getByRole("button", { name: "Actions for sam@example.com" })).toHaveAttribute("aria-expanded", "false");
+        });
+
+        it("returns focus to the Actions button when its dialog closes", async () => {
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Set password");
+            await userEvent.keyboard("{Escape}");
+            await vi.waitFor(() => expect(screen.getByRole("button", { name: "Actions for sam@example.com" })).toHaveFocus());
+        });
+
+        it("leaves set password and delete out of your own row", async () => {
+            render(<Admin />);
+            await userEvent.click(await screen.findByRole("button", { name: "Actions for alex@example.com" }));
+
+            const menu = screen.getByRole("menu");
+            expect(within(menu).getByRole("menuitem", { name: "Make permanent" })).toBeInTheDocument();
+            expect(within(menu).queryByRole("menuitem", { name: "Set password" })).toBeNull();
+            expect(within(menu).queryByRole("menuitem", { name: "Delete account" })).toBeNull();
+        });
+
+        it("shows a Permanent badge", async () => {
+            render(<Admin />);
+            await screen.findByText("sam@example.com");
+
+            expect(within(row("sam@example.com")).getByText("Permanent")).toBeInTheDocument();
+            expect(within(row("alex@example.com")).queryByText("Permanent")).toBeNull();
+        });
+
+        it("toggles permanent straight away and reloads", async () => {
+            render(<Admin />);
+            await chooseAction("alex@example.com", "Make permanent");
+
+            expect(setUserPermanentAPI).toHaveBeenCalledWith("u1", true);
+            await vi.waitFor(() => expect(getAdminUsersAPI).toHaveBeenCalledTimes(2));
+            expect(await screen.findByRole("status")).toHaveTextContent("alex@example.com is now a permanent account.");
+        });
+
+        it("shows why a permanent change failed", async () => {
+            setUserPermanentAPI.mockRejectedValue(failure(404, "User not found"));
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Remove permanent");
+
+            expect(await screen.findByRole("alert")).toHaveTextContent("User not found");
+            expect(getAdminUsersAPI).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe("set password", () => {
+        it("only enables Set password once the password meets the rules", async () => {
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Set password");
+
+            const dialog = screen.getByRole("dialog", { name: "Set password for sam@example.com" });
+            const save = within(dialog).getByRole("button", { name: "Set password" });
+            expect(save).toBeDisabled();
+            await userEvent.type(within(dialog).getByLabelText("New password"), "weak");
+            expect(save).toBeDisabled();
+            await userEvent.clear(within(dialog).getByLabelText("New password"));
+            await userEvent.type(within(dialog).getByLabelText("New password"), "N3wPassword");
+            expect(save).toBeEnabled();
+        });
+
+        it("sets the password, closes and says so", async () => {
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Set password");
+            await userEvent.type(screen.getByLabelText("New password"), "N3wPassword");
+            await userEvent.click(screen.getByRole("button", { name: "Set password" }));
+
+            expect(setUserPasswordAPI).toHaveBeenCalledWith("u2", "N3wPassword");
+            expect(await screen.findByRole("status")).toHaveTextContent("Password set for sam@example.com");
+            expect(screen.queryByRole("dialog")).toBeNull();
+        });
+
+        it("shows the server's message and stays open when it refuses", async () => {
+            setUserPasswordAPI.mockRejectedValue(failure(400, "Password must be 72 bytes or fewer"));
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Set password");
+            await userEvent.type(screen.getByLabelText("New password"), "N3wPassword");
+            await userEvent.click(screen.getByRole("button", { name: "Set password" }));
+
+            expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent("Password must be 72 bytes or fewer");
+        });
+
+        it("closes on Cancel and on Escape without saving", async () => {
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Set password");
+            await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+            expect(screen.queryByRole("dialog")).toBeNull();
+
+            await chooseAction("sam@example.com", "Set password");
+            await userEvent.keyboard("{Escape}");
+            expect(screen.queryByRole("dialog")).toBeNull();
+            expect(setUserPasswordAPI).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("delete account", () => {
+        it("needs the user's email typed before Delete account is enabled", async () => {
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Delete account");
+
+            const dialog = screen.getByRole("dialog", { name: "Delete account" });
+            const confirm = within(dialog).getByRole("button", { name: "Delete account" });
+            expect(confirm).toBeDisabled();
+            await userEvent.type(within(dialog).getByLabelText("Type sam@example.com to confirm"), "sam@exampl");
+            expect(confirm).toBeDisabled();
+            await userEvent.type(within(dialog).getByLabelText("Type sam@example.com to confirm"), "e.com");
+            expect(confirm).toBeEnabled();
+            expect(deleteUserAPI).not.toHaveBeenCalled();
+        });
+
+        it("deletes the account and reloads the list", async () => {
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Delete account");
+            await userEvent.type(screen.getByLabelText("Type sam@example.com to confirm"), "sam@example.com");
+            await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete account" }));
+
+            expect(deleteUserAPI).toHaveBeenCalledWith("u2");
+            await vi.waitFor(() => expect(getAdminUsersAPI).toHaveBeenCalledTimes(2));
+            expect(await screen.findByRole("status")).toHaveTextContent("The account for sam@example.com was deleted.");
+            expect(screen.queryByRole("dialog")).toBeNull();
+        });
+
+        it("shows the server's refusal (the last administrator) and keeps the dialog open", async () => {
+            deleteUserAPI.mockRejectedValue(failure(409, "There must always be at least one administrator"));
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Delete account");
+            await userEvent.type(screen.getByLabelText("Type sam@example.com to confirm"), "sam@example.com");
+            await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete account" }));
+
+            expect(await within(screen.getByRole("dialog")).findByRole("alert"))
+                .toHaveTextContent("There must always be at least one administrator");
+            expect(getAdminUsersAPI).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe("create account", () => {
+        const fill = async ({ first = "Jo", last = "Bloggs", email = "jo@example.com", password = "N3wPassword" } = {}) => {
+            await userEvent.click(await screen.findByRole("button", { name: "Create account" }));
+            const form = screen.getByRole("form", { name: "Create account" });
+            if (first) await userEvent.type(within(form).getByLabelText("First name"), first);
+            if (last) await userEvent.type(within(form).getByLabelText(/Last name/), last);
+            if (email) await userEvent.type(within(form).getByLabelText("Email address"), email);
+            if (password) await userEvent.type(within(form).getByLabelText("Password"), password);
+            return form;
+        };
+
+        it("keeps Create account disabled until the details are valid", async () => {
+            render(<Admin />);
+            const form = await fill({ password: "weak" });
+            const submit = within(form).getByRole("button", { name: "Create account" });
+            expect(submit).toBeDisabled();
+
+            await userEvent.clear(within(form).getByLabelText("Password"));
+            await userEvent.type(within(form).getByLabelText("Password"), "N3wPassword");
+            expect(submit).toBeEnabled();
+        });
+
+        it("creates the account with the chosen flags and reloads", async () => {
+            render(<Admin />);
+            const form = await fill();
+            await userEvent.click(within(form).getByLabelText("Permanent account"));
+            await userEvent.click(within(form).getByRole("button", { name: "Create account" }));
+
+            expect(createUserAPI).toHaveBeenCalledWith({
+                firstName: "Jo", lastName: "Bloggs", email: "jo@example.com", password: "N3wPassword", isAdmin: false, isPermanent: true,
+            });
+            await vi.waitFor(() => expect(getAdminUsersAPI).toHaveBeenCalledTimes(2));
+            expect(await screen.findByRole("status")).toHaveTextContent("Account created for jo@example.com");
+            expect(screen.queryByRole("form", { name: "Create account" })).toBeNull();
+        });
+
+        it("shows the duplicate-email message and keeps the form", async () => {
+            createUserAPI.mockRejectedValue(failure(409, "Email already exists"));
+            render(<Admin />);
+            const form = await fill();
+            await userEvent.click(within(form).getByRole("button", { name: "Create account" }));
+
+            expect(await within(form).findByRole("alert")).toHaveTextContent("Email already exists");
+            expect(getAdminUsersAPI).toHaveBeenCalledTimes(1);
+            expect(within(form).getByLabelText("Email address")).toHaveValue("jo@example.com");
+        });
+
+        it("can be cancelled", async () => {
+            render(<Admin />);
+            const form = await fill();
+            await userEvent.click(within(form).getByRole("button", { name: "Cancel" }));
+
+            expect(screen.queryByRole("form", { name: "Create account" })).toBeNull();
+            expect(createUserAPI).not.toHaveBeenCalled();
+        });
     });
 });

@@ -221,10 +221,12 @@ public partial class DatabaseServices
         const string query = @"
             SELECT u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin,
                    COALESCE(SUM(CASE WHEN f.IsDirectory = 0 THEN f.Size END), 0) AS BytesUsed,
-                   COUNT(CASE WHEN f.IsDirectory = 0 THEN 1 END) AS FileCount
+                   COUNT(CASE WHEN f.IsDirectory = 0 THEN 1 END) AS FileCount,
+                   u.IsPermanent, u.AvatarUpdatedAt
             FROM Users u
             LEFT JOIN Files f ON f.UserId = u.Id
-            GROUP BY u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin
+            GROUP BY u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin,
+                     u.IsPermanent, u.AvatarUpdatedAt
             ORDER BY u.CreatedAt, u.Email";
 
         await using var command = new SqlCommand(query, connection);
@@ -243,7 +245,9 @@ public partial class DatabaseServices
                 reader.GetInt32(9),
                 quotaOverride ?? defaultQuota,
                 quotaOverride,
-                reader.GetBoolean(7)));
+                reader.GetBoolean(7),
+                reader.GetBoolean(10),
+                reader.IsDBNull(11) ? null : DateTime.SpecifyKind(reader.GetDateTime(11), DateTimeKind.Utc)));
         }
 
         return users;

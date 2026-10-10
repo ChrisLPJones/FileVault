@@ -604,6 +604,16 @@ public partial class DatabaseServices
             // touching Files so the lock order is always the same
             await TakeAdminMembershipLockAsync(connection, (SqlTransaction)transaction);
 
+            await using (var exists = new SqlCommand("SELECT COUNT(1) FROM Users WHERE Id = @UserId", connection, (SqlTransaction)transaction))
+            {
+                exists.Parameters.AddWithValue("@UserId", userId);
+                if (Convert.ToInt32(await exists.ExecuteScalarAsync()) == 0)
+                {
+                    await transaction.RollbackAsync();
+                    return HttpReturnResult.NotFound("User not found");
+                }
+            }
+
             // Never delete the last administrator
             await using (var lastAdmin = new SqlCommand($@"
                 SELECT CASE WHEN EXISTS (SELECT 1 FROM Users WHERE Id = @UserId AND {EffectiveAdminPredicate})
@@ -726,24 +736,37 @@ public partial class DatabaseServices
 
 
     // Store a new refresh token (hash only) for a session, and drop this user's expired
-    // tokens and the sessions left without any
-    public async Task StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc)
+    // tokens and the sessions left without any. When rotating a token, pass the user's
+    // TokensValidAfter as read before the old token was consumed (RefreshTokenUse): the new
+    // token is stored only if that value is unchanged, so a refresh that was in flight while an
+    // administrator set the password can't leave a live session behind. Returns false if it was
+    // refused for that reason (or the user is gone).
+    public async Task<bool> StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
+        bool requireUnchangedTokensValidAfter = false, DateTime? seenTokensValidAfter = null)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         const string query = @"
             DELETE FROM RefreshTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
-            INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt) VALUES (@UserId, @SessionId, @TokenHash, @ExpiresAt);
+            INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt)
+            SELECT @UserId, @SessionId, @TokenHash, @ExpiresAt
+            WHERE @Guard = 0 OR EXISTS (
+                SELECT 1 FROM Users WHERE Id = @UserId
+                AND ((TokensValidAfter IS NULL AND @Seen IS NULL) OR TokensValidAfter = @Seen));
+            DECLARE @Stored INT = @@ROWCOUNT;
             DELETE FROM Sessions WHERE UserId = @UserId
-                AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);";
+                AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);
+            SELECT @Stored;";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@SessionId", sessionId);
         command.Parameters.AddWithValue("@TokenHash", tokenHash);
         command.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
-        await command.ExecuteNonQueryAsync();
+        command.Parameters.AddWithValue("@Guard", requireUnchangedTokensValidAfter);
+        command.Parameters.Add("@Seen", System.Data.SqlDbType.DateTime2).Value = (object?)seenTokensValidAfter ?? DBNull.Value;
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
     }
 
 
@@ -752,7 +775,8 @@ public partial class DatabaseServices
     // SessionId is null for tokens from before sessions existed. Replaced is true if the token was
     // rotated (a newer token exists in its session), as opposed to revoked by logging out or signing
     // the session out.
-    public record RefreshTokenUse(string UserId, bool Valid, TimeSpan? SinceRevoked, Guid? SessionId = null, bool Replaced = false);
+    public record RefreshTokenUse(string UserId, bool Valid, TimeSpan? SinceRevoked, Guid? SessionId = null, bool Replaced = false,
+        DateTime? UserTokensValidAfter = null);
 
     // Atomically revoke a refresh token so it can only be used once.
     // Returns null if the token doesn't exist. Valid is true only if this call revoked an active, unexpired token.
@@ -760,6 +784,18 @@ public partial class DatabaseServices
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
+
+        // Read before consuming: if an administrator sets the password after this point, the
+        // value changes and the replacement token is refused (see StoreRefreshTokenAsync). If the
+        // change committed before, the token was revoked with the rest and the consume below fails.
+        DateTime? tokensValidAfter = null;
+        await using (var read = new SqlCommand(
+            "SELECT u.TokensValidAfter FROM RefreshTokens t JOIN Users u ON u.Id = t.UserId WHERE t.TokenHash = @TokenHash", connection))
+        {
+            read.Parameters.AddWithValue("@TokenHash", tokenHash);
+            if (await read.ExecuteScalarAsync() is DateTime seen)
+                tokensValidAfter = seen;
+        }
 
         const string consume = @"
             UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
@@ -774,7 +810,7 @@ public partial class DatabaseServices
             {
                 var expiresAt = reader.GetDateTime(1);
                 return new RefreshTokenUse(reader.GetGuid(0).ToString(), expiresAt > DateTime.UtcNow, null,
-                    reader.IsDBNull(2) ? null : reader.GetGuid(2));
+                    reader.IsDBNull(2) ? null : reader.GetGuid(2), false, tokensValidAfter);
             }
         }
 

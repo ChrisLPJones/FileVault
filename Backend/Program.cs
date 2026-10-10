@@ -123,6 +123,9 @@ namespace Backend
             builder.Services.AddScoped<ShareService>();
             builder.Services.AddScoped<TrashService>();
             builder.Services.AddScoped<ChunkedUploadService>();
+            builder.Services.AddScoped<AccountDeletionService>();
+            builder.Services.AddMemoryCache();
+            builder.Services.AddSingleton<AccessTokenGate>();
             builder.Services.AddHostedService<StorageCleanupService>();
             builder.Services.AddHostedService<AdminBootstrapOnStartup>();
             builder.Services.AddEmail(builder.Configuration);
@@ -148,6 +151,16 @@ namespace Backend
 
                     option.Events = new JwtBearerEvents
                     {
+                        // A token with a good signature and expiry is still refused for a deleted user,
+                        // or one whose password an administrator has set since it was issued
+                        OnTokenValidated = async context =>
+                        {
+                            var services = context.HttpContext.RequestServices;
+                            if (context.Principal == null ||
+                                !await services.GetRequiredService<AccessTokenGate>()
+                                    .IsAcceptedAsync(context.Principal, services.GetRequiredService<DatabaseServices>()))
+                                context.Fail("The access token is no longer valid");
+                        },
                         OnChallenge = context =>
                         {
                             // Skip the default response
