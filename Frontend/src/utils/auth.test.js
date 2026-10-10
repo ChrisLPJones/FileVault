@@ -1,6 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { meetsPasswordRules, passwordRules } from "./passwordRules";
-import { clearToken, getToken, isAuthenticated, isTokenExpiring, setToken } from "./auth";
+import {
+    SESSION_HINT_KEY,
+    clearToken,
+    endSession,
+    getToken,
+    hasSessionHint,
+    isAuthenticated,
+    isTokenExpiring,
+    setToken,
+    startSession,
+    subscribeAuth,
+} from "./auth";
 import { makeToken } from "../test/tokens";
 
 describe("password rules", () => {
@@ -31,11 +42,35 @@ describe("password rules", () => {
 });
 
 describe("access token helpers", () => {
-    it("stores, reads and clears the token", () => {
-        setToken("abc");
-        expect(getToken()).toBe("abc");
+    it("stores, reads and clears the token in memory only", () => {
+        const token = makeToken();
+        setToken(token);
+        expect(getToken()).toBe(token);
+        expect(isAuthenticated()).toBe(true);
+        expect(JSON.stringify({ ...localStorage })).not.toContain(token);
+        expect(JSON.stringify({ ...sessionStorage })).not.toContain(token);
+
         clearToken();
         expect(getToken()).toBeNull();
+        expect(isAuthenticated()).toBe(false);
+    });
+
+    it("notifies subscribers when the token changes", () => {
+        const listener = vi.fn();
+        const unsubscribe = subscribeAuth(listener);
+        setToken(makeToken());
+        clearToken();
+        expect(listener).toHaveBeenCalledTimes(2);
+
+        unsubscribe();
+        setToken(makeToken());
+        expect(listener).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not store an unreadable token", () => {
+        setToken("garbage");
+        expect(getToken()).toBeNull();
+        expect(isAuthenticated()).toBe(false);
     });
 
     it("forgets the last files address when the token is cleared", () => {
@@ -55,15 +90,52 @@ describe("access token helpers", () => {
         expect(isTokenExpiring(makeToken({ expiresIn: null }))).toBe(true);
     });
 
-    it("counts an expired but readable token as a session (the client refreshes it)", () => {
+    it("counts an expired but readable token as held (the client refreshes it)", () => {
         setToken(makeToken({ expiresIn: -60 }));
         expect(isAuthenticated()).toBe(true);
     });
+});
 
-    it("drops an unreadable token and reports no session", () => {
-        expect(isAuthenticated()).toBe(false);
-        setToken("garbage");
-        expect(isAuthenticated()).toBe(false);
+describe("session hint", () => {
+    it("startSession keeps the token and sets a hint that is not the token", () => {
+        const token = makeToken();
+        startSession(token);
+        expect(getToken()).toBe(token);
+        expect(hasSessionHint()).toBe(true);
+        const hint = localStorage.getItem(SESSION_HINT_KEY);
+        expect(hint).toBeTruthy();
+        expect(hint).not.toContain(token);
+    });
+
+    it("endSession drops the token and the hint", () => {
+        startSession(makeToken());
+        endSession();
         expect(getToken()).toBeNull();
+        expect(hasSessionHint()).toBe(false);
+    });
+
+    it("tolerates unavailable storage (always tries a refresh)", () => {
+        const spies = ["getItem", "setItem", "removeItem"].map((method) =>
+            vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+                throw new Error("denied");
+            })
+        );
+
+        expect(hasSessionHint()).toBe(true);
+        expect(() => startSession(makeToken())).not.toThrow();
+        expect(() => endSession()).not.toThrow();
+        spies.forEach((spy) => spy.mockRestore());
+    });
+});
+
+describe("legacy token migration", () => {
+    it("removes the old localStorage token at load and keeps its owner signed in via the hint", async () => {
+        localStorage.setItem("token", "old-long-lived-token");
+        vi.resetModules();
+        const fresh = await import("./auth");
+
+        expect(localStorage.getItem("token")).toBeNull();
+        expect(fresh.getToken()).toBeNull();
+        expect(fresh.hasSessionHint()).toBe(true);
     });
 });

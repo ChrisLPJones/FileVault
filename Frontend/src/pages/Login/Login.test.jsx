@@ -4,11 +4,18 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Login from "./Login";
 import { login } from "../../services/Auth";
-import { getToken } from "../../utils/auth";
+import { getToken, hasSessionHint } from "../../utils/auth";
+import { makeToken } from "../../test/tokens";
 
 vi.mock("../../services/Auth", () => ({ login: vi.fn() }));
 // The server status banner polls the API; not part of these tests
 vi.mock("../../components/ServerStatus", () => ({ default: () => null }));
+vi.mock("./TwoFactorStep", () => ({
+    default: ({ onSuccess }) => <button onClick={() => onSuccess(twoFactorToken)}>Finish 2FA</button>,
+}));
+
+const loginToken = makeToken();
+const twoFactorToken = makeToken();
 
 const renderLogin = (state) =>
     render(
@@ -60,7 +67,7 @@ describe("Login form", () => {
     });
 
     it("logs in with the trimmed email, stores the token and opens the files", async () => {
-        login.mockResolvedValue({ status: 200, data: { success: "new-token" } });
+        login.mockResolvedValue({ status: 200, data: { success: loginToken } });
         renderLogin();
         await userEvent.type(email(), "  alex@example.com ");
         await userEvent.type(password(), "Passw0rd");
@@ -68,7 +75,23 @@ describe("Login form", () => {
 
         expect(login).toHaveBeenCalledWith("alex@example.com", "Passw0rd");
         expect(await screen.findByText("Dashboard page")).toBeInTheDocument();
-        expect(getToken()).toBe("new-token");
+        expect(getToken()).toBe(loginToken);
+        expect(hasSessionHint()).toBe(true);
+        expect(localStorage.getItem("token")).toBeNull();
+    });
+
+    it("keeps the token from the two-factor step in memory and sets the session hint", async () => {
+        login.mockResolvedValue({ status: 200, data: { twoFactorRequired: true, challengeToken: "challenge" } });
+        renderLogin();
+        await userEvent.type(email(), "alex@example.com");
+        await userEvent.type(password(), "Passw0rd");
+        await submit();
+        expect(getToken()).toBeNull();
+
+        await userEvent.click(await screen.findByRole("button", { name: "Finish 2FA" }));
+        expect(await screen.findByText("Dashboard page")).toBeInTheDocument();
+        expect(getToken()).toBe(twoFactorToken);
+        expect(hasSessionHint()).toBe(true);
     });
 
     it("shows the server's error, e.g. a wrong password", async () => {
@@ -81,6 +104,7 @@ describe("Login form", () => {
         expect(await screen.findByRole("alert")).toHaveTextContent("Invalid email or password");
         expect(screen.getByRole("button", { name: "Log in" })).toBeEnabled();
         expect(getToken()).toBeNull();
+        expect(hasSessionHint()).toBe(false);
     });
 
     it("says when the server can't be reached", async () => {

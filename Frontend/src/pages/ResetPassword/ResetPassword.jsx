@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { getErrorMessage } from "../../api/api";
 import { resetPasswordAPI } from "../../api/accountEmailAPI";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
-import { clearToken } from "../../utils/auth";
+import { endSession } from "../../utils/auth";
 import "../Auth/Auth.css";
 
 const ruleClass = (typed, met) => (!typed ? undefined : met ? "met" : "unmet");
@@ -34,7 +34,7 @@ function ResetPassword() {
         try {
             await resetPasswordAPI(token, password);
             // Every session was signed out, including any in this browser
-            clearToken();
+            endSession();
             setDone(true);
         } catch (err) {
             setError(getErrorMessage(err, "Could not reset the password"));

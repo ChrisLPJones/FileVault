@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../Auth/Auth.css";
 import { login } from "../../services/Auth";
-import { setToken } from "../../utils/auth";
+import { startSession } from "../../utils/auth";
 import ServerStatus from "../../components/ServerStatus";
 import { getErrorMessage } from "../../api/api";
 import { resendVerificationByEmailAPI } from "../../api/accountEmailAPI";
@@ -59,7 +59,7 @@ function Login() {
                 return;
             }
             if (response.status === 200) {
-                setToken(response.data.success);
+                startSession(response.data.success);
                 navigate("/dashboard", { replace: true });
                 return;
             }
@@ -86,7 +86,7 @@ function Login() {
             <TwoFactorStep
                 challengeToken={challengeToken}
                 onSuccess={(token) => {
-                    setToken(token);
+                    startSession(token);
                     navigate("/dashboard", { replace: true });
                 }}
                 onRestart={() => setChallengeToken(null)}

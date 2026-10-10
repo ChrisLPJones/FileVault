@@ -1,5 +1,5 @@
 import { api } from "./api";
-import { clearToken, setToken } from "../utils/auth";
+import { endSession, setToken } from "../utils/auth";
 
 // Fired after the profile or profile picture changes so every avatar reloads
 export const PROFILE_CHANGED_EVENT = "fv-profile-change";
@@ -26,7 +26,7 @@ export const changePasswordAPI = async (currentPassword, newPassword) => {
 
 export const deleteAccountAPI = async () => {
     await api.delete("/user");
-    clearToken();
+    endSession();
 };
 
 export const getAvatarBlobAPI = async () => (await api.get("/user/avatar", { responseType: "blob" })).data;
