@@ -194,8 +194,6 @@ public partial class DatabaseServices
         {
             addressLock.Parameters.AddWithValue("@Resource", "fv-email-change:" + newEmail.ToLowerInvariant());
             var result = Convert.ToInt32(await addressLock.ExecuteScalarAsync());
-            if (result < 0 && result != -3)
-                await ReportAppLockFailureAsync("fv-email-change:<address>", result, connection, transaction);
             // -3 is a deadlock victim. -999 with the transaction already ended by the server (seen in
             // CI) means it was rolled back under us; nothing was committed, so try again like a deadlock
             if (result < 0)
