@@ -60,42 +60,53 @@ public partial class DatabaseServices
     // Set a user's password and end every way they were signed in, in one transaction: all
     // refresh tokens (so every session), pending two-factor login challenges and unused
     // password-reset links, and TokensValidAfter, which makes the access tokens they hold stop
-    // working now (see AccessTokenGate). Returns false if there's no such user.
-    public Task<bool> SetPasswordAndSignOutAsync(string userId, string passwordHash) =>
-        RetryOnDeadlockAsync(() => SetPasswordAndSignOutOnceAsync(userId, passwordHash));
+    // working now (see AccessTokenGate). Not found is 404; with refuseAdmin an administrator is
+    // refused (400), decided by the same UPDATE that would write, so it can't race a promotion.
+    public Task<HttpReturnResult> SetPasswordAndSignOutAsync(string userId, string passwordHash, bool refuseAdmin = false) =>
+        RetryOnDeadlockAsync(() => SetPasswordAndSignOutOnceAsync(userId, passwordHash, refuseAdmin));
 
-    private async Task<bool> SetPasswordAndSignOutOnceAsync(string userId, string passwordHash)
+    private async Task<HttpReturnResult> SetPasswordAndSignOutOnceAsync(string userId, string passwordHash, bool refuseAdmin)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
         await using var command = new SqlCommand(@"
-            UPDATE Users SET PasswordHash = @PasswordHash, TokensValidAfter = @Now WHERE Id = @UserId;
+            UPDATE Users SET PasswordHash = @PasswordHash, TokensValidAfter = @Now
+            WHERE Id = @UserId AND (@RefuseAdmin = 0 OR IsAdmin = 0);
             IF @@ROWCOUNT = 0
             BEGIN
-                SELECT CAST(0 AS BIT);
+                SELECT CASE WHEN EXISTS (SELECT 1 FROM Users WHERE Id = @UserId) THEN 2 ELSE 0 END;
                 RETURN;
             END
             UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE UserId = @UserId AND RevokedAt IS NULL;
             DELETE FROM LoginChallenges WHERE UserId = @UserId;
             UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
             WHERE UserId = @UserId AND Purpose = @ResetPurpose AND UsedAt IS NULL;
-            SELECT CAST(1 AS BIT);", connection, transaction);
+            SELECT 1;", connection, transaction);
         command.Parameters.AddWithValue("@PasswordHash", passwordHash);
         command.Parameters.AddWithValue("@Now", DateTime.UtcNow);
         command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@RefuseAdmin", refuseAdmin);
         command.Parameters.AddWithValue("@ResetPurpose", AccountEmailService.ResetPurpose);
-        var found = (bool)(await command.ExecuteScalarAsync())!;
+        var outcome = Convert.ToInt32(await command.ExecuteScalarAsync());
 
         await transaction.CommitAsync();
-        return found;
+        return outcome switch
+        {
+            1 => new HttpReturnResult(true),
+            2 => new HttpReturnResult(false, AdminAccountsLockedMessage),
+            _ => HttpReturnResult.NotFound("User not found")
+        };
     }
 
+    public const string AdminAccountsLockedMessage = "Administrator accounts can't be changed from the admin page";
 
 
-    // Mark an account permanent (or not); false if there's no such user
-    public async Task<bool> SetPermanentAsync(string userId, bool isPermanent)
+
+    // Mark an account permanent (or not). Not found is 404. An administrator is refused (400):
+    // administrators are always permanent, and the check is the same UPDATE that would write.
+    public async Task<HttpReturnResult> SetPermanentAsync(string userId, bool isPermanent)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -105,10 +116,19 @@ public partial class DatabaseServices
             UPDATE Users SET IsPermanent = @IsPermanent,
                 LastActiveAt = CASE WHEN @IsPermanent = 0 AND IsPermanent = 1 THEN SYSUTCDATETIME() ELSE LastActiveAt END,
                 InactivityWarnedAt = CASE WHEN @IsPermanent = 0 AND IsPermanent = 1 THEN NULL ELSE InactivityWarnedAt END
-            WHERE Id = @UserId", connection);
+            WHERE Id = @UserId AND IsAdmin = 0;
+            IF @@ROWCOUNT = 0
+                SELECT CASE WHEN EXISTS (SELECT 1 FROM Users WHERE Id = @UserId) THEN 2 ELSE 0 END;
+            ELSE
+                SELECT 1;", connection);
         command.Parameters.AddWithValue("@IsPermanent", isPermanent);
         command.Parameters.AddWithValue("@UserId", userId);
-        return await command.ExecuteNonQueryAsync() > 0;
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) switch
+        {
+            1 => new HttpReturnResult(true),
+            2 => new HttpReturnResult(false, isPermanent ? AdminAccountsLockedMessage : "Administrator accounts are always permanent"),
+            _ => HttpReturnResult.NotFound("User not found")
+        };
     }
 
 
@@ -118,10 +138,11 @@ public partial class DatabaseServices
     // tokens, pending two-factor login challenges and unused password-reset links. Their files,
     // shares and quota are left alone. Suspending the last effective administrator is refused
     // (409). Takes the admin-membership lock because it can remove an administrator.
-    public Task<HttpReturnResult> SetSuspendedAsync(string userId, bool suspended) =>
-        RetryOnDeadlockAsync(() => SetSuspendedOnceAsync(userId, suspended));
+    // With refuseAdmin any administrator is refused (400), checked under the admin-membership lock.
+    public Task<HttpReturnResult> SetSuspendedAsync(string userId, bool suspended, bool refuseAdmin = false) =>
+        RetryOnDeadlockAsync(() => SetSuspendedOnceAsync(userId, suspended, refuseAdmin));
 
-    private async Task<HttpReturnResult> SetSuspendedOnceAsync(string userId, bool suspended)
+    private async Task<HttpReturnResult> SetSuspendedOnceAsync(string userId, bool suspended, bool refuseAdmin)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -130,6 +151,7 @@ public partial class DatabaseServices
         await TakeAdminMembershipLockAsync(connection, transaction);
 
         var found = false;
+        var isAdmin = false;
         var effectiveAdmin = false;
         await using (var read = new SqlCommand("SELECT IsAdmin, SuspendedAt FROM Users WHERE Id = @UserId", connection, transaction))
         {
@@ -138,11 +160,14 @@ public partial class DatabaseServices
             if (await reader.ReadAsync())
             {
                 found = true;
-                effectiveAdmin = reader.GetBoolean(0) && reader.IsDBNull(1);
+                isAdmin = reader.GetBoolean(0);
+                effectiveAdmin = isAdmin && reader.IsDBNull(1);
             }
         }
         if (!found)
             return HttpReturnResult.NotFound("User not found");
+        if (refuseAdmin && isAdmin)
+            return new HttpReturnResult(false, AdminAccountsLockedMessage);
 
         if (suspended && effectiveAdmin)
         {

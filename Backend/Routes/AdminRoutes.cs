@@ -158,7 +158,7 @@ namespace Backend.Routes
                 if (id.ToString() == http.User.GetUserId())
                     return Results.BadRequest(new { error = "Use Settings to delete your own account" });
 
-                var result = await deletion.DeleteAsync(id.ToString());
+                var result = await deletion.DeleteAsync(id.ToString(), refuseAdmin: true);
                 if (!result.Success)
                     return Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 500);
 
@@ -189,8 +189,9 @@ namespace Backend.Routes
                 if (validationError != null)
                     return Results.BadRequest(new { error = validationError });
 
-                if (!await db.SetPasswordAndSignOutAsync(id.ToString(), auth.GeneratePasswordHash(request.Password!)))
-                    return Results.NotFound(new { error = "User not found" });
+                var result = await db.SetPasswordAndSignOutAsync(id.ToString(), auth.GeneratePasswordHash(request.Password!), refuseAdmin: true);
+                if (!result.Success)
+                    return Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
 
                 tokenGate.Evict(id.ToString());
                 Audit(http, "set-password", id.ToString()); // never the password itself
@@ -216,7 +217,7 @@ namespace Backend.Routes
                 if (id.ToString() == http.User.GetUserId())
                     return Results.BadRequest(new { error = "You can't suspend your own account" });
 
-                var result = await db.SetSuspendedAsync(id.ToString(), request.Suspended.Value);
+                var result = await db.SetSuspendedAsync(id.ToString(), request.Suspended.Value, refuseAdmin: true);
                 if (!result.Success)
                     return Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
 
@@ -239,8 +240,11 @@ namespace Backend.Routes
                 var request = await ReadJsonAsync<AdminPermanentRequest>(http.Request);
                 if (request?.IsPermanent == null)
                     return Results.BadRequest(new { error = "Invalid JSON" });
-                if (!Guid.TryParse(userId, out var id) || !await db.SetPermanentAsync(id.ToString(), request.IsPermanent.Value))
+                if (!Guid.TryParse(userId, out var id))
                     return Results.NotFound(new { error = "User not found" });
+                var result = await db.SetPermanentAsync(id.ToString(), request.IsPermanent.Value);
+                if (!result.Success)
+                    return Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
 
                 Audit(http, request.IsPermanent.Value ? "mark-permanent" : "unmark-permanent", id.ToString());
                 return Results.Ok(new { success = request.IsPermanent.Value ? "Account marked permanent" : "Account no longer permanent" });

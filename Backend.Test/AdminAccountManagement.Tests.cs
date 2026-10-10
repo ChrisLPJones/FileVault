@@ -196,6 +196,9 @@ namespace Backend.Test
                 row.GetProperty("isAdmin").GetBoolean().Should().BeTrue();
                 row.GetProperty("isPermanent").GetBoolean().Should().BeTrue();
 
+                // Administrators are always permanent, and can't be deleted from the admin page
+                (await admin.Client.DeleteAsync($"/admin/users/{id}")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                (await admin.Client.PutAsJsonAsync($"/admin/users/{id}/admin", new { isAdmin = false })).StatusCode.Should().Be(HttpStatusCode.OK);
                 (await admin.Client.DeleteAsync($"/admin/users/{id}")).StatusCode.Should().Be(HttpStatusCode.OK);
             }
             finally
@@ -321,18 +324,57 @@ namespace Backend.Test
         }
 
         [Fact]
-        public async Task Delete_OfAnotherAdmin_Works()
+        public async Task AdminOnAdminActions_AreRefused_ForPasswordSuspendDeleteAndPermanent()
         {
             var first = await NewAdminAsync();
             var second = await NewAdminAsync();
             try
             {
-                (await first.Client.DeleteAsync($"/admin/users/{second.UserId}")).StatusCode.Should().Be(HttpStatusCode.OK);
-                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM Users WHERE Id = @Id", ("@Id", second.UserId))).Should().Be(0);
+                var c = first.Client;
+                var message = "Administrator accounts can't be changed from the admin page";
+
+                var password = await c.PutAsJsonAsync($"/admin/users/{second.UserId}/password", new { password = "Another-Passw0rd!x" });
+                password.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                (await ReadAsync(password)).GetProperty("error").GetString().Should().Be(message);
+
+                var suspend = await c.PutAsJsonAsync($"/admin/users/{second.UserId}/suspended", new { suspended = true });
+                suspend.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                (await ReadAsync(suspend)).GetProperty("error").GetString().Should().Be(message);
+
+                var delete = await c.DeleteAsync($"/admin/users/{second.UserId}");
+                delete.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                (await ReadAsync(delete)).GetProperty("error").GetString().Should().Be(message);
+
+                var clear = await c.PutAsJsonAsync($"/admin/users/{second.UserId}/permanent", new { isPermanent = false });
+                clear.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                (await ReadAsync(clear)).GetProperty("error").GetString().Should().Be("Administrator accounts are always permanent");
+                (await c.PutAsJsonAsync($"/admin/users/{second.UserId}/permanent", new { isPermanent = true })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM Users WHERE Id = @Id AND SuspendedAt IS NULL", ("@Id", second.UserId))).Should().Be(1);
             }
             finally
             {
                 await first.Client.DeleteAsync("/user");
+                await second.Client.DeleteAsync("/user");
+            }
+        }
+
+        [Fact]
+        public async Task GrantingAdmin_AlsoMakesTheAccountPermanent()
+        {
+            var admin = await NewAdminAsync();
+            var target = await NewUserAsync();
+            try
+            {
+                (await UserRowAsync(admin.Client, target.UserId)).GetProperty("isPermanent").GetBoolean().Should().BeFalse();
+                (await admin.Client.PutAsJsonAsync($"/admin/users/{target.UserId}/admin", new { isAdmin = true })).StatusCode.Should().Be(HttpStatusCode.OK);
+                (await UserRowAsync(admin.Client, target.UserId)).GetProperty("isPermanent").GetBoolean().Should().BeTrue();
+            }
+            finally
+            {
+                await admin.Client.PutAsJsonAsync($"/admin/users/{target.UserId}/admin", new { isAdmin = false });
+                await admin.Client.DeleteAsync($"/admin/users/{target.UserId}");
+                await admin.Client.DeleteAsync("/user");
             }
         }
 

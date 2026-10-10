@@ -385,14 +385,17 @@ namespace Backend.Test
             {
                 (await other.Client.GetAsync("/admin/users")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-                (await SuspendAsync(actor.Client, other.UserId)).StatusCode.Should().Be(HttpStatusCode.OK);
+                // The admin page route refuses administrators; suspend through the service instead
+                (await SuspendAsync(actor.Client, other.UserId)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                using var scope = _factory.Services.CreateScope();
+                var data = scope.ServiceProvider.GetRequiredService<DatabaseServices>();
+                (await data.SetSuspendedAsync(other.UserId, true)).Success.Should().BeTrue();
 
                 // Their old token is dead outright, and a database check says they are no admin
                 (await other.Client.GetAsync("/admin/users")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-                using (var scope = _factory.Services.CreateScope())
-                    (await scope.ServiceProvider.GetRequiredService<DatabaseServices>().IsAdminAsync(other.UserId)).Should().BeFalse();
+                (await data.IsAdminAsync(other.UserId)).Should().BeFalse();
 
-                (await SuspendAsync(actor.Client, other.UserId, false)).StatusCode.Should().Be(HttpStatusCode.OK);
+                (await data.SetSuspendedAsync(other.UserId, false)).Success.Should().BeTrue();
                 var again = await TestAccounts.LoginAsync(_factory.CreateClient(), other.Email);
                 (await again.GetAsync("/admin/users")).StatusCode.Should().Be(HttpStatusCode.OK);
             }
@@ -444,11 +447,14 @@ namespace Backend.Test
             var b = await TestAccounts.CreateAsync(factory, "b");
             (await a.Client.PutAsJsonAsync($"/admin/users/{b.UserId}/admin", new { isAdmin = true })).StatusCode.Should().Be(HttpStatusCode.OK);
 
+            // The HTTP route refuses administrators, so race the service calls
+            using var scope = factory.Services.CreateScope();
+            var data = scope.ServiceProvider.GetRequiredService<DatabaseServices>();
             var results = await Task.WhenAll(
-                SuspendAsync(a.Client, b.UserId),
-                SuspendAsync(b.Client, a.UserId));
+                data.SetSuspendedAsync(b.UserId, true),
+                data.SetSuspendedAsync(a.UserId, true));
 
-            results.Select(r => r.StatusCode).Should().Contain(HttpStatusCode.OK);
+            results.Select(r => r.Success).Should().Contain(true);
             (await db.ScalarAsync<int>("SELECT COUNT(*) FROM Users WHERE IsAdmin = 1 AND SuspendedAt IS NULL")).Should().Be(1);
         }
     }

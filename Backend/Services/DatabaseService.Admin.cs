@@ -202,6 +202,7 @@ public partial class DatabaseServices
 
         await using (var update = new SqlCommand(@"
             UPDATE Users SET IsAdmin = @IsAdmin,
+                IsPermanent = CASE WHEN @IsAdmin = 1 THEN 1 ELSE IsPermanent END,
                 LastActiveAt = CASE WHEN @IsAdmin = 0 AND IsAdmin = 1 THEN SYSUTCDATETIME() ELSE LastActiveAt END,
                 InactivityWarnedAt = CASE WHEN @IsAdmin = 0 AND IsAdmin = 1 THEN NULL ELSE InactivityWarnedAt END
             WHERE Id = @UserId", connection, transaction))

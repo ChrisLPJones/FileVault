@@ -15,9 +15,10 @@ public class AccountDeletionService(
 {
     // onlyIfInactive: only delete the account if it is still due for removal for inactivity
     // (hosted mode), checked inside the delete transaction
-    public async Task<HttpReturnResult> DeleteAsync(string userId, HostedOptions? onlyIfInactive = null)
+    // refuseAdmin: refuse (400) if the account is an administrator (the admin page's delete)
+    public async Task<HttpReturnResult> DeleteAsync(string userId, HostedOptions? onlyIfInactive = null, bool refuseAdmin = false)
     {
-        var result = await db.DeleteUserAndFilesById(userId, files, onlyIfInactive);
+        var result = await db.DeleteUserAndFilesById(userId, files, onlyIfInactive, refuseAdmin);
         if (!result.Success)
             return result;
 

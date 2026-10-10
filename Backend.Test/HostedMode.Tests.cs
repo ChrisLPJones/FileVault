@@ -319,7 +319,7 @@ namespace Backend.Test
             using var scope = _hosted.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<DatabaseServices>();
 
-            (await db.SetPermanentAsync(user.UserId, false)).Should().BeTrue();
+            (await db.SetPermanentAsync(user.UserId, false)).Success.Should().BeTrue();
 
             (await ColumnAsync(_hosted, user, "InactivityWarnedAt")).Should().BeNull();
             (await ColumnAsync(_hosted, user, "LastActiveAt")).Should().BeAfter(DateTime.UtcNow.AddMinutes(-5));

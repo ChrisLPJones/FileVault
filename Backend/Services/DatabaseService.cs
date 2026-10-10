@@ -590,10 +590,11 @@ public partial class DatabaseServices
     // With onlyIfInactive (hosted-mode removal) the account is deleted only if it is still due for
     // removal inside the transaction (409 otherwise), so someone who signed in, or was made admin or
     // permanent, after the job picked them is left alone.
-    public Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs, HostedOptions? onlyIfInactive = null) =>
-        RetryOnDeadlockAsync(() => DeleteUserAndFilesOnceAsync(userId, fs, onlyIfInactive));
+    // With refuseAdmin an administrator is refused (400), checked under the admin-membership lock.
+    public Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs, HostedOptions? onlyIfInactive = null, bool refuseAdmin = false) =>
+        RetryOnDeadlockAsync(() => DeleteUserAndFilesOnceAsync(userId, fs, onlyIfInactive, refuseAdmin));
 
-    private async Task<HttpReturnResult> DeleteUserAndFilesOnceAsync(string userId, FileServices fs, HostedOptions? onlyIfInactive)
+    private async Task<HttpReturnResult> DeleteUserAndFilesOnceAsync(string userId, FileServices fs, HostedOptions? onlyIfInactive, bool refuseAdmin)
     {
         var files = new List<string>();
 
@@ -615,6 +616,17 @@ public partial class DatabaseServices
                 {
                     await transaction.RollbackAsync();
                     return HttpReturnResult.NotFound("User not found");
+                }
+            }
+
+            if (refuseAdmin)
+            {
+                await using var adminCheck = new SqlCommand("SELECT COUNT(1) FROM Users WHERE Id = @UserId AND IsAdmin = 1", connection, (SqlTransaction)transaction);
+                adminCheck.Parameters.AddWithValue("@UserId", userId);
+                if (Convert.ToInt32(await adminCheck.ExecuteScalarAsync()) > 0)
+                {
+                    await transaction.RollbackAsync();
+                    return new HttpReturnResult(false, AdminAccountsLockedMessage) { StatusCode = 400 };
                 }
             }
 
