@@ -60,6 +60,8 @@ public partial class DatabaseServices
             return;
 
         _logger.LogError("Could not take the admin membership lock (sp_getapplock returned {Result})", result);
+        if (result != -3)
+            await ReportAppLockFailureAsync(AdminMembershipLock, result, connection, transaction);
         throw result switch
         {
             -3 => new AppLockDeadlockException("Chosen as a deadlock victim waiting for the admin membership lock"),

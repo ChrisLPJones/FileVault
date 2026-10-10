@@ -194,6 +194,8 @@ public partial class DatabaseServices
         {
             addressLock.Parameters.AddWithValue("@Resource", "fv-email-change:" + newEmail.ToLowerInvariant());
             var result = Convert.ToInt32(await addressLock.ExecuteScalarAsync());
+            if (result < 0 && result != -3)
+                await ReportAppLockFailureAsync("fv-email-change:<address>", result, connection, transaction);
             if (result < 0)
                 throw result == -3
                     ? new AppLockDeadlockException("Chosen as a deadlock victim waiting for the email address lock")

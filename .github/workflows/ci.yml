@@ -14,6 +14,10 @@ jobs:
       SA_PASSWORD: CiOnly-Str0ng!Pass
       # Says the database below is a test database, so the tests may seed a sentinel admin in it
       FILEVAULT_TEST_DB: "1"
+      # Diagnostics for intermittent applock timeouts: a test-side watchdog and app-side reports
+      # (both only read lock state and print it in the test output)
+      FILEVAULT_LOCK_DIAGNOSTICS: "1"
+      Diagnostics__AppLock: "true"
 
     services:
       sqlserver:

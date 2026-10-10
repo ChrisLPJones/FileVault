@@ -14,6 +14,7 @@ public partial class DatabaseServices
         InitialAdminEmail = NormaliseInitialAdminEmail(config["Admin:InitialEmail"]);
         _connectionString = config.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not set.");
+        _lockDiagnostics = config.GetValue<bool>("Diagnostics:AppLock");
         _logger = logger;
     }
 
