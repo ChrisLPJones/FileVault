@@ -5,11 +5,15 @@ namespace Backend.Services;
 // Storage:TrashRetentionDays and removes chunked uploads abandoned for 24 hours. In hosted mode it
 // also warns and removes inactive accounts (see InactiveAccountService).
 // Failures are logged and retried on the next run.
+// Storage:BackgroundCleanup=false (the test hosts) stops the loop; RunOnceAsync can still be called.
 public class StorageCleanupService(IServiceScopeFactory scopes, IConfiguration config, ILogger<StorageCleanupService> logger)
     : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!config.GetValue("Storage:BackgroundCleanup", true))
+            return;
+
         var interval = TimeSpan.FromMinutes(Math.Max(1, config.GetValue("Storage:CleanupIntervalMinutes", 60)));
 
         try
