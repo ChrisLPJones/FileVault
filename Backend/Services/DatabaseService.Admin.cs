@@ -60,6 +60,10 @@ public partial class DatabaseServices
             return;
 
         _logger.LogError("Could not take the admin membership lock (sp_getapplock returned {Result})", result);
+        // A -999 with the transaction already ended by the server means it was rolled back under us
+        // (nothing committed): retry like a deadlock victim
+        if (result == -999 && transaction.Connection == null)
+            result = -3;
         throw result switch
         {
             -3 => new AppLockDeadlockException("Chosen as a deadlock victim waiting for the admin membership lock"),

@@ -194,8 +194,10 @@ public partial class DatabaseServices
         {
             addressLock.Parameters.AddWithValue("@Resource", "fv-email-change:" + newEmail.ToLowerInvariant());
             var result = Convert.ToInt32(await addressLock.ExecuteScalarAsync());
+            // -3 is a deadlock victim. -999 with the transaction already ended by the server (seen in
+            // CI) means it was rolled back under us; nothing was committed, so try again like a deadlock
             if (result < 0)
-                throw result == -3
+                throw result == -3 || (result == -999 && transaction.Connection == null)
                     ? new AppLockDeadlockException("Chosen as a deadlock victim waiting for the email address lock")
                     : new InvalidOperationException($"Could not take the email address lock (sp_getapplock returned {result})");
         }

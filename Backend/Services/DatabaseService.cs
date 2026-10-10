@@ -758,13 +758,22 @@ public partial class DatabaseServices
     // password change, reset or administrator password set can't leave a live session behind. Returns false if it was
     // refused for that reason, or because the user is suspended (checked on every insert so a login
     // in flight when a suspension commits can't leave a token behind), or the user is gone.
-    public async Task<bool> StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
-        bool requireUnchangedTokensValidAfter = false, DateTime? seenTokensValidAfter = null)
+    // The batch runs in one explicit transaction (XACT_ABORT ON), so a deadlock victim rolls back
+    // the delete, insert and session cleanup together and the retry starts clean.
+    public Task<bool> StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
+        bool requireUnchangedTokensValidAfter = false, DateTime? seenTokensValidAfter = null) =>
+        RetryOnDeadlockAsync(() => StoreRefreshTokenOnceAsync(userId, sessionId, tokenHash, expiresAtUtc,
+            requireUnchangedTokensValidAfter, seenTokensValidAfter));
+
+    private async Task<bool> StoreRefreshTokenOnceAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
+        bool requireUnchangedTokensValidAfter, DateTime? seenTokensValidAfter)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         const string query = @"
+            SET XACT_ABORT ON;
+            BEGIN TRAN;
             DELETE FROM RefreshTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
             INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt)
             SELECT @UserId, @SessionId, @TokenHash, @ExpiresAt
@@ -774,6 +783,7 @@ public partial class DatabaseServices
             DECLARE @Stored INT = @@ROWCOUNT;
             DELETE FROM Sessions WHERE UserId = @UserId
                 AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);
+            COMMIT;
             SELECT @Stored;";
 
         await using var command = new SqlCommand(query, connection);
