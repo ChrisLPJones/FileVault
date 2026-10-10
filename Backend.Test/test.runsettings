@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Used by `dotnet test` for this project (see RunSettingsFilePath in Backend.Test.csproj).
-     FILEVAULT_TEST_DB=1 tells the tests that the database in the connection string is a test
-     database, so they may add a sentinel administrator to it (see SentinelAdmin in TestAdmins.cs). -->
+     The tests create their own FvTest_ database and point every host at it (see TestAdmins.cs). -->
 <RunSettings>
   <RunConfiguration>
     <EnvironmentVariables>
-      <FILEVAULT_TEST_DB>1</FILEVAULT_TEST_DB>
       <!-- No caching of per-user access-token state, so tests see deletions and password changes at once -->
       <Auth__UserStateCacheSeconds>0</Auth__UserStateCacheSeconds>
+      <!-- Test hosts don't run the cleanup loop on their own; tests call RunOnceAsync when they need it -->
+      <Storage__BackgroundCleanup>false</Storage__BackgroundCleanup>
     </EnvironmentVariables>
   </RunConfiguration>
 </RunSettings>

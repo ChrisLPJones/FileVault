@@ -8,7 +8,7 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
 
-    <!-- Sets FILEVAULT_TEST_DB=1 for `dotnet test`; see TestAdmins.cs -->
+    <!-- Test host settings for `dotnet test` (no background cleanup, no user-state cache); see TestAdmins.cs -->
     <RunSettingsFilePath>$(MSBuildProjectDirectory)/test.runsettings</RunSettingsFilePath>
   </PropertyGroup>
 

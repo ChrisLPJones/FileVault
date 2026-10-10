@@ -27,10 +27,12 @@ namespace Backend.Test
         [ModuleInitializer]
         public static void Start()
         {
+            // Only finds the server (all applocks are watched server-wide), so it does not depend on
+            // the order of module initializers or on the per-run database being set up yet
             if (Environment.GetEnvironmentVariable(EnabledFlag) != "1")
                 return;
 
-            var master = new SqlConnectionStringBuilder(TestEnvironment.ConnectionString) { InitialCatalog = "master", Pooling = false }.ConnectionString;
+            var master = new SqlConnectionStringBuilder(TestEnvironment.LoadConfiguredConnectionString()) { InitialCatalog = "master", Pooling = false }.ConnectionString;
             var thread = new Thread(() => Run(master)) { IsBackground = true, Name = "applock-watchdog" };
             thread.Start();
         }
