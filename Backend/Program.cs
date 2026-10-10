@@ -124,6 +124,10 @@ namespace Backend
             builder.Services.AddScoped<TrashService>();
             builder.Services.AddScoped<ChunkedUploadService>();
             builder.Services.AddScoped<AccountDeletionService>();
+            // Read from config when first needed (and forced below at start-up), so a bad FILEVAULT_MODE stops the API
+            builder.Services.AddSingleton(sp => HostedOptions.From(sp.GetRequiredService<IConfiguration>()));
+            builder.Services.AddSingleton<RemovalTracker>();
+            builder.Services.AddScoped<InactiveAccountService>();
             builder.Services.AddMemoryCache();
             builder.Services.AddSingleton<AccessTokenGate>();
             builder.Services.AddHostedService<StorageCleanupService>();
@@ -180,6 +184,12 @@ namespace Backend
                 });
 
             var app = builder.Build();
+
+            // Fail fast on an unknown FILEVAULT_MODE
+            var hostedOptions = app.Services.GetRequiredService<HostedOptions>();
+            app.Logger.LogInformation("FileVault mode: {Mode}", hostedOptions.ModeName);
+            if (hostedOptions.IsHosted && app.Services.GetRequiredService<IEmailSender>() is LogEmailSender)
+                app.Logger.LogWarning("Hosted mode without an SMTP host (Email:Smtp:Host): inactive accounts will be removed without a warning email");
 
             // Administrators are managed on the admin page now; the old setting does nothing
             var legacyAdminEmails = builder.Configuration.GetSection("Admin:Emails");

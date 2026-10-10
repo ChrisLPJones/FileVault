@@ -344,6 +344,7 @@ export default function Admin() {
     if (!data) return <div className="admin-page"><p className="admin-loading">Loading…</p></div>;
 
     const { users, stats } = data;
+    const hosted = stats.mode === "hosted";
     const diskUsed = stats.diskTotalBytes != null && stats.diskFreeBytes != null ? stats.diskTotalBytes - stats.diskFreeBytes : null;
     const tiles = [
         ["Users", stats.userCount, `${stats.adminCount} admin${stats.adminCount === 1 ? "" : "s"}${stats.suspendedCount ? `, ${stats.suspendedCount} suspended` : ""}`],
@@ -391,6 +392,8 @@ export default function Admin() {
                                 <th scope="col">Created</th>
                                 <th scope="col">Last login</th>
                                 <th scope="col">Login location</th>
+                                {hosted && <th scope="col">Last active</th>}
+                                {hosted && <th scope="col">Removal due</th>}
                                 <th scope="col" className="numeric">Files</th>
                                 <th scope="col">Storage used</th>
                                 <th scope="col">Quota</th>
@@ -439,6 +442,14 @@ export default function Admin() {
                                                 <span className="admin-muted">Unknown</span>
                                             )}
                                         </td>
+                                        {hosted && <td>{formatWhen(user.lastActiveAt)}</td>}
+                                        {hosted && (
+                                            <td>
+                                                {user.removalDueAt
+                                                    ? formatWhen(user.removalDueAt)
+                                                    : <span className="admin-muted">Not removed</span>}
+                                            </td>
+                                        )}
                                         <td className="numeric">{user.fileCount.toLocaleString()}</td>
                                         <td>
                                             <div>{formatBytes(user.bytesUsed)}</div>

@@ -2,7 +2,8 @@ namespace Backend.Services;
 
 // Housekeeping that runs in the background: shortly after start-up, then every
 // Storage:CleanupIntervalMinutes (default 60). Empties recycle bin entries older than
-// Storage:TrashRetentionDays and removes chunked uploads abandoned for 24 hours.
+// Storage:TrashRetentionDays and removes chunked uploads abandoned for 24 hours. In hosted mode it
+// also warns and removes inactive accounts (see InactiveAccountService).
 // Failures are logged and retried on the next run.
 public class StorageCleanupService(IServiceScopeFactory scopes, IConfiguration config, ILogger<StorageCleanupService> logger)
     : BackgroundService
@@ -53,6 +54,17 @@ public class StorageCleanupService(IServiceScopeFactory scopes, IConfiguration c
         catch (Exception ex)
         {
             logger.LogError(ex, "Removing abandoned uploads failed");
+        }
+
+        try
+        {
+            var inactive = await scope.ServiceProvider.GetRequiredService<InactiveAccountService>().RunAsync();
+            if (inactive.Warned > 0 || inactive.Removed > 0)
+                logger.LogInformation("Inactive accounts: warned {Warned}, removed {Removed}", inactive.Warned, inactive.Removed);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Removing inactive accounts failed");
         }
     }
 }

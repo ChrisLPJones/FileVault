@@ -200,7 +200,11 @@ public partial class DatabaseServices
                 return HttpReturnResult.Conflict(LastAdminMessage); // rolled back (nothing written) when disposed
         }
 
-        await using (var update = new SqlCommand("UPDATE Users SET IsAdmin = @IsAdmin WHERE Id = @UserId", connection, transaction))
+        await using (var update = new SqlCommand(@"
+            UPDATE Users SET IsAdmin = @IsAdmin,
+                LastActiveAt = CASE WHEN @IsAdmin = 0 AND IsAdmin = 1 THEN SYSUTCDATETIME() ELSE LastActiveAt END,
+                InactivityWarnedAt = CASE WHEN @IsAdmin = 0 AND IsAdmin = 1 THEN NULL ELSE InactivityWarnedAt END
+            WHERE Id = @UserId", connection, transaction))
         {
             update.Parameters.AddWithValue("@IsAdmin", isAdmin);
             update.Parameters.AddWithValue("@UserId", userId);
@@ -215,10 +219,11 @@ public partial class DatabaseServices
 
     // Every account with its storage use and file count, oldest first. Reads every user's files,
     // so it can be picked as a deadlock victim by someone's delete; it only reads, so it's retried.
-    public Task<List<AdminUser>> GetUsersForAdminAsync(long defaultQuota) =>
-        RetryOnDeadlockAsync(() => ReadUsersForAdminAsync(defaultQuota));
+    // In hosted mode each row also says when the account will be removed for inactivity.
+    public Task<List<AdminUser>> GetUsersForAdminAsync(long defaultQuota, HostedOptions? hosted = null) =>
+        RetryOnDeadlockAsync(() => ReadUsersForAdminAsync(defaultQuota, hosted));
 
-    private async Task<List<AdminUser>> ReadUsersForAdminAsync(long defaultQuota)
+    private async Task<List<AdminUser>> ReadUsersForAdminAsync(long defaultQuota, HostedOptions? hosted)
     {
         var users = new List<AdminUser>();
 
@@ -229,11 +234,12 @@ public partial class DatabaseServices
             SELECT u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin,
                    COALESCE(SUM(CASE WHEN f.IsDirectory = 0 THEN f.Size END), 0) AS BytesUsed,
                    COUNT(CASE WHEN f.IsDirectory = 0 THEN 1 END) AS FileCount,
-                   u.IsPermanent, u.AvatarUpdatedAt, u.SuspendedAt, u.LastLoginIp
+                   u.IsPermanent, u.AvatarUpdatedAt, u.SuspendedAt, u.LastLoginIp,
+                   COALESCE(u.LastActiveAt, u.LastLogin, u.CreatedAt), u.InactivityWarnedAt
             FROM Users u
             LEFT JOIN Files f ON f.UserId = u.Id
             GROUP BY u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin,
-                     u.IsPermanent, u.AvatarUpdatedAt, u.SuspendedAt, u.LastLoginIp
+                     u.IsPermanent, u.AvatarUpdatedAt, u.SuspendedAt, u.LastLoginIp, u.LastActiveAt, u.InactivityWarnedAt, u.CreatedAt
             ORDER BY u.CreatedAt, u.Email";
 
         await using var command = new SqlCommand(query, connection);
@@ -241,6 +247,11 @@ public partial class DatabaseServices
         while (await reader.ReadAsync())
         {
             var quotaOverride = reader.IsDBNull(6) ? (long?)null : reader.GetInt64(6);
+            var lastActive = reader.IsDBNull(14) ? (DateTime?)null : DateTime.SpecifyKind(reader.GetDateTime(14), DateTimeKind.Utc);
+            var warnedAt = reader.IsDBNull(15) ? (DateTime?)null : DateTime.SpecifyKind(reader.GetDateTime(15), DateTimeKind.Utc);
+            var isAdmin = reader.GetBoolean(7);
+            var isPermanent = reader.GetBoolean(10);
+            var suspendedAt = reader.IsDBNull(12) ? (DateTime?)null : DateTime.SpecifyKind(reader.GetDateTime(12), DateTimeKind.Utc);
             users.Add(new AdminUser(
                 reader.GetGuid(0),
                 reader.GetString(1),
@@ -252,11 +263,15 @@ public partial class DatabaseServices
                 reader.GetInt32(9),
                 quotaOverride ?? defaultQuota,
                 quotaOverride,
-                reader.GetBoolean(7),
-                reader.GetBoolean(10),
+                isAdmin,
+                isPermanent,
                 reader.IsDBNull(11) ? null : DateTime.SpecifyKind(reader.GetDateTime(11), DateTimeKind.Utc),
-                reader.IsDBNull(12) ? null : DateTime.SpecifyKind(reader.GetDateTime(12), DateTimeKind.Utc),
-                reader.IsDBNull(13) ? null : reader.GetString(13)));
+                suspendedAt,
+                reader.IsDBNull(13) ? null : reader.GetString(13),
+                LastActiveAt: lastActive,
+                RemovalDueAt: hosted is { IsHosted: true } && lastActive is { } active
+                    ? RemovalDueAt(hosted, isAdmin, isPermanent, suspendedAt != null, active, warnedAt)
+                    : null));
         }
 
         return users;

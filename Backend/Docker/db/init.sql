@@ -714,3 +714,34 @@ BEGIN
     PRINT 'Column "Users.SuspendedAt" added.';
 END
 GO
+
+------------------------------------------------------------
+-- HOSTED MODE: inactive-account removal and the first-login notice (added to existing databases too)
+------------------------------------------------------------
+-- Last sign-in or use of the app (UTC), for the inactivity clock. Written at sign-in and when the
+-- access token is renewed (at most once an hour). New accounts start at the time they're created.
+-- Existing accounts start from their last login, or when they were created.
+IF COL_LENGTH('Users', 'LastActiveAt') IS NULL
+BEGIN
+    ALTER TABLE Users ADD LastActiveAt DATETIME2 NULL CONSTRAINT DF_Users_LastActiveAt DEFAULT SYSUTCDATETIME();
+    PRINT 'Column "Users.LastActiveAt" added.';
+    EXEC('UPDATE Users SET LastActiveAt = COALESCE(LastLogin, CreatedAt, SYSUTCDATETIME()) WHERE LastActiveAt IS NULL');
+END
+GO
+
+-- When the user was warned that their account would be removed for inactivity (UTC). NULL = not
+-- warned; cleared as soon as they use the app again.
+IF COL_LENGTH('Users', 'InactivityWarnedAt') IS NULL
+BEGIN
+    ALTER TABLE Users ADD InactivityWarnedAt DATETIME2 NULL;
+    PRINT 'Column "Users.InactivityWarnedAt" added.';
+END
+GO
+
+-- When the user dismissed the hosted-mode notice (UTC). NULL = not yet dismissed.
+IF COL_LENGTH('Users', 'HostedNoticeDismissedAt') IS NULL
+BEGIN
+    ALTER TABLE Users ADD HostedNoticeDismissedAt DATETIME2 NULL;
+    PRINT 'Column "Users.HostedNoticeDismissedAt" added.';
+END
+GO

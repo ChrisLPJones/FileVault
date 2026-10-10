@@ -59,6 +59,10 @@ services:
       Admin__InitialEmail: ${INITIAL_ADMIN_EMAIL:-}
       # Only read so the API can warn that ADMIN_EMAILS is no longer used (empty value doesn't warn)
       Admin__Emails: ${ADMIN_EMAILS:-}
+      # self-hosted (default) or hosted; hosted turns on inactive-account removal and the first-login notice
+      App__Mode: ${FILEVAULT_MODE:-self-hosted}
+      # Hosted mode only: the address users are told to email to ask for a permanent account
+      Hosted__ContactEmail: ${HOSTED_CONTACT_EMAIL:-}
       # Links in emails point here
       App__FrontendUrl: ${FRONTEND_URL:-http://localhost:5173}
       # Optional SMTP for password reset / email confirmation (otherwise logged)

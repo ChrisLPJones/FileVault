@@ -5,8 +5,11 @@ import { endSession, setToken } from "../utils/auth";
 export const PROFILE_CHANGED_EVENT = "fv-profile-change";
 export const notifyProfileChanged = () => window.dispatchEvent(new Event(PROFILE_CHANGED_EVENT));
 
-// { firstName, lastName, email, avatarUpdatedAt }
+// { firstName, lastName, email, avatarUpdatedAt, emailVerified, hostedNotice, hostedInactiveDays, hostedContactEmail }
 export const getUserInfoAPI = async () => (await api.get("/user/info")).data;
+
+// Hosted mode: remember that this user closed the first-login notice
+export const dismissHostedNoticeAPI = async () => (await api.post("/user/notices/hosted/dismiss")).data;
 
 // { used, quota, maxUploadBytes, maxFileBytes } in bytes; used includes files in the recycle bin
 export const getUsageAPI = async () => (await api.get("/user/usage")).data;

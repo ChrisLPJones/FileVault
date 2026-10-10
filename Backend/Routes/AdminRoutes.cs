@@ -35,15 +35,15 @@ namespace Backend.Routes
                 });
 
             // Every account with its usage and quota
-            admin.MapGet("/users", async (DatabaseServices db, IConfiguration config, GeoIpService geoIp) =>
+            admin.MapGet("/users", async (DatabaseServices db, IConfiguration config, GeoIpService geoIp, HostedOptions hosted) =>
             {
                 // The country is looked up now, not stored, so it always reflects the current database
-                var users = await db.GetUsersForAdminAsync(DefaultQuota(config));
+                var users = await db.GetUsersForAdminAsync(DefaultQuota(config), hosted);
                 return Results.Ok(users.Select(u => geoIp.TryCountry(u.LastLoginIp) is var (code, name)
                     ? u with { LastLoginCountryCode = code, LastLoginCountry = name }
                     : u).ToList());
             })
-                .WithSummary("List users: name, email, created, last login (with address and country), bytes used, file count and quota (admins only)")
+                .WithSummary("List users: name, email, created, last login (with address and country), last active, removal due (hosted mode), bytes used, file count and quota (admins only)")
                 .Produces<List<AdminUser>>()
                 .Produces<ErrorResponse>(403);
 
@@ -266,14 +266,14 @@ namespace Backend.Routes
                 .Produces<ErrorResponse>(404);
 
             // Totals and disk space
-            admin.MapGet("/stats", async (ClaimsPrincipal user, DatabaseServices db, IConfiguration config) =>
+            admin.MapGet("/stats", async (ClaimsPrincipal user, DatabaseServices db, IConfiguration config, HostedOptions hosted) =>
             {
                 var (users, admins, files, folders, bytes, suspended) = await db.GetAdminTotalsAsync();
                 var (onDisk, total, free) = DiskUsage(config.GetValue<string>("StorageRoot") ?? "");
                 return Results.Ok(new AdminStats(users, admins, files, folders, bytes, DefaultQuota(config), onDisk, total, free,
-                    Guid.Parse(user.GetUserId()), suspended));
+                    Guid.Parse(user.GetUserId()), suspended, hosted.ModeName));
             })
-                .WithSummary("User and file counts, bytes stored, and disk use of the storage folder (admins only)")
+                .WithSummary("User and file counts, bytes stored, disk use of the storage folder, and the mode (self-hosted or hosted) (admins only)")
                 .Produces<AdminStats>()
                 .Produces<ErrorResponse>(403);
         }

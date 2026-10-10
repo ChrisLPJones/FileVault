@@ -13,9 +13,11 @@ public class AccountDeletionService(
     ChunkedUploadService uploads,
     AccessTokenGate tokenGate)
 {
-    public async Task<HttpReturnResult> DeleteAsync(string userId)
+    // onlyIfInactive: only delete the account if it is still due for removal for inactivity
+    // (hosted mode), checked inside the delete transaction
+    public async Task<HttpReturnResult> DeleteAsync(string userId, HostedOptions? onlyIfInactive = null)
     {
-        var result = await db.DeleteUserAndFilesById(userId, files);
+        var result = await db.DeleteUserAndFilesById(userId, files, onlyIfInactive);
         if (!result.Success)
             return result;
 

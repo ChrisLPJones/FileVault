@@ -586,10 +586,13 @@ public partial class DatabaseServices
 
 
     // Remove user and all file metadata from database and delete files from storage
-    public Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs) =>
-        RetryOnDeadlockAsync(() => DeleteUserAndFilesOnceAsync(userId, fs));
+    // With onlyIfInactive (hosted-mode removal) the account is deleted only if it is still due for
+    // removal inside the transaction (409 otherwise), so someone who signed in, or was made admin or
+    // permanent, after the job picked them is left alone.
+    public Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs, HostedOptions? onlyIfInactive = null) =>
+        RetryOnDeadlockAsync(() => DeleteUserAndFilesOnceAsync(userId, fs, onlyIfInactive));
 
-    private async Task<HttpReturnResult> DeleteUserAndFilesOnceAsync(string userId, FileServices fs)
+    private async Task<HttpReturnResult> DeleteUserAndFilesOnceAsync(string userId, FileServices fs, HostedOptions? onlyIfInactive)
     {
         var files = new List<string>();
 
@@ -611,6 +614,21 @@ public partial class DatabaseServices
                 {
                     await transaction.RollbackAsync();
                     return HttpReturnResult.NotFound("User not found");
+                }
+            }
+
+            if (onlyIfInactive != null)
+            {
+                await using var due = new SqlCommand(
+                    $"SELECT COUNT(1) FROM Users WITH (UPDLOCK, ROWLOCK) WHERE Id = @UserId AND {DueForRemovalPredicate}",
+                    connection, (SqlTransaction)transaction);
+                due.Parameters.AddWithValue("@UserId", userId);
+                due.Parameters.AddWithValue("@InactiveDays", onlyIfInactive.InactiveDays);
+                due.Parameters.AddWithValue("@WarningDays", onlyIfInactive.WarningDays);
+                if (Convert.ToInt32(await due.ExecuteScalarAsync()) == 0)
+                {
+                    await transaction.RollbackAsync();
+                    return HttpReturnResult.Conflict("Account is no longer due for removal");
                 }
             }
 
