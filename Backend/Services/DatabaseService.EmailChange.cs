@@ -183,6 +183,23 @@ public partial class DatabaseServices
             return new EmailChangeResult(EmailChangeOutcome.Invalid);
         }
 
+        // Two accounts confirming the same address would otherwise take overlapping range locks on
+        // the email index and deadlock; one at a time per address, the second then finds it taken.
+        // Released when the transaction ends. A deadlock victim here is retried like a SQL one.
+        await using (var addressLock = new SqlCommand(@"
+            DECLARE @Result INT;
+            EXEC @Result = sp_getapplock @Resource = @Resource, @LockMode = 'Exclusive',
+                 @LockOwner = 'Transaction', @LockTimeout = 10000;
+            SELECT @Result;", connection, transaction))
+        {
+            addressLock.Parameters.AddWithValue("@Resource", "fv-email-change:" + newEmail.ToLowerInvariant());
+            var result = Convert.ToInt32(await addressLock.ExecuteScalarAsync());
+            if (result < 0)
+                throw result == -3
+                    ? new AppLockDeadlockException("Chosen as a deadlock victim waiting for the email address lock")
+                    : new InvalidOperationException($"Could not take the email address lock (sp_getapplock returned {result})");
+        }
+
         string? oldEmail = null;
         var oldVerified = false;
         await using (var read = new SqlCommand("SELECT Email, EmailVerified FROM Users WITH (UPDLOCK) WHERE Id = @UserId", connection, transaction))
@@ -221,7 +238,20 @@ public partial class DatabaseServices
 
         if (changed == 0)
         {
-            await transaction.CommitAsync(); // keep the link used up
+            if (transaction.Connection != null)
+                await transaction.CommitAsync(); // keep the link used up
+            else
+            {
+                // The server ended the transaction with the failed statement, taking the used-up
+                // link with it: mark it used again on its own
+                await using var burn = new SqlCommand(@"
+                    UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
+                    WHERE TokenHash = @TokenHash AND Purpose = @Purpose AND UserId = @UserId AND UsedAt IS NULL", connection);
+                burn.Parameters.AddWithValue("@TokenHash", tokenHash);
+                burn.Parameters.AddWithValue("@Purpose", AccountEmailService.ChangePurpose);
+                burn.Parameters.AddWithValue("@UserId", userId);
+                await burn.ExecuteNonQueryAsync();
+            }
             return new EmailChangeResult(EmailChangeOutcome.Taken);
         }
 
