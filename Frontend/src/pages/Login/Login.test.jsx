@@ -23,6 +23,7 @@ const renderLogin = (state) =>
             <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/dashboard" element={<p>Dashboard page</p>} />
+                <Route path="/confirm-email" element={<p>Confirm email page</p>} />
             </Routes>
         </MemoryRouter>
     );
@@ -79,6 +80,27 @@ describe("Login form", () => {
         expect(hasSessionHint()).toBe(true);
         expect(localStorage.getItem("token")).toBeNull();
     });
+
+    it("returns to the page the visitor came from, if it is inside the app", async () => {
+        login.mockResolvedValue({ status: 200, data: { success: loginToken } });
+        renderLogin({ from: "/confirm-email?token=abc" });
+        await userEvent.type(email(), "alex@example.com");
+        await userEvent.type(password(), "Passw0rd");
+        await submit();
+
+        expect(await screen.findByText("Confirm email page")).toBeInTheDocument();
+    });
+
+    it.each(["//evil.example/confirm-email", "https://evil.example", "/\\evil.example", "/\t/evil.example"])(
+        "ignores an outside return path (%s)", async (from) => {
+            login.mockResolvedValue({ status: 200, data: { success: loginToken } });
+            renderLogin({ from });
+            await userEvent.type(email(), "alex@example.com");
+            await userEvent.type(password(), "Passw0rd");
+            await submit();
+
+            expect(await screen.findByText("Dashboard page")).toBeInTheDocument();
+        });
 
     it("keeps the token from the two-factor step in memory and sets the session hint", async () => {
         login.mockResolvedValue({ status: 200, data: { twoFactorRequired: true, challengeToken: "challenge" } });

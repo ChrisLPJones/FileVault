@@ -5,8 +5,9 @@ using System.Security.Claims;
 namespace Backend.Routes
 {
     // Forgot password and email verification. A new account can't log in until its address is
-    // confirmed. Someone who changes their address stays logged in (with a banner asking them to
-    // confirm it) but must confirm it before their next login.
+    // confirmed. Changing the address of a signed-in account is in EmailChangeRoutes (the new
+    // address is pending until confirmed); these links only confirm sign-up addresses, and the
+    // addresses of accounts that changed theirs before pending changes existed.
     public static class AccountEmailRoutes
     {
         private const string ForgotPasswordReply =
@@ -58,6 +59,9 @@ namespace Backend.Routes
 
                 await db.UpdatePasswordHashAsync(use.UserId, auth.GeneratePasswordHash(request.NewPassword));
                 await db.RevokeAllRefreshTokensAsync(use.UserId);
+
+                // A pending email change may have been started by someone else: drop it
+                await db.CancelPendingEmailChangeAsync(use.UserId);
 
                 // The link was opened from the account's inbox, which confirms the address. The
                 // password is one the owner just chose, so if this is the INITIAL_ADMIN_EMAIL

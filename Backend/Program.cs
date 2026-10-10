@@ -262,6 +262,7 @@ namespace Backend
             app.MapShareRoutes();
             app.MapTrashRoutes();
             app.MapAccountEmailRoutes();
+            app.MapEmailChangeRoutes();
             app.MapUploadRoutes();
             app.MapTwoFactorRoutes();
             app.MapSessionRoutes();

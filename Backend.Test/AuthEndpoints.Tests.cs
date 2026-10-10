@@ -295,7 +295,7 @@ namespace Backend.Test
         }
 
         [Fact]
-        public async Task ProfileUpdate_RejectsEmailUsedByAnotherAccount()
+        public async Task EmailChange_RejectsEmailUsedByAnotherAccount()
         {
             var otherClient = NewClient(_factory);
             var otherEmail = NewEmail();
@@ -305,8 +305,8 @@ namespace Backend.Test
 
             var (client, token, _) = await NewUserSessionAsync();
 
-            var emailTaken = await client.SendAsync(Authed(HttpMethod.Patch, "/user/profile", token,
-                new { firstName = "Fresh", lastName = "Name", email = otherEmail.ToUpperInvariant() }));
+            var emailTaken = await client.SendAsync(Authed(HttpMethod.Post, "/user/email/change", token,
+                new { email = otherEmail.ToUpperInvariant(), currentPassword = Password }));
             emailTaken.StatusCode.Should().Be(HttpStatusCode.Conflict);
             (await emailTaken.Content.ReadAsStringAsync()).Should().Contain("Email already exists");
         }
