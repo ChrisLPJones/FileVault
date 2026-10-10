@@ -157,7 +157,7 @@ namespace Backend.Routes
 
                 var avatar = await db.GetAvatarAsync(userId);
                 return Results.Ok(new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt,
-                    await db.IsEmailVerifiedAsync(userId)));
+                    await db.IsEmailVerifiedAsync(userId), await db.GetIconThemeAsync(userId)));
             })
                 .WithTags("Account")
                 .WithSummary("Get the current user's name, email, whether it's confirmed and when their profile picture last changed")

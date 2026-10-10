@@ -238,6 +238,7 @@ namespace Backend
             app.MapUploadRoutes();
             app.MapTwoFactorRoutes();
             app.MapSessionRoutes();
+            app.MapPreferenceRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");

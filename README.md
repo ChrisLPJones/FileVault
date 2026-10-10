@@ -32,6 +32,7 @@
 **Account and appearance**
 - Log in with email; first and last name, profile picture, password change, account deletion
 - Light, dark and system themes, and a choice of accent colour
+- Per-user icon themes (Default, Windows, macOS, Ubuntu style) for file and folder icons, chosen in Settings
 - An admin page for the server owner: every account's storage use and quota, and server totals
 
 **Tooling**

@@ -11,3 +11,43 @@
 .file-type-icon.folder {
     filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.16));
 }
+
+/* Icon themes (see themedIcons.jsx): original drawings in the colours of each desktop. Same in light and dark. */
+.icon-theme-windows {
+    --ic-back: #dba10f;
+    --ic-front-top: #ffe38f;
+    --ic-front-bottom: #fac93c;
+    --ic-highlight: rgba(255, 255, 255, 0.5);
+    --ic-glyph: #9a5b08;
+    --ic-base: #b57a06;
+    --ic-paper: #fff;
+    --ic-page: #ffffff;
+    --ic-page-edge: #a9b4c1;
+    --ic-fold: #dde5ee;
+}
+
+.icon-theme-macos {
+    --ic-back: #3a82d4;
+    --ic-front-top: #94cdfd;
+    --ic-front-bottom: #52a5f4;
+    --ic-highlight: rgba(255, 255, 255, 0.75);
+    --ic-glyph: #1b5db0;
+    --ic-base: #2a6fc0;
+    --ic-paper: #f6faff;
+    --ic-page: #ffffff;
+    --ic-page-edge: #cfd5dc;
+    --ic-fold: #eceff3;
+}
+
+.icon-theme-ubuntu {
+    --ic-back: #6d2166;
+    --ic-front-top: #c0618f;
+    --ic-front-bottom: #a1417a;
+    --ic-highlight: rgba(255, 255, 255, 0.4);
+    --ic-glyph: #fdebf4;
+    --ic-base: #3d0c38;
+    --ic-paper: #f3eff2;
+    --ic-page: #f7f6f6;
+    --ic-page-edge: #b4abb2;
+    --ic-fold: #ddd6db;
+}

@@ -657,3 +657,14 @@ GO
 -- otherwise the oldest account with a confirmed email. It lives in the API (see
 -- AdminBootstrapOnStartup) because this script can't read app settings, and must not hand
 -- admin to someone else before the setting is applied.
+
+------------------------------------------------------------
+-- ICON THEME: per-user choice of folder/file icon style
+------------------------------------------------------------
+-- NULL means the default icons; otherwise windows, macos or ubuntu (checked by the API).
+IF COL_LENGTH('Users', 'IconTheme') IS NULL
+BEGIN
+    ALTER TABLE Users ADD IconTheme NVARCHAR(16) NULL;
+    PRINT 'Column "Users.IconTheme" added.';
+END
+GO

@@ -12,4 +12,9 @@ namespace Backend.Models
         public string? CurrentPassword { get; set; }
         public string? NewPassword { get; set; }
     }
+
+    public class IconThemeRequest
+    {
+        public string? IconTheme { get; set; }
+    }
 }
