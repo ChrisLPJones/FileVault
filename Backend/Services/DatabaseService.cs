@@ -703,15 +703,16 @@ public partial class DatabaseServices
 
 
     // 
-    // Record a successful login
-    public async Task UpdateUserLastLogin(string userId)
+    // Record a successful login (a session was issued) and the address it came from
+    public async Task UpdateUserLastLogin(string userId, string? ipAddress)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = "UPDATE Users SET LastLogin = @LastLogin WHERE Id = @UserId";
+        const string query = "UPDATE Users SET LastLogin = @LastLogin, LastLoginIp = @Ip WHERE Id = @UserId";
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@LastLogin", DateTime.UtcNow);
+        command.Parameters.AddWithValue("@Ip", (object?)ipAddress ?? DBNull.Value);
         command.Parameters.AddWithValue("@UserId", userId);
         await command.ExecuteNonQueryAsync();
     }

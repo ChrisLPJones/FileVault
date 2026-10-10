@@ -129,6 +129,7 @@ without the first three.
 | `BEHIND_HTTPS_PROXY` | `true` behind an HTTPS reverse proxy (section 1) |
 | `SWAGGER_ENABLED` | `true` to serve the API docs (section 5). Off by default |
 | `INITIAL_ADMIN_EMAIL` | Optional, recommended on a public install: the one email that can become the first administrator (section 7) |
+| `GEOIPUPDATE_ACCOUNT_ID`, `GEOIPUPDATE_LICENSE_KEY` | Optional: MaxMind credentials for the `geoip` profile, which downloads the country database (section 8) |
 
 Other API settings can be passed as environment variables on the `api` service using
 `Section__Key` names, for example `Storage__DefaultQuotaBytes`, `Storage__MaxUploadBytes`,
@@ -289,3 +290,45 @@ writes an audit line to the API log under the `Backend.AdminAudit` category, usi
   re-running `init.sql` (`docker compose up --build -d`) applies them.
 - Changing admin rights takes a short database lock. If it can't be had in time the API answers
   `503` with a `Retry-After` header; retrying a moment later works.
+
+## 8. Last login location (GeoIP)
+
+The Admin page shows each user's last login IP address and country. Only the latest login address
+is stored (`Users.LastLoginIp`), and it is recorded when a session is issued. The country is
+looked up when the page loads, in a local MaxMind GeoLite2 Country database, and is never stored.
+No address is sent to MaxMind or anyone else. Without the database the country shows "Unknown".
+
+**Set it up**
+
+1. Create a free [MaxMind](https://www.maxmind.com) account and generate a licence key.
+2. Put `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY` in `.env`.
+3. Start the updater: `docker compose --profile geoip up -d`. The `geoipupdate` service downloads
+   `GeoLite2-Country.mmdb` into the `geoip_data` volume and refreshes it every 72 hours. The API
+   mounts the volume read-only (`GeoIp__DatabasePath` is `/data/geoip/GeoLite2-Country.mmdb`) and
+   picks up the new file when it changes.
+
+Without a MaxMind account, copy a `GeoLite2-Country.mmdb` into the `geoip_data` volume yourself
+(Compose names it `filevault_geoip_data`).
+
+**MaxMind's licence**
+
+- Don't commit the `.mmdb` file to git or bake it into a Docker image; the volume keeps it out of both.
+- Keep it updated; MaxMind's terms require using the current version. The `geoip` profile does this.
+- The README carries the required GeoLite2 attribution.
+
+**Behind a proxy**
+
+- Without `BEHIND_HTTPS_PROXY=true`, behind a reverse proxy every user shows the proxy's IP.
+- With it, the API trusts `X-Forwarded-For`, so the API port must not be reachable except through
+  the proxy (section 1). Otherwise anyone can send their own header and fake the address shown.
+  Setting `ForwardedHeaders__KnownProxies__0` to your proxy's address (section 1) narrows this further.
+
+**Privacy**
+
+Storing IP addresses is personal data processing. If you run a public instance, mention the
+last-login IP logging in your privacy notice. Only the latest login address is kept for the admin page, and only admins can see it; active sessions also keep their own address (users see it under Active sessions).
+
+**Upgrading**
+
+The upgrade adds a `Users.LastLoginIp` column; re-running `init.sql` (`docker compose up --build -d`)
+applies it. Existing users show no IP until their next login.

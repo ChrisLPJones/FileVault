@@ -689,3 +689,15 @@ BEGIN
     PRINT 'Column "Users.TokensValidAfter" added.';
 END
 GO
+
+------------------------------------------------------------
+-- LAST LOGIN ADDRESS (admin page "Last login" location)
+------------------------------------------------------------
+-- The address of the latest sign-in that started a session. The country is not stored:
+-- the API looks it up when the admin page loads.
+IF COL_LENGTH('Users', 'LastLoginIp') IS NULL
+BEGIN
+    ALTER TABLE Users ADD LastLoginIp NVARCHAR(45) NULL;
+    PRINT 'Column "Users.LastLoginIp" added.';
+END
+GO

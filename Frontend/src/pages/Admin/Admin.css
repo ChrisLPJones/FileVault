@@ -460,3 +460,7 @@
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+.admin-footnote {
+    margin: 12px 0 0;
+}

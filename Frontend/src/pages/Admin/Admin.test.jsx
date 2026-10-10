@@ -31,7 +31,8 @@ const GB = 1024 ** 3;
 const users = [
     { id: "u1", firstName: "Alex", lastName: "Morgan", email: "alex@example.com", createdAt: "2026-01-02T10:00:00Z",
         lastLogin: "2026-03-04T09:30:00Z", bytesUsed: 512 * 1024 ** 2, fileCount: 42, quota: GB, quotaOverride: null, isAdmin: true,
-        isPermanent: false, avatarUpdatedAt: null },
+        isPermanent: false, avatarUpdatedAt: null,
+        lastLoginIp: "81.2.69.160", lastLoginCountryCode: "GB", lastLoginCountry: "United Kingdom" },
     { id: "u2", firstName: "Sam", lastName: "", email: "sam@example.com", createdAt: "2026-02-01T10:00:00Z",
         lastLogin: null, bytesUsed: 1.9 * GB, fileCount: 7, quota: 2 * GB, quotaOverride: 2 * GB, isAdmin: false,
         isPermanent: true, avatarUpdatedAt: "2026-02-02T10:00:00Z" },
@@ -84,6 +85,30 @@ describe("Admin page", () => {
         expect(within(sam).getByText("Never")).toBeInTheDocument();
         expect(within(sam).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "95");
         expect(within(sam).queryByText("(default)")).toBeNull();
+    });
+
+    it("shows the last login address and country, with Unknown fallbacks and the GeoLite2 attribution", async () => {
+        getAdminUsersAPI.mockResolvedValue([
+            ...users,
+            { ...users[1], id: "u3", email: "kim@example.com", lastLoginIp: "10.0.0.5", lastLoginCountry: null, lastLoginCountryCode: null },
+        ]);
+        render(<Admin />);
+        await screen.findByText("alex@example.com");
+
+        const alex = row("alex@example.com");
+        expect(within(alex).getByText("81.2.69.160")).toBeInTheDocument();
+        expect(within(alex).getByText("United Kingdom")).toBeInTheDocument();
+
+        // Address but no country (private address, or no database installed)
+        const kim = row("kim@example.com");
+        expect(within(kim).getByText("10.0.0.5")).toBeInTheDocument();
+        expect(within(kim).getByText("Unknown")).toBeInTheDocument();
+
+        // Never logged in since the address was recorded
+        expect(within(row("sam@example.com")).getByText("Unknown")).toBeInTheDocument();
+
+        expect(screen.getByText(/GeoLite2 data created by MaxMind/)).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "maxmind.com" })).toHaveAttribute("href", "https://www.maxmind.com");
     });
 
     it("changes a quota in the chosen unit and reloads", async () => {

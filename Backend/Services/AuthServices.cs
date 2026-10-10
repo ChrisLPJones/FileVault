@@ -101,7 +101,8 @@ namespace Backend.Services
         }
 
         // Validates credentials by email address.
-        // Returns the user, or null if the email/password is wrong.
+        // Returns the user, or null if the email/password is wrong. Doesn't record a login: that happens
+        // when a session is issued (see DatabaseServices.UpdateUserLastLogin).
         public async Task<UserModel?> ValidateUser(LoginModel user, DatabaseServices db)
         {
             var identifier = user.Identifier;
@@ -117,7 +118,6 @@ namespace Backend.Services
             if (!BCrypt.Net.BCrypt.Verify(user.Password, userRecord.Password))
                 return null;
 
-            await db.UpdateUserLastLogin(userRecord.Id.ToString());
             return userRecord;
         }
 

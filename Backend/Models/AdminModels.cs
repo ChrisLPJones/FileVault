@@ -18,7 +18,10 @@ namespace Backend.Models
         long? QuotaOverride,
         bool IsAdmin,
         bool IsPermanent,
-        DateTime? AvatarUpdatedAt);
+        DateTime? AvatarUpdatedAt,
+        string? LastLoginIp = null,
+        string? LastLoginCountryCode = null,
+        string? LastLoginCountry = null);
 
     // POST /admin/users. Validated like /user/register; the email counts as confirmed.
     public class AdminCreateUserRequest

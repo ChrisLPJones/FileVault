@@ -99,6 +99,7 @@ namespace Backend.Routes
                         await twoFactor.CreateLoginChallengeAsync(userRecord.Id.ToString())));
 
                 await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
+                await db.UpdateUserLastLogin(userRecord.Id.ToString(), DeviceDescription.IpAddress(http));
 
                 return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
             })

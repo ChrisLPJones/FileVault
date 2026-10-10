@@ -33,7 +33,7 @@
 - Log in with email; first and last name, profile picture, password change, account deletion
 - Light, dark and system themes, and a choice of accent colour
 - Per-user icon themes (Default, Windows, macOS, Ubuntu style) for file and folder icons, chosen in Settings
-- An admin page for the server owner: every account's avatar, storage use and quota, and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark accounts permanent, and delete accounts (type the email to confirm; the last admin can't be deleted)
+- An admin page for the server owner: every account's avatar, storage use and quota, each user's last login IP address and country (looked up in a local database, nothing sent to a third party), and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark accounts permanent, and delete accounts (type the email to confirm; the last admin can't be deleted)
 
 **Tooling**
 - Interactive API docs (Swagger) at `/swagger` in development, or with `SWAGGER_ENABLED=true`
@@ -123,6 +123,8 @@ New accounts confirm their email address before they can log in, and "Forgot pas
 The first account registered on a new install becomes the administrator and gets an Admin link in the account menu (`/admin`: every account's storage use and quota, server totals, and who else is an administrator). On a public install, register straight after the first start, or set `INITIAL_ADMIN_EMAIL` in `.env` to your address so only that account can become the administrator, once its email is confirmed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Administrators can grant or remove admin rights on the Admin page; there is always at least one.
 
 The frontend bundle has the API URL compiled in. If the browser reaches the API somewhere other than `http://localhost:3000`, set `API_URL` (and `FRONTEND_URL` for CORS) in `.env` and rebuild.
+
+The Admin page can show the country of each user's last login. That needs a free MaxMind GeoLite2 Country database, which Compose can download for you with `docker compose --profile geoip up -d` once `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY` are set in `.env`. Without it the country shows "Unknown". See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#8-last-login-location-geoip).
 
 Hosting it for real (HTTPS reverse proxy, secrets, backups, key rotation, security headers): see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
@@ -235,6 +237,8 @@ To try protected endpoints, call `POST /user/login`, then click **Authorize** an
 
 This project is licensed under the [MIT License](LICENSE). The file manager UI is adapted from
 [@cubone/react-file-manager](https://github.com/Saifullah-dev/react-file-manager), also MIT licensed.
+
+This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com
 
 ## Author
 

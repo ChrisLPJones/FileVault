@@ -33,6 +33,7 @@ namespace Backend.Routes
                     return Results.Json(new { error = "This login has expired. Please log in again." }, statusCode: 401);
 
                 await auth.IssueRefreshTokenAsync(user.Id.ToString(), db, http);
+                await db.UpdateUserLastLogin(user.Id.ToString(), DeviceDescription.IpAddress(http));
                 return Results.Ok(new { Success = auth.GetJWTToken(user) });
             })
                 .WithTags("Account")

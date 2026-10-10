@@ -222,11 +222,11 @@ public partial class DatabaseServices
             SELECT u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin,
                    COALESCE(SUM(CASE WHEN f.IsDirectory = 0 THEN f.Size END), 0) AS BytesUsed,
                    COUNT(CASE WHEN f.IsDirectory = 0 THEN 1 END) AS FileCount,
-                   u.IsPermanent, u.AvatarUpdatedAt
+                   u.IsPermanent, u.AvatarUpdatedAt, u.LastLoginIp
             FROM Users u
             LEFT JOIN Files f ON f.UserId = u.Id
             GROUP BY u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin,
-                     u.IsPermanent, u.AvatarUpdatedAt
+                     u.IsPermanent, u.AvatarUpdatedAt, u.LastLoginIp
             ORDER BY u.CreatedAt, u.Email";
 
         await using var command = new SqlCommand(query, connection);
@@ -247,7 +247,8 @@ public partial class DatabaseServices
                 quotaOverride,
                 reader.GetBoolean(7),
                 reader.GetBoolean(10),
-                reader.IsDBNull(11) ? null : DateTime.SpecifyKind(reader.GetDateTime(11), DateTimeKind.Utc)));
+                reader.IsDBNull(11) ? null : DateTime.SpecifyKind(reader.GetDateTime(11), DateTimeKind.Utc),
+                reader.IsDBNull(12) ? null : reader.GetString(12)));
         }
 
         return users;
