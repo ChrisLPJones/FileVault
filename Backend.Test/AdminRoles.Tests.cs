@@ -227,6 +227,26 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task AdministratorsArePermanent_FirstAccountAndInitScriptPromotion()
+        {
+            var first = await NewAccountAsync("first");
+            var later = await NewAccountAsync("later");
+            Task<bool> PermanentAsync(string email) =>
+                _db.ScalarAsync<bool>("SELECT IsPermanent FROM Users WHERE Email = @Email", ("@Email", email));
+
+            (await PermanentAsync(first.Email)).Should().BeTrue();
+            (await PermanentAsync(later.Email)).Should().BeFalse();
+
+            // An admin that isn't permanent (an older install) is fixed by init.sql, and only admins are touched
+            await _db.ExecuteAsync("UPDATE Users SET IsPermanent = 0 WHERE Email = @Email", ("@Email", first.Email));
+            await _db.RunInitScriptAsync();
+            await _db.RunInitScriptAsync();
+
+            (await PermanentAsync(first.Email)).Should().BeTrue();
+            (await PermanentAsync(later.Email)).Should().BeFalse();
+        }
+
+        [Fact]
         public async Task InitScript_CanBeRunTwiceOnAFreshDatabase_WithoutErrorsOrChanges()
         {
             var admin = await NewAccountAsync("first");

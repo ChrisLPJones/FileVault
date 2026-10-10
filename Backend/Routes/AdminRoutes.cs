@@ -35,9 +35,15 @@ namespace Backend.Routes
                 });
 
             // Every account with its usage and quota
-            admin.MapGet("/users", async (DatabaseServices db, IConfiguration config) =>
-                Results.Ok(await db.GetUsersForAdminAsync(DefaultQuota(config))))
-                .WithSummary("List users: name, email, created, last login, bytes used, file count and quota (admins only)")
+            admin.MapGet("/users", async (DatabaseServices db, IConfiguration config, GeoIpService geoIp, HostedOptions hosted) =>
+            {
+                // The country is looked up now, not stored, so it always reflects the current database
+                var users = await db.GetUsersForAdminAsync(DefaultQuota(config), hosted);
+                return Results.Ok(users.Select(u => geoIp.TryCountry(u.LastLoginIp) is var (code, name)
+                    ? u with { LastLoginCountryCode = code, LastLoginCountry = name }
+                    : u).ToList());
+            })
+                .WithSummary("List users: name, email, created, last login (with address and country), last active, removal due (hosted mode), bytes used, file count and quota (admins only)")
                 .Produces<List<AdminUser>>()
                 .Produces<ErrorResponse>(403);
 
@@ -62,6 +68,7 @@ namespace Backend.Routes
                 if (!Guid.TryParse(userId, out _) || !await db.SetStorageQuotaAsync(userId, request.QuotaBytes))
                     return Results.NotFound(new { error = "User not found" });
 
+                Audit(http.HttpContext, "set-quota", userId);
                 return Results.Ok(new { success = request.QuotaBytes == null ? "Quota reset to the default" : "Quota updated" });
             })
                 .WithSummary("Set a user's storage quota in bytes (body: { quotaBytes }; null = the default) (admins only)")
@@ -90,6 +97,8 @@ namespace Backend.Routes
                     return Results.NotFound(new { error = "User not found" });
 
                 var result = await db.SetAdminAsync(userId, request.IsAdmin.Value);
+                if (result.Success)
+                    Audit(http.HttpContext, request.IsAdmin.Value ? "grant-admin" : "remove-admin", userId);
                 return result.Success
                     ? Results.Ok(new { success = result.Message })
                     : Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
@@ -102,17 +111,198 @@ namespace Backend.Routes
                 .Produces<ErrorResponse>(404)
                 .Produces<ErrorResponse>(409);
 
-            // Totals and disk space
-            admin.MapGet("/stats", async (DatabaseServices db, IConfiguration config) =>
+            // Create an account that works straight away: the administrator vouches for the email
+            // address, so there is no confirmation email
+            admin.MapPost("/users", async (HttpContext http, DatabaseServices db, AuthServices auth, FileServices fs) =>
             {
-                var (users, admins, files, folders, bytes) = await db.GetAdminTotalsAsync();
-                var (onDisk, total, free) = DiskUsage(config.GetValue<string>("StorageRoot") ?? "");
-                return Results.Ok(new AdminStats(users, admins, files, folders, bytes, DefaultQuota(config), onDisk, total, free));
+                var request = await ReadJsonAsync<AdminCreateUserRequest>(http.Request);
+                if (request == null)
+                    return Results.BadRequest(new { error = "Invalid JSON" });
+
+                var validationError = AuthServices.ValidateAccount(request.FirstName, request.LastName, request.Email)
+                    ?? AuthServices.ValidatePassword(request.Password);
+                if (validationError != null)
+                    return Results.BadRequest(new { error = validationError });
+
+                if (request.QuotaBytes is < 0 or > MaxQuotaBytes)
+                    return Results.BadRequest(new { error = "Quota must be between 0 bytes and 1 PB" });
+
+                var user = new UserModel
+                {
+                    FirstName = request.FirstName!.Trim(),
+                    LastName = request.LastName?.Trim() ?? "",
+                    Email = request.Email!.Trim(),
+                    Password = auth.GeneratePasswordHash(request.Password!)
+                };
+                var id = await db.CreateUserByAdminAsync(user, request.IsAdmin == true, request.IsPermanent == true, request.QuotaBytes);
+                if (id == null)
+                    return Results.Json(new { error = "Email already exists" }, statusCode: StatusCodes.Status409Conflict);
+
+                await fs.CreateDefaultFoldersAsync(db, id.Value.ToString());
+                Audit(http, "create-user", id.Value.ToString());
+                return Results.Ok(new AdminCreatedUserResponse($"Account created for {user.Email.ToLowerInvariant()}", id.Value));
             })
-                .WithSummary("User and file counts, bytes stored, and disk use of the storage folder (admins only)")
+                .WithSummary("Create an account (body: { firstName, lastName, email, password, isAdmin?, isPermanent?, quotaBytes? }); administrators are always permanent; " +
+                    "its email counts as confirmed, so it can sign in straight away (admins only)")
+                .Accepts<AdminCreateUserRequest>("application/json")
+                .Produces<AdminCreatedUserResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(403)
+                .Produces<ErrorResponse>(409);
+
+            // Delete another user's account and every file they stored
+            admin.MapDelete("/users/{userId}", async (string userId, HttpContext http, AccountDeletionService deletion) =>
+            {
+                if (!Guid.TryParse(userId, out var id))
+                    return Results.NotFound(new { error = "User not found" });
+                if (id.ToString() == http.User.GetUserId())
+                    return Results.BadRequest(new { error = "Use Settings to delete your own account" });
+
+                var result = await deletion.DeleteAsync(id.ToString(), refuseAdmin: true);
+                if (!result.Success)
+                    return Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 500);
+
+                Audit(http, "delete-user", id.ToString());
+                return Results.Ok(new { success = "Account deleted" });
+            })
+                .WithSummary("Delete an account and all its files; not your own, and never the last administrator (admins only)")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(403)
+                .Produces<ErrorResponse>(404)
+                .Produces<ErrorResponse>(409);
+
+            // Set another user's password. They are signed out everywhere, and the access tokens
+            // they hold stop working immediately.
+            admin.MapPut("/users/{userId}/password", async (string userId, HttpContext http, DatabaseServices db,
+                AuthServices auth, AccessTokenGate tokenGate) =>
+            {
+                var request = await ReadJsonAsync<AdminSetPasswordRequest>(http.Request);
+                if (request == null)
+                    return Results.BadRequest(new { error = "Invalid JSON" });
+                if (!Guid.TryParse(userId, out var id))
+                    return Results.NotFound(new { error = "User not found" });
+                if (id.ToString() == http.User.GetUserId())
+                    return Results.BadRequest(new { error = "Use Settings to change your own password" });
+
+                var validationError = AuthServices.ValidatePassword(request.Password);
+                if (validationError != null)
+                    return Results.BadRequest(new { error = validationError });
+
+                var result = await db.SetPasswordAndSignOutAsync(id.ToString(), auth.GeneratePasswordHash(request.Password!), refuseAdmin: true);
+                if (!result.Success)
+                    return Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
+
+                tokenGate.Evict(id.ToString());
+                Audit(http, "set-password", id.ToString()); // never the password itself
+                return Results.Ok(new { success = "Password set; the user has been signed out everywhere" });
+            })
+                .WithSummary("Set another user's password (body: { password }) and sign them out everywhere, " +
+                    "including access tokens they already hold (admins only)")
+                .Accepts<AdminSetPasswordRequest>("application/json")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(403)
+                .Produces<ErrorResponse>(404);
+
+            // Suspend an account (it can't sign in; its data is kept) or lift the suspension
+            admin.MapPut("/users/{userId}/suspended", async (string userId, HttpContext http, DatabaseServices db,
+                AccessTokenGate tokenGate) =>
+            {
+                var request = await ReadJsonAsync<AdminSuspendRequest>(http.Request);
+                if (request?.Suspended == null)
+                    return Results.BadRequest(new { error = "Invalid JSON" });
+                if (!Guid.TryParse(userId, out var id))
+                    return Results.NotFound(new { error = "User not found" });
+                if (id.ToString() == http.User.GetUserId())
+                    return Results.BadRequest(new { error = "You can't suspend your own account" });
+
+                var result = await db.SetSuspendedAsync(id.ToString(), request.Suspended.Value, refuseAdmin: true);
+                if (!result.Success)
+                    return Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
+
+                tokenGate.Evict(id.ToString()); // the change applies to their access tokens at once
+                Audit(http, request.Suspended.Value ? "suspend" : "unsuspend", id.ToString());
+                return Results.Ok(new { success = result.Message });
+            })
+                .WithSummary("Suspend or unsuspend an account (body: { suspended }); a suspended user is signed out everywhere and can't sign in, " +
+                    "their files are kept; not your own, and never the last administrator (admins only)")
+                .Accepts<AdminSuspendRequest>("application/json")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(403)
+                .Produces<ErrorResponse>(404)
+                .Produces<ErrorResponse>(409);
+
+            // Mark an account permanent, so inactive-account removal (hosted mode) skips it
+            admin.MapPut("/users/{userId}/permanent", async (string userId, HttpContext http, DatabaseServices db) =>
+            {
+                var request = await ReadJsonAsync<AdminPermanentRequest>(http.Request);
+                if (request?.IsPermanent == null)
+                    return Results.BadRequest(new { error = "Invalid JSON" });
+                if (!Guid.TryParse(userId, out var id))
+                    return Results.NotFound(new { error = "User not found" });
+                var result = await db.SetPermanentAsync(id.ToString(), request.IsPermanent.Value);
+                if (!result.Success)
+                    return Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
+
+                Audit(http, request.IsPermanent.Value ? "mark-permanent" : "unmark-permanent", id.ToString());
+                return Results.Ok(new { success = request.IsPermanent.Value ? "Account marked permanent" : "Account no longer permanent" });
+            })
+                .WithSummary("Mark an account permanent or not (body: { isPermanent }) (admins only)")
+                .Accepts<AdminPermanentRequest>("application/json")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(403)
+                .Produces<ErrorResponse>(404);
+
+            // Another user's profile picture, for the users list
+            admin.MapGet("/users/{userId}/avatar", async (string userId, HttpContext http, DatabaseServices db, AvatarService avatars) =>
+            {
+                var avatar = Guid.TryParse(userId, out var id) ? await avatars.OpenAsync(db, id.ToString()) : null;
+                if (avatar == null)
+                    return Results.NotFound(new { error = "No profile picture" });
+
+                http.Response.Headers.CacheControl = "private, no-cache";
+                return Results.File(avatar.Stream, avatar.MimeType,
+                    lastModified: new DateTimeOffset(DateTime.SpecifyKind(avatar.UpdatedAt, DateTimeKind.Utc)));
+            })
+                .WithSummary("A user's profile picture (admins only)")
+                .Produces(200, contentType: "image/png")
+                .Produces<ErrorResponse>(403)
+                .Produces<ErrorResponse>(404);
+
+            // Totals and disk space
+            admin.MapGet("/stats", async (ClaimsPrincipal user, DatabaseServices db, IConfiguration config, HostedOptions hosted) =>
+            {
+                var (users, admins, files, folders, bytes, suspended) = await db.GetAdminTotalsAsync();
+                var (onDisk, total, free) = DiskUsage(config.GetValue<string>("StorageRoot") ?? "");
+                return Results.Ok(new AdminStats(users, admins, files, folders, bytes, DefaultQuota(config), onDisk, total, free,
+                    Guid.Parse(user.GetUserId()), suspended, hosted.ModeName));
+            })
+                .WithSummary("User and file counts, bytes stored, disk use of the storage folder, and the mode (self-hosted or hosted) (admins only)")
                 .Produces<AdminStats>()
                 .Produces<ErrorResponse>(403);
         }
+
+        // Read a JSON body, or null if it's missing or malformed
+        private static async Task<T?> ReadJsonAsync<T>(HttpRequest request) where T : class
+        {
+            try
+            {
+                return await JsonSerializer.DeserializeAsync<T>(request.Body, JsonOptions);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        // One log line per change an administrator makes to someone's account: who, to whom and
+        // what, as IDs. Never passwords or email addresses.
+        private static void Audit(HttpContext http, string action, string targetUserId) =>
+            http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Backend.AdminAudit")
+                .LogInformation("Admin {AdminId} did {Action} on user {TargetUserId}", http.User.GetUserId(), action, targetUserId);
 
         private static long DefaultQuota(IConfiguration config) =>
             config.GetValue("Storage:DefaultQuotaBytes", FileServices.DefaultQuotaBytes);

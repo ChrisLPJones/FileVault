@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getErrorMessage } from "../../api/api";
 import { verifyEmailAPI } from "../../api/accountEmailAPI";
-import { isAuthenticated } from "../../utils/auth";
+import { useAuthToken } from "../../utils/auth";
 import "../Auth/Auth.css";
 
 // Opened from the verification email (/verify-email?token=...): confirms the address straight away
@@ -22,7 +22,7 @@ function VerifyEmail() {
             .catch((err) => setResult({ ok: false, message: getErrorMessage(err, "Could not confirm your email address") }));
     }, [token]);
 
-    const loggedIn = isAuthenticated();
+    const loggedIn = useAuthToken() !== null;
 
     return (
         <div className="auth-page">

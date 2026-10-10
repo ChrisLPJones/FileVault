@@ -657,3 +657,86 @@ GO
 -- otherwise the oldest account with a confirmed email. It lives in the API (see
 -- AdminBootstrapOnStartup) because this script can't read app settings, and must not hand
 -- admin to someone else before the setting is applied.
+
+------------------------------------------------------------
+-- ADMIN ACCOUNT MANAGEMENT (added to existing databases too)
+------------------------------------------------------------
+-- Marks an account the inactive-account removal (hosted mode) must never delete.
+IF COL_LENGTH('Users', 'IsPermanent') IS NULL
+BEGIN
+    ALTER TABLE Users ADD IsPermanent BIT NOT NULL CONSTRAINT DF_Users_IsPermanent DEFAULT 0;
+    PRINT 'Column "Users.IsPermanent" added.';
+END
+GO
+
+-- Access tokens issued before this moment (UTC) are refused. Set when an administrator
+-- sets the user's password, so the user is signed out at once rather than when the
+-- 15-minute access token expires. NULL = no token has been invalidated.
+IF COL_LENGTH('Users', 'TokensValidAfter') IS NULL
+BEGIN
+    ALTER TABLE Users ADD TokensValidAfter DATETIME2 NULL;
+    PRINT 'Column "Users.TokensValidAfter" added.';
+END
+GO
+
+------------------------------------------------------------
+-- LAST LOGIN ADDRESS (admin page "Last login" location)
+------------------------------------------------------------
+-- The address of the latest sign-in that started a session. The country is not stored:
+-- the API looks it up when the admin page loads.
+IF COL_LENGTH('Users', 'LastLoginIp') IS NULL
+BEGIN
+    ALTER TABLE Users ADD LastLoginIp NVARCHAR(45) NULL;
+    PRINT 'Column "Users.LastLoginIp" added.';
+END
+GO
+
+------------------------------------------------------------
+-- ACCOUNT SUSPENSION (added to existing databases too)
+------------------------------------------------------------
+-- When the account was suspended (UTC). NULL = not suspended. A suspended account can't sign in
+-- and its access is cut at once; its files, shares and quota are kept. A suspended administrator
+-- doesn't count towards the "at least one administrator" rule.
+IF COL_LENGTH('Users', 'SuspendedAt') IS NULL
+BEGIN
+    ALTER TABLE Users ADD SuspendedAt DATETIME2 NULL;
+    PRINT 'Column "Users.SuspendedAt" added.';
+END
+GO
+
+------------------------------------------------------------
+-- HOSTED MODE: inactive-account removal and the first-login notice (added to existing databases too)
+------------------------------------------------------------
+-- Last sign-in or use of the app (UTC), for the inactivity clock. Written at sign-in and when the
+-- access token is renewed (at most once an hour). New accounts start at the time they're created.
+-- Existing accounts start from their last login, or when they were created.
+IF COL_LENGTH('Users', 'LastActiveAt') IS NULL
+BEGIN
+    ALTER TABLE Users ADD LastActiveAt DATETIME2 NULL CONSTRAINT DF_Users_LastActiveAt DEFAULT SYSUTCDATETIME();
+    PRINT 'Column "Users.LastActiveAt" added.';
+    EXEC('UPDATE Users SET LastActiveAt = COALESCE(LastLogin, CreatedAt, SYSUTCDATETIME()) WHERE LastActiveAt IS NULL');
+END
+GO
+
+-- When the user was warned that their account would be removed for inactivity (UTC). NULL = not
+-- warned; cleared as soon as they use the app again.
+IF COL_LENGTH('Users', 'InactivityWarnedAt') IS NULL
+BEGIN
+    ALTER TABLE Users ADD InactivityWarnedAt DATETIME2 NULL;
+    PRINT 'Column "Users.InactivityWarnedAt" added.';
+END
+GO
+
+-- When the user dismissed the hosted-mode notice (UTC). NULL = not yet dismissed.
+IF COL_LENGTH('Users', 'HostedNoticeDismissedAt') IS NULL
+BEGIN
+    ALTER TABLE Users ADD HostedNoticeDismissedAt DATETIME2 NULL;
+    PRINT 'Column "Users.HostedNoticeDismissedAt" added.';
+END
+GO
+
+------------------------------------------------------------
+-- ADMINISTRATORS ARE PERMANENT (idempotent; also applied to existing databases)
+------------------------------------------------------------
+UPDATE Users SET IsPermanent = 1 WHERE IsAdmin = 1 AND IsPermanent = 0;
+GO

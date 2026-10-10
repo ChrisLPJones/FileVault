@@ -74,17 +74,22 @@ namespace Backend.Services
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfig["Key"] ?? throw new InvalidOperationException("Jwt:Key is not set.")));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
+            var now = DateTime.UtcNow;
             var claims = new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                // Issue time to the millisecond, for AccessTokenGate
+                new Claim(AccessTokenGate.IssuedAtMillisecondsClaim,
+                    new DateTimeOffset(now).ToUnixTimeMilliseconds().ToString(), ClaimValueTypes.Integer64)
             };
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddMinutes(jwtConfig.GetValue("ExpireMinutes", 15)),
+                IssuedAt = now,
+                Expires = now.AddMinutes(jwtConfig.GetValue("ExpireMinutes", 15)),
                 Issuer = jwtConfig["Issuer"],
                 Audience = jwtConfig["Audience"],
                 SigningCredentials = credentials,
@@ -96,7 +101,11 @@ namespace Backend.Services
         }
 
         // Validates credentials by email address.
-        // Returns the user, or null if the email/password is wrong.
+        // What login answers (with suspended: true) for a suspended account
+        public const string SuspendedMessage = "This account has been suspended";
+
+        // Returns the user, or null if the email/password is wrong. Doesn't record a login: that happens
+        // when a session is issued (see DatabaseServices.UpdateUserLastLogin).
         public async Task<UserModel?> ValidateUser(LoginModel user, DatabaseServices db)
         {
             var identifier = user.Identifier;
@@ -112,7 +121,6 @@ namespace Backend.Services
             if (!BCrypt.Net.BCrypt.Verify(user.Password, userRecord.Password))
                 return null;
 
-            await db.UpdateUserLastLogin(userRecord.Id.ToString());
             return userRecord;
         }
 
@@ -129,7 +137,8 @@ namespace Backend.Services
         // Create a refresh token for the user and set it as an httpOnly cookie.
         // Without a session ID this is a new login: it starts a new session (see Active sessions)
         // and retires any refresh token this browser already had.
-        public async Task<Guid> IssueRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http, Guid? sessionId = null)
+        public async Task<Guid?> IssueRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http, Guid? sessionId = null,
+            DatabaseServices.RefreshTokenUse? rotatedFrom = null)
         {
             var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
             var expiresAt = DateTime.UtcNow.Add(RefreshLifetime);
@@ -148,7 +157,15 @@ namespace Backend.Services
                 await db.TouchSessionAsync(sessionId.Value, ipAddress);
             }
 
-            await db.StoreRefreshTokenAsync(userId, sessionId.Value, HashToken(token), expiresAt);
+            // When rotating, the token is stored only if no administrator password change landed
+            // since the old one was consumed; null means refused
+            if (!await db.StoreRefreshTokenAsync(userId, sessionId.Value, HashToken(token), expiresAt,
+                    rotatedFrom != null, rotatedFrom?.UserTokensValidAfter))
+                return null;
+
+            // Signing in, and renewing the access token while the app is open, count as use (hosted mode's
+            // inactivity clock); written at most about hourly
+            await db.TouchActivityAsync(userId);
 
             http.Response.Cookies.Append(RefreshCookieName, token, RefreshCookieOptions(http, expiresAt));
             return sessionId.Value;
@@ -177,40 +194,46 @@ namespace Backend.Services
         };
 
         // Exchange the refresh cookie for a new access token and a new refresh cookie.
-        // Returns null if the cookie is missing, expired, revoked or unknown.
-        public async Task<UserModel?> RotateRefreshTokenAsync(DatabaseServices db, HttpContext http)
+        // User is null if the cookie is missing, expired, revoked or unknown. RacedWithinGrace is true
+        // when the token was just rotated away (e.g. a second tab refreshing at the same moment): the
+        // caller must not clear the cookie then, as it now holds the winner's fresh token.
+        public async Task<(UserModel? User, bool RacedWithinGrace)> RotateRefreshTokenAsync(DatabaseServices db, HttpContext http)
         {
             if (!http.Request.Cookies.TryGetValue(RefreshCookieName, out var token) || string.IsNullOrEmpty(token))
-                return null;
+                return (null, false);
 
             var use = await db.ConsumeRefreshTokenAsync(HashToken(token));
             if (use == null)
-                return null;
+                return (null, false);
 
             if (!use.Valid)
             {
                 // Signed out on purpose (logout, or the session was signed out from another
                 // device): just refuse it. Only a rotated-away token suggests theft.
                 if (use.SessionId != null && !use.Replaced)
-                    return null;
+                    return (null, false);
 
                 // A used token being presented again outside the short grace window (two tabs
                 // refreshing at once) suggests it was stolen: end every session for this user.
                 var grace = TimeSpan.FromSeconds(_config.GetValue("Jwt:RefreshReuseGraceSeconds", 30));
                 if (use.SinceRevoked >= grace)
+                {
                     await db.RevokeAllRefreshTokensAsync(use.UserId);
-                return null;
+                    return (null, false);
+                }
+                return (null, true);
             }
 
             var user = await db.GetUserByUserId(use.UserId);
-            if (user == null)
-                return null;
+            if (user == null || (await db.GetUserAuthStateAsync(use.UserId)).Suspended)
+                return (null, false);
 
             // Stay in the same session (tokens from before sessions existed start one now)
-            await IssueRefreshTokenAsync(use.UserId, db, http, use.SessionId
+            var issued = await IssueRefreshTokenAsync(use.UserId, db, http, use.SessionId
                 ?? await db.CreateSessionAsync(use.UserId,
-                    DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), DeviceDescription.IpAddress(http)));
-            return user;
+                    DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), DeviceDescription.IpAddress(http)), use);
+            // Refused (the user's tokens were invalidated meanwhile): 401 and clear the cookie
+            return issued == null ? (null, false) : (user, false);
         }
 
         // Revoke the refresh token in the request's cookie (logout)

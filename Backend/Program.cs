@@ -69,7 +69,7 @@ namespace Backend
                         new { error = "Too many attempts. Please wait a minute and try again." }, ct);
                 };
 
-                foreach (var (policy, defaultLimit) in new[] { ("auth", 10), ("refresh", 30), ("two-factor", 10) })
+                foreach (var (policy, defaultLimit) in new[] { ("auth", 10), ("refresh", 60), ("two-factor", 10) })
                 {
                     options.AddPolicy(policy, http =>
                     {
@@ -123,10 +123,21 @@ namespace Backend
             builder.Services.AddScoped<ShareService>();
             builder.Services.AddScoped<TrashService>();
             builder.Services.AddScoped<ChunkedUploadService>();
+            builder.Services.AddScoped<AccountDeletionService>();
+            // Read from config when first needed (and forced below at start-up), so a bad FILEVAULT_MODE stops the API
+            builder.Services.AddSingleton(sp => HostedOptions.From(sp.GetRequiredService<IConfiguration>()));
+            builder.Services.AddSingleton<RemovalTracker>();
+            builder.Services.AddScoped<InactiveAccountService>();
+            builder.Services.AddMemoryCache();
+            builder.Services.AddSingleton<AccessTokenGate>();
             builder.Services.AddHostedService<StorageCleanupService>();
             builder.Services.AddHostedService<AdminBootstrapOnStartup>();
             builder.Services.AddEmail(builder.Configuration);
             builder.Services.AddSingleton<SecretProtector>();
+            // Optional local GeoLite2 Country database for the admin page's login countries
+            builder.Services.AddSingleton(sp => new GeoIpService(
+                sp.GetRequiredService<IConfiguration>()["GeoIp:DatabasePath"],
+                sp.GetRequiredService<ILogger<GeoIpService>>()));
             builder.Services.AddSingleton(TimeProvider.System);
             builder.Services.AddScoped<TwoFactorService>();
             builder.Services.AddAuthorization();
@@ -148,6 +159,16 @@ namespace Backend
 
                     option.Events = new JwtBearerEvents
                     {
+                        // A token with a good signature and expiry is still refused for a deleted user,
+                        // or one whose password an administrator has set since it was issued
+                        OnTokenValidated = async context =>
+                        {
+                            var services = context.HttpContext.RequestServices;
+                            if (context.Principal == null ||
+                                !await services.GetRequiredService<AccessTokenGate>()
+                                    .IsAcceptedAsync(context.Principal, services.GetRequiredService<DatabaseServices>()))
+                                context.Fail("The access token is no longer valid");
+                        },
                         OnChallenge = context =>
                         {
                             // Skip the default response
@@ -163,6 +184,12 @@ namespace Backend
                 });
 
             var app = builder.Build();
+
+            // Fail fast on an unknown FILEVAULT_MODE
+            var hostedOptions = app.Services.GetRequiredService<HostedOptions>();
+            app.Logger.LogInformation("FileVault mode: {Mode}", hostedOptions.ModeName);
+            if (hostedOptions.IsHosted && app.Services.GetRequiredService<IEmailSender>() is LogEmailSender)
+                app.Logger.LogWarning("Hosted mode without an SMTP host (Email:Smtp:Host): inactive accounts will be removed without a warning email");
 
             // Administrators are managed on the admin page now; the old setting does nothing
             var legacyAdminEmails = builder.Configuration.GetSection("Admin:Emails");

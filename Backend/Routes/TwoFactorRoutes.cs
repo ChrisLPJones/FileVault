@@ -32,7 +32,15 @@ namespace Backend.Routes
                 if (user == null)
                     return Results.Json(new { error = "This login has expired. Please log in again." }, statusCode: 401);
 
-                await auth.IssueRefreshTokenAsync(user.Id.ToString(), db, http);
+                // Suspended between the password and the code
+                if ((await db.GetUserAuthStateAsync(user.Id.ToString())).Suspended)
+                    return Results.Json(new { error = AuthServices.SuspendedMessage, suspended = true }, statusCode: 403);
+
+                // Null means the token was refused: suspended after the check above
+                if (await auth.IssueRefreshTokenAsync(user.Id.ToString(), db, http) == null)
+                    return Results.Json(new { error = AuthServices.SuspendedMessage, suspended = true }, statusCode: 403);
+
+                await db.UpdateUserLastLogin(user.Id.ToString(), DeviceDescription.IpAddress(http));
                 return Results.Ok(new { Success = auth.GetJWTToken(user) });
             })
                 .WithTags("Account")
@@ -40,6 +48,7 @@ namespace Backend.Routes
                 .Produces<TokenResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(401)
+                .Produces<ErrorResponse>(403)
                 .Produces<ErrorResponse>(429).RequireRateLimiting("two-factor");
 
             // Whether 2FA is on, and how many recovery codes are left

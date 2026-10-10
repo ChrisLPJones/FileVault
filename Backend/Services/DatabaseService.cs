@@ -463,8 +463,9 @@ public partial class DatabaseServices
         await TakeAdminMembershipLockAsync(connection, transaction);
 
         const string query = @"
-            INSERT INTO Users (FirstName, LastName, Email, PasswordHash, IsAdmin)
+            INSERT INTO Users (FirstName, LastName, Email, PasswordHash, IsAdmin, IsPermanent)
             SELECT @FirstName, @LastName, @Email, @PasswordHash,
+                   CASE WHEN @FirstAccountIsAdmin = 1 AND NOT EXISTS (SELECT 1 FROM Users) THEN 1 ELSE 0 END,
                    CASE WHEN @FirstAccountIsAdmin = 1 AND NOT EXISTS (SELECT 1 FROM Users) THEN 1 ELSE 0 END";
         await using var command = new SqlCommand(query, connection, transaction);
 
@@ -586,10 +587,14 @@ public partial class DatabaseServices
 
 
     // Remove user and all file metadata from database and delete files from storage
-    public Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs) =>
-        RetryOnDeadlockAsync(() => DeleteUserAndFilesOnceAsync(userId, fs));
+    // With onlyIfInactive (hosted-mode removal) the account is deleted only if it is still due for
+    // removal inside the transaction (409 otherwise), so someone who signed in, or was made admin or
+    // permanent, after the job picked them is left alone.
+    // With refuseAdmin an administrator is refused (400), checked under the admin-membership lock.
+    public Task<HttpReturnResult> DeleteUserAndFilesById(string userId, FileServices fs, HostedOptions? onlyIfInactive = null, bool refuseAdmin = false) =>
+        RetryOnDeadlockAsync(() => DeleteUserAndFilesOnceAsync(userId, fs, onlyIfInactive, refuseAdmin));
 
-    private async Task<HttpReturnResult> DeleteUserAndFilesOnceAsync(string userId, FileServices fs)
+    private async Task<HttpReturnResult> DeleteUserAndFilesOnceAsync(string userId, FileServices fs, HostedOptions? onlyIfInactive, bool refuseAdmin)
     {
         var files = new List<string>();
 
@@ -603,6 +608,42 @@ public partial class DatabaseServices
             // Serialised with every other change to who the administrators are, and taken before
             // touching Files so the lock order is always the same
             await TakeAdminMembershipLockAsync(connection, (SqlTransaction)transaction);
+
+            await using (var exists = new SqlCommand("SELECT COUNT(1) FROM Users WHERE Id = @UserId", connection, (SqlTransaction)transaction))
+            {
+                exists.Parameters.AddWithValue("@UserId", userId);
+                if (Convert.ToInt32(await exists.ExecuteScalarAsync()) == 0)
+                {
+                    await transaction.RollbackAsync();
+                    return HttpReturnResult.NotFound("User not found");
+                }
+            }
+
+            if (refuseAdmin)
+            {
+                await using var adminCheck = new SqlCommand("SELECT COUNT(1) FROM Users WHERE Id = @UserId AND IsAdmin = 1", connection, (SqlTransaction)transaction);
+                adminCheck.Parameters.AddWithValue("@UserId", userId);
+                if (Convert.ToInt32(await adminCheck.ExecuteScalarAsync()) > 0)
+                {
+                    await transaction.RollbackAsync();
+                    return new HttpReturnResult(false, AdminAccountsLockedMessage) { StatusCode = 400 };
+                }
+            }
+
+            if (onlyIfInactive != null)
+            {
+                await using var due = new SqlCommand(
+                    $"SELECT COUNT(1) FROM Users WITH (UPDLOCK, ROWLOCK) WHERE Id = @UserId AND {DueForRemovalPredicate}",
+                    connection, (SqlTransaction)transaction);
+                due.Parameters.AddWithValue("@UserId", userId);
+                due.Parameters.AddWithValue("@InactiveDays", onlyIfInactive.InactiveDays);
+                due.Parameters.AddWithValue("@WarningDays", onlyIfInactive.WarningDays);
+                if (Convert.ToInt32(await due.ExecuteScalarAsync()) == 0)
+                {
+                    await transaction.RollbackAsync();
+                    return HttpReturnResult.Conflict("Account is no longer due for removal");
+                }
+            }
 
             // Never delete the last administrator
             await using (var lastAdmin = new SqlCommand($@"
@@ -693,15 +734,16 @@ public partial class DatabaseServices
 
 
     // 
-    // Record a successful login
-    public async Task UpdateUserLastLogin(string userId)
+    // Record a successful login (a session was issued) and the address it came from
+    public async Task UpdateUserLastLogin(string userId, string? ipAddress)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = "UPDATE Users SET LastLogin = @LastLogin WHERE Id = @UserId";
+        const string query = "UPDATE Users SET LastLogin = @LastLogin, LastLoginIp = @Ip WHERE Id = @UserId AND SuspendedAt IS NULL";
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@LastLogin", DateTime.UtcNow);
+        command.Parameters.AddWithValue("@Ip", (object?)ipAddress ?? DBNull.Value);
         command.Parameters.AddWithValue("@UserId", userId);
         await command.ExecuteNonQueryAsync();
     }
@@ -726,24 +768,38 @@ public partial class DatabaseServices
 
 
     // Store a new refresh token (hash only) for a session, and drop this user's expired
-    // tokens and the sessions left without any
-    public async Task StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc)
+    // tokens and the sessions left without any. When rotating a token, pass the user's
+    // TokensValidAfter as read before the old token was consumed (RefreshTokenUse): the new
+    // token is stored only if that value is unchanged, so a refresh that was in flight while an
+    // administrator set the password can't leave a live session behind. Returns false if it was
+    // refused for that reason, or because the user is suspended (checked on every insert so a login
+    // in flight when a suspension commits can't leave a token behind), or the user is gone.
+    public async Task<bool> StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
+        bool requireUnchangedTokensValidAfter = false, DateTime? seenTokensValidAfter = null)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         const string query = @"
             DELETE FROM RefreshTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
-            INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt) VALUES (@UserId, @SessionId, @TokenHash, @ExpiresAt);
+            INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt)
+            SELECT @UserId, @SessionId, @TokenHash, @ExpiresAt
+            WHERE EXISTS (
+                SELECT 1 FROM Users WHERE Id = @UserId AND SuspendedAt IS NULL
+                AND (@Guard = 0 OR (TokensValidAfter IS NULL AND @Seen IS NULL) OR TokensValidAfter = @Seen));
+            DECLARE @Stored INT = @@ROWCOUNT;
             DELETE FROM Sessions WHERE UserId = @UserId
-                AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);";
+                AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);
+            SELECT @Stored;";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@SessionId", sessionId);
         command.Parameters.AddWithValue("@TokenHash", tokenHash);
         command.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
-        await command.ExecuteNonQueryAsync();
+        command.Parameters.AddWithValue("@Guard", requireUnchangedTokensValidAfter);
+        command.Parameters.Add("@Seen", System.Data.SqlDbType.DateTime2).Value = (object?)seenTokensValidAfter ?? DBNull.Value;
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
     }
 
 
@@ -752,7 +808,8 @@ public partial class DatabaseServices
     // SessionId is null for tokens from before sessions existed. Replaced is true if the token was
     // rotated (a newer token exists in its session), as opposed to revoked by logging out or signing
     // the session out.
-    public record RefreshTokenUse(string UserId, bool Valid, TimeSpan? SinceRevoked, Guid? SessionId = null, bool Replaced = false);
+    public record RefreshTokenUse(string UserId, bool Valid, TimeSpan? SinceRevoked, Guid? SessionId = null, bool Replaced = false,
+        DateTime? UserTokensValidAfter = null);
 
     // Atomically revoke a refresh token so it can only be used once.
     // Returns null if the token doesn't exist. Valid is true only if this call revoked an active, unexpired token.
@@ -760,6 +817,18 @@ public partial class DatabaseServices
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
+
+        // Read before consuming: if an administrator sets the password after this point, the
+        // value changes and the replacement token is refused (see StoreRefreshTokenAsync). If the
+        // change committed before, the token was revoked with the rest and the consume below fails.
+        DateTime? tokensValidAfter = null;
+        await using (var read = new SqlCommand(
+            "SELECT u.TokensValidAfter FROM RefreshTokens t JOIN Users u ON u.Id = t.UserId WHERE t.TokenHash = @TokenHash", connection))
+        {
+            read.Parameters.AddWithValue("@TokenHash", tokenHash);
+            if (await read.ExecuteScalarAsync() is DateTime seen)
+                tokensValidAfter = seen;
+        }
 
         const string consume = @"
             UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
@@ -774,7 +843,7 @@ public partial class DatabaseServices
             {
                 var expiresAt = reader.GetDateTime(1);
                 return new RefreshTokenUse(reader.GetGuid(0).ToString(), expiresAt > DateTime.UtcNow, null,
-                    reader.IsDBNull(2) ? null : reader.GetGuid(2));
+                    reader.IsDBNull(2) ? null : reader.GetGuid(2), false, tokensValidAfter);
             }
         }
 

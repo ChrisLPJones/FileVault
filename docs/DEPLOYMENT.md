@@ -12,7 +12,9 @@ and don't expose the containers' ports to the internet.
 The browser talks to two origins: the frontend (nginx, container port 80) and the API (container
 port 8080). The simplest setup gives each its own hostname, for example `files.example.com` and
 `api.files.example.com`. Keep them on the same registrable domain: the refresh-token cookie is
-`SameSite=Strict`, so it is only sent when the frontend and API are the same *site*.
+`SameSite=Strict`, so it is only sent when the frontend and API are the same *site*. The browser
+keeps the access token in memory only and gets a new one from that cookie on every page load, so
+on different sites users are signed out each time they reload or open a new tab.
 
 In `.env`:
 
@@ -126,12 +128,20 @@ without the first three.
 | `API_URL` | Where the browser reaches the API. Build-time: rebuild after changing it |
 | `BEHIND_HTTPS_PROXY` | `true` behind an HTTPS reverse proxy (section 1) |
 | `SWAGGER_ENABLED` | `true` to serve the API docs (section 5). Off by default |
+| `FILEVAULT_MODE` | Optional: `self-hosted` (default) or `hosted` (section 9). Anything else stops the API starting |
+| `HOSTED_CONTACT_EMAIL` | Optional, hosted mode only: the address users are told to email to ask for a permanent account |
 | `INITIAL_ADMIN_EMAIL` | Optional, recommended on a public install: the one email that can become the first administrator (section 7) |
+| `GEOIPUPDATE_ACCOUNT_ID`, `GEOIPUPDATE_LICENSE_KEY` | Optional: MaxMind credentials for the `geoip` profile, which downloads the country database (section 8) |
 
 Other API settings can be passed as environment variables on the `api` service using
 `Section__Key` names, for example `Storage__DefaultQuotaBytes`, `Storage__MaxUploadBytes`,
 `RateLimiting__auth__PermitLimit` or `TwoFactor__Issuer` (the name shown in authenticator apps).
 See `Backend/appsettings.json` for the full list and defaults.
+
+`Auth__UserStateCacheSeconds` (default 30) is how long the API caches each user's sign-in state when
+checking access tokens. When an administrator sets a user's password or suspends an account, that user's current access
+token stops working immediately; changes made on another API instance or directly in the database can take up
+to this many seconds.
 
 Keep the master key somewhere other than the server too, such as a password manager.
 
@@ -258,9 +268,17 @@ address first (for example with `ß` instead of `ss`) can't become administrator
 registering that address. Fix it by choosing a different `INITIAL_ADMIN_EMAIL` or removing that
 account.
 
-Once there is an administrator, they can grant or remove admin rights for other accounts on the
-Admin page ("Admin rights" column). There must always be at least one administrator: removing the
+Once there is an administrator, they can create further administrator accounts on the Admin page
+(Administrator tick box when creating an account); admin rights can't be changed afterwards in the
+app. Administrator accounts are always permanent (never removed for inactivity) and have no row
+actions on the Admin page. There must always be at least one administrator: removing the
 last one, or the last administrator deleting their own account, is refused.
+
+Administrators can also create accounts (active immediately, email already confirmed), set a user's
+password (signs them out everywhere), suspend and unsuspend accounts, mark accounts permanent, and
+delete accounts. A suspended administrator doesn't count as an administrator until unsuspended. Each of these
+writes an audit line to the API log under the `Backend.AdminAudit` category, using account ids only
+(no emails or passwords), so you can watch that category for admin activity.
 
 **Upgrading an existing install**
 
@@ -273,7 +291,92 @@ last one, or the last administrator deleting their own account, is refused.
   confirmed account is promoted, or set `IsAdmin` in the database.
 - An account stored with capital letters by an old version won't match `INITIAL_ADMIN_EMAIL`. For
   that install leave the setting unset, or lower-case the address in the database.
-- The upgrade adds a `Users.EmailChanged` column; re-running `init.sql` (`docker compose up --build -d`)
-  applies it.
-- Changing admin rights takes a short database lock. If it can't be had in time the API answers
+- The upgrade adds `Users.EmailChanged`, `Users.TokensValidAfter`, `Users.IsPermanent` and `Users.SuspendedAt` columns;
+  re-running `init.sql` (`docker compose up --build -d`) applies them.
+- Admin membership changes take a short database lock. If it can't be had in time the API answers
   `503` with a `Retry-After` header; retrying a moment later works.
+
+## 8. Last login location (GeoIP)
+
+The Admin page shows each user's last login IP address and country. Only the latest login address
+is stored (`Users.LastLoginIp`), and it is recorded when a session is issued. The country is
+looked up when the page loads, in a local MaxMind GeoLite2 Country database, and is never stored.
+No address is sent to MaxMind or anyone else. Without the database the country shows "Unknown".
+
+**Set it up**
+
+1. Create a free [MaxMind](https://www.maxmind.com) account and generate a licence key.
+2. Put `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY` in `.env`.
+3. Start the updater: `docker compose --profile geoip up -d`. The `geoipupdate` service downloads
+   `GeoLite2-Country.mmdb` into the `geoip_data` volume and refreshes it every 72 hours. The API
+   mounts the volume read-only (`GeoIp__DatabasePath` is `/data/geoip/GeoLite2-Country.mmdb`) and
+   picks up the new file when it changes.
+
+Without a MaxMind account, copy a `GeoLite2-Country.mmdb` into the `geoip_data` volume yourself
+(Compose names it `filevault_geoip_data`).
+
+**MaxMind's licence**
+
+- Don't commit the `.mmdb` file to git or bake it into a Docker image; the volume keeps it out of both.
+- Keep it updated; MaxMind's terms require using the current version. The `geoip` profile does this.
+- The README carries the required GeoLite2 attribution.
+
+**Behind a proxy**
+
+- Without `BEHIND_HTTPS_PROXY=true`, behind a reverse proxy every user shows the proxy's IP.
+- With it, the API trusts `X-Forwarded-For`, so the API port must not be reachable except through
+  the proxy (section 1). Otherwise anyone can send their own header and fake the address shown.
+  Setting `ForwardedHeaders__KnownProxies__0` to your proxy's address (section 1) narrows this further.
+
+**Privacy**
+
+Storing IP addresses is personal data processing. If you run a public instance, mention the
+last-login IP logging in your privacy notice. Only the latest login address is kept for the admin page, and only admins can see it; active sessions also keep their own address (users see it under Active sessions).
+
+**Upgrading**
+
+The upgrade adds a `Users.LastLoginIp` column; re-running `init.sql` (`docker compose up --build -d`)
+applies it. Existing users show no IP until their next login.
+
+## 9. Hosted mode
+
+Set `FILEVAULT_MODE=hosted` for a public instance with limited resources. The default,
+`self-hosted`, removes nothing. Any other value stops the API at start.
+
+In hosted mode:
+
+- An account with no sign-in and no use of the app for 30 days is removed along with its files.
+  Staying signed in and using the app counts as use. Administrator, permanent and suspended
+  accounts are never removed (mark an account permanent on the Admin page).
+- 7 days before the removal a warning email is sent, only to an address that was confirmed and only
+  if SMTP is set up (the `SMTP_*` settings). Without SMTP no warning is sent, but the removal still
+  happens (the API logs a warning at startup in that case). A user who signs in again before then
+  keeps the account. Unsuspending an account, or removing its permanent mark,
+  restarts its clock.
+- New users see a dismissible notice on the dashboard on first login saying unused accounts are
+  removed. Administrators and permanent accounts don't see it. `HOSTED_CONTACT_EMAIL` adds the
+  address to ask for a permanent account; leave it empty to leave that sentence out.
+- The Admin page gains "Last active" and "Removal due" columns.
+
+The job runs with the hourly storage cleanup. These settings go in `appsettings.json`, or on the
+`api` service as environment variables:
+
+| Setting | Default | What it is |
+|---|---|---|
+| `Hosted:InactiveDays` | 30 | Days without sign-in or use before removal |
+| `Hosted:WarningDays` | 7 | Days of warning before removal (kept below `InactiveDays`) |
+| `Hosted:MaxRemovalsPerRun` | 50 | Most accounts warned, and most removed, per run |
+| `Hosted:MaxRemovalsPerDay` | 200 | Most accounts removed in any 24 hours (a safety brake; counted per API process) |
+
+**Switching an existing install to hosted**
+
+Accounts that are already stale are not removed straight away. Each gets at least the warning
+period (7 days by default) from the first run, whether or not an email could be sent. Before
+turning it on, mark any account you want to keep as permanent or as an administrator.
+
+**Upgrading**
+
+The upgrade adds the `Users.LastActiveAt`, `Users.InactivityWarnedAt` and
+`Users.HostedNoticeDismissedAt` columns, even if you stay self-hosted; re-running `init.sql`
+(`docker compose up --build -d`) applies them. Existing accounts start their inactivity clock from
+their last login, or when they were created.

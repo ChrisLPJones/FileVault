@@ -32,7 +32,8 @@
 **Account and appearance**
 - Log in with email; first and last name, profile picture, password change, account deletion
 - Light, dark and system themes, and a choice of accent colour
-- An admin page for the server owner: every account's storage use and quota, and server totals
+- An admin page for the server owner: every account's avatar, storage use and quota, each user's last login IP address and country (looked up in a local database, nothing sent to a third party), and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark non-admin accounts permanent (admins are always permanent), suspend and unsuspend accounts (a suspended user is signed out at once and can't sign in; files and shares are kept, share links show "not found" until unsuspended), and delete accounts (type the email to confirm; the last admin can't be deleted)
+- Optional hosted mode (`FILEVAULT_MODE=hosted`) for a public instance: accounts unused for 30 days are removed with their files (after a warning email when SMTP is set up), and new users see a dismissible notice. Administrator, permanent and suspended accounts are never removed. Self-hosted is the default and removes nothing
 
 **Tooling**
 - Interactive API docs (Swagger) at `/swagger` in development, or with `SWAGGER_ENABLED=true`
@@ -119,9 +120,13 @@ To open the database in a GUI tool (SSMS, Azure Data Studio, VS Code SQLTools), 
 
 New accounts confirm their email address before they can log in, and "Forgot password?" sends a reset link. To send those emails, set the `SMTP_*` settings in `.env`. Without them the API writes each email, link included, to its log instead, so on a local setup you can find the link with `docker compose logs api`.
 
-The first account registered on a new install becomes the administrator and gets an Admin link in the account menu (`/admin`: every account's storage use and quota, server totals, and who else is an administrator). On a public install, register straight after the first start, or set `INITIAL_ADMIN_EMAIL` in `.env` to your address so only that account can become the administrator, once its email is confirmed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Administrators can grant or remove admin rights on the Admin page; there is always at least one.
+The first account registered on a new install becomes the administrator and gets an Admin link in the account menu (`/admin`: every account's storage use and quota, server totals, and who else is an administrator). On a public install, register straight after the first start, or set `INITIAL_ADMIN_EMAIL` in `.env` to your address so only that account can become the administrator, once its email is confirmed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Admin rights are chosen only when an administrator creates an account (Administrator tick box); there is always at least one administrator.
 
 The frontend bundle has the API URL compiled in. If the browser reaches the API somewhere other than `http://localhost:3000`, set `API_URL` (and `FRONTEND_URL` for CORS) in `.env` and rebuild.
+
+The Admin page can show the country of each user's last login. That needs a free MaxMind GeoLite2 Country database, which Compose can download for you with `docker compose --profile geoip up -d` once `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY` are set in `.env`. Without it the country shows "Unknown". See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#8-last-login-location-geoip).
+
+To run a public instance that cleans up unused accounts, set `FILEVAULT_MODE=hosted` in `.env`, and optionally `HOSTED_CONTACT_EMAIL` (the address the notice tells users to email to ask for a permanent account). Anything other than `self-hosted` or `hosted` stops the API starting. See "Hosted mode" in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Hosting it for real (HTTPS reverse proxy, secrets, backups, key rotation, security headers): see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
@@ -217,7 +222,7 @@ To try protected endpoints, call `POST /user/login`, then click **Authorize** an
 - **Uploads**: chunked, resumable uploads for big files
 - **Recycle bin**: list, restore, delete for good, empty
 - **Shares**: create, list and revoke share links, and the public endpoints a link uses
-- **Admin**: every account's usage and quota, change quotas, grant or remove admin rights, server totals
+- **Admin**: every account's usage and quota, change quotas, create accounts (optionally as an administrator, with an optional quota), delete accounts, set a user's password, mark non-admin accounts permanent (admins are always permanent), suspend or unsuspend accounts (`PUT /admin/users/{id}/suspended`), server totals
 - **Health**: `/ping` and `/pingsql`
 
 ## Project layout
@@ -234,6 +239,8 @@ To try protected endpoints, call `POST /user/login`, then click **Authorize** an
 
 This project is licensed under the [MIT License](LICENSE). The file manager UI is adapted from
 [@cubone/react-file-manager](https://github.com/Saifullah-dev/react-file-manager), also MIT licensed.
+
+This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com
 
 ## Author
 

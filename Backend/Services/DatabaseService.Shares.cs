@@ -124,10 +124,12 @@ public partial class DatabaseServices
         await connection.OpenAsync();
 
         const string query = @"
-            SELECT Id, ItemId, UserId, ExpiresAt, PasswordHash
-            FROM Shares
-            WHERE TokenHash = @TokenHash AND RevokedAt IS NULL
-              AND (ExpiresAt IS NULL OR ExpiresAt > SYSUTCDATETIME())";
+            SELECT s.Id, s.ItemId, s.UserId, s.ExpiresAt, s.PasswordHash
+            FROM Shares s
+            JOIN Users u ON u.Id = s.UserId
+            WHERE s.TokenHash = @TokenHash AND s.RevokedAt IS NULL
+              AND (s.ExpiresAt IS NULL OR s.ExpiresAt > SYSUTCDATETIME())
+              AND u.SuspendedAt IS NULL"; // links of a suspended owner look like missing ones; they work again after unsuspending
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@TokenHash", tokenHash);

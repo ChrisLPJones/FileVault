@@ -1,0 +1,56 @@
+/* Hosted-mode notice: bottom right on desktop, a full-width bottom sheet on phones. Below the
+   file manager's drawer and details sheet (z-index 30+), and the upload panel is a modal
+   dialog (top layer), so it never covers either. */
+.hosted-notice {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 25;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: min(360px, calc(100vw - 32px));
+    padding: 12px 8px 12px 14px;
+    border: 1px solid var(--fv-border);
+    border-radius: 10px;
+    background-color: var(--fv-surface);
+    color: var(--fv-text);
+    box-shadow: var(--fv-shadow);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.hosted-notice-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.hosted-notice-text a {
+    color: var(--fv-link);
+}
+
+.hosted-notice-close {
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font-size: 1.3rem;
+    line-height: 1;
+    padding: 0 6px;
+    cursor: pointer;
+}
+
+@media (max-width: 600px) {
+    .hosted-notice {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: auto;
+        border-width: 1px 0 0;
+        border-radius: 14px 14px 0 0;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+}

@@ -28,7 +28,8 @@ namespace Backend.Routes
                     return Results.BadRequest(new { error = "Enter your email address" });
 
                 var user = await db.GetUserByEmail(email);
-                if (user != null)
+                // A suspended account gets nothing, and the answer stays the same
+                if (user != null && !(await db.GetUserAuthStateAsync(user.Id.ToString())).Suspended)
                     await emails.SendPasswordResetAsync(user, db);
 
                 return Results.Ok(new { success = ForgotPasswordReply });
@@ -52,7 +53,7 @@ namespace Backend.Routes
 
                 var use = await AccountEmailService.ConsumeAsync(request.Token, AccountEmailService.ResetPurpose, db);
                 var user = use == null ? null : await db.GetUserByUserId(use.UserId);
-                if (use == null || user == null)
+                if (use == null || user == null || (await db.GetUserAuthStateAsync(use.UserId)).Suspended)
                     return Results.BadRequest(new { error = "This reset link is invalid or has expired. Please ask for a new one." });
 
                 await db.UpdatePasswordHashAsync(use.UserId, auth.GeneratePasswordHash(request.NewPassword));

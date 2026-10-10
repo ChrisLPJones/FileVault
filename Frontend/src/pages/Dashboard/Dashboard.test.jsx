@@ -47,8 +47,13 @@ const recent = () => within(screen.getByRole("region", { name: "Recent" }));
 const previewToggle = () => screen.getByRole("button", { name: /preview pane/i });
 const detailsPane = () => screen.queryByRole("complementary", { name: "Details" });
 
+// Favourites and Recent start collapsed; most tests need them open
+const openQuickAccess = () =>
+    localStorage.setItem("fv-quick-access", JSON.stringify({ favourites: true, recent: true }));
+
 beforeEach(() => {
     localStorage.clear();
+    openQuickAccess();
 });
 
 describe("Recent files", () => {
@@ -174,6 +179,14 @@ describe("Folders section", () => {
     const heading = () => screen.getByRole("button", { name: "Folders" });
     const pane = () => document.querySelector(".sb-folders-scroll");
 
+    it("starts with Favourites and Recent collapsed for a first-time user", async () => {
+        localStorage.clear();
+        await renderDashboard();
+        expect(heading()).toHaveAttribute("aria-expanded", "true");
+        expect(screen.getByRole("button", { name: "Favourites" })).toHaveAttribute("aria-expanded", "false");
+        expect(screen.getByRole("button", { name: "Recent" })).toHaveAttribute("aria-expanded", "false");
+    });
+
     it("collapses like Favourites and Recent and remembers it", async () => {
         await renderDashboard();
         expect(heading()).toHaveAttribute("aria-expanded", "true");
@@ -190,9 +203,9 @@ describe("Folders section", () => {
     });
 
     it("starts collapsed when it was left that way", async () => {
-        localStorage.setItem("fv-quick-access", JSON.stringify({ favourites: false }));
+        localStorage.setItem("fv-quick-access", JSON.stringify({ folders: true, favourites: false }));
         await renderDashboard();
-        expect(heading()).toHaveAttribute("aria-expanded", "true"); // missing keys default to open
+        expect(heading()).toHaveAttribute("aria-expanded", "true");
         expect(screen.getByRole("button", { name: "Favourites" })).toHaveAttribute("aria-expanded", "false");
     });
 });

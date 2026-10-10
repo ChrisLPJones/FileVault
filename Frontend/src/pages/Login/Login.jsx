@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../Auth/Auth.css";
 import { login } from "../../services/Auth";
-import { setToken } from "../../utils/auth";
+import { startSession } from "../../utils/auth";
 import ServerStatus from "../../components/ServerStatus";
 import { getErrorMessage } from "../../api/api";
 import { resendVerificationByEmailAPI } from "../../api/accountEmailAPI";
@@ -15,6 +15,7 @@ function Login() {
     const [loginError, setLoginError] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+    const [suspended, setSuspended] = useState(false); // right password, but an administrator suspended the account
     const [resendStatus, setResendStatus] = useState(null); // null | "sending" | message
     // Set when the password was right but two-factor authentication needs a code
     const [challengeToken, setChallengeToken] = useState(null);
@@ -59,12 +60,13 @@ function Login() {
                 return;
             }
             if (response.status === 200) {
-                setToken(response.data.success);
+                startSession(response.data.success);
                 navigate("/dashboard", { replace: true });
                 return;
             }
             // Right password, but the address hasn't been confirmed yet: offer to resend the link
             setUnverifiedEmail(response.data?.emailNotVerified ? identifier.trim() : null);
+            setSuspended(response.data?.suspended === true);
             // e.g. "Invalid email or password" or the rate-limit message
             setLoginError(response.data?.error || "Login failed");
         } catch {
@@ -86,7 +88,7 @@ function Login() {
             <TwoFactorStep
                 challengeToken={challengeToken}
                 onSuccess={(token) => {
-                    setToken(token);
+                    startSession(token);
                     navigate("/dashboard", { replace: true });
                 }}
                 onRestart={() => setChallengeToken(null)}
@@ -151,6 +153,11 @@ function Login() {
                             {unverifiedEmail && (
                                 <p className="auth-alert-detail">
                                     Open the link we emailed to {unverifiedEmail}, then log in.
+                                </p>
+                            )}
+                            {suspended && (
+                                <p className="auth-alert-detail">
+                                    Your files are kept. Contact an administrator to get access back.
                                 </p>
                             )}
                         </div>

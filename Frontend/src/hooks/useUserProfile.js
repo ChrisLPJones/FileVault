@@ -7,7 +7,8 @@ import { getAdminStatusAPI } from "../api/adminAPI";
 // changes (see notifyProfileChanged) and dropped once nothing shows it, e.g. after logging out,
 // so the next account never sees the previous one's details.
 // emailVerified starts true so the "confirm your email" banner only shows once the server says so
-const EMPTY = { firstName: "", lastName: "", name: "", email: "", emailVerified: true, imageUrl: null, isAdmin: false };
+const EMPTY = { firstName: "", lastName: "", name: "", email: "", emailVerified: true, imageUrl: null, isAdmin: false,
+    hostedNotice: false, hostedContactEmail: null, hostedInactiveDays: 30 };
 
 let profile = EMPTY;
 let loadId = 0;
@@ -38,6 +39,9 @@ const load = async () => {
             emailVerified: info.emailVerified !== false,
             imageUrl,
             isAdmin: !!admin?.isAdmin,
+            hostedNotice: info.hostedNotice === true,
+            hostedContactEmail: info.hostedContactEmail || null,
+            hostedInactiveDays: info.hostedInactiveDays || 30,
         };
         emit();
     } catch {

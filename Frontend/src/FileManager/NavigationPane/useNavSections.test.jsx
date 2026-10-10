@@ -9,23 +9,23 @@ describe("useNavSections", () => {
     beforeEach(() => localStorage.clear());
     afterEach(() => vi.restoreAllMocks());
 
-    it("defaults every section to open", () => {
+    it("defaults Folders to open and Favourites and Recent to collapsed", () => {
         const { result } = renderHook(() => useNavSections());
-        expect(result.current[0]).toEqual({ folders: true, favourites: true, recent: true });
+        expect(result.current[0]).toEqual({ folders: true, favourites: false, recent: false });
     });
 
     it("toggles one section and remembers it", () => {
         const { result } = renderHook(() => useNavSections());
         act(() => result.current[1]("folders"));
         expect(result.current[0].folders).toBe(false);
-        expect(result.current[0].favourites).toBe(true);
+        expect(result.current[0].favourites).toBe(false);
         expect(JSON.parse(localStorage.getItem(KEY)).folders).toBe(false);
     });
 
     it("reads the saved state on mount", () => {
-        localStorage.setItem(KEY, JSON.stringify({ favourites: false }));
+        localStorage.setItem(KEY, JSON.stringify({ favourites: true }));
         const { result } = renderHook(() => useNavSections());
-        expect(result.current[0]).toEqual({ folders: true, favourites: false, recent: true });
+        expect(result.current[0]).toEqual({ folders: true, favourites: true, recent: false });
     });
 
     it("survives corrupt storage", () => {

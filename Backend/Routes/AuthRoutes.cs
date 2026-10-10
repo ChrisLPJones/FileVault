@@ -93,12 +93,20 @@ namespace Backend.Routes
                 if (!await db.IsEmailVerifiedAsync(userRecord.Id.ToString()))
                     return Results.Json(new { error = "Please confirm your email address first", emailNotVerified = true }, statusCode: 403);
 
+                // Also only after the password matched. No challenge is issued and nothing is recorded.
+                if ((await db.GetUserAuthStateAsync(userRecord.Id.ToString())).Suspended)
+                    return Results.Json(new { error = AuthServices.SuspendedMessage, suspended = true }, statusCode: 403);
+
                 // With two-factor on, the password only earns a short-lived challenge for POST /user/login/2fa
                 if ((await db.GetTwoFactorStateAsync(userRecord.Id.ToString()))?.Enabled == true)
                     return Results.Ok(new TwoFactorChallengeResponse(true,
                         await twoFactor.CreateLoginChallengeAsync(userRecord.Id.ToString())));
 
-                await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http);
+                // Null means the token was refused: suspended after the check above
+                if (await auth.IssueRefreshTokenAsync(userRecord.Id.ToString(), db, http) == null)
+                    return Results.Json(new { error = AuthServices.SuspendedMessage, suspended = true }, statusCode: 403);
+
+                await db.UpdateUserLastLogin(userRecord.Id.ToString(), DeviceDescription.IpAddress(http));
 
                 return Results.Ok(new { Success = auth.GetJWTToken(userRecord) });
             })
@@ -117,11 +125,16 @@ namespace Backend.Routes
                 AuthServices auth,
                 DatabaseServices db) =>
             {
-                var user = await auth.RotateRefreshTokenAsync(db, http);
+                var (user, racedWithinGrace) = await auth.RotateRefreshTokenAsync(db, http);
                 if (user == null)
                 {
-                    AuthServices.ClearRefreshCookie(http);
-                    return Results.Json(new { error = "Session expired" }, statusCode: 401);
+                    // Keep the cookie when another tab just rotated it: it holds that tab's fresh token
+                    if (!racedWithinGrace)
+                        AuthServices.ClearRefreshCookie(http);
+                    // raced tells the client this is transient: retry once before treating the session as over
+                    return racedWithinGrace
+                        ? Results.Json(new { error = "Session expired", raced = true }, statusCode: 401)
+                        : Results.Json(new { error = "Session expired" }, statusCode: 401);
                 }
 
                 return Results.Ok(new { Success = auth.GetJWTToken(user) });
@@ -148,7 +161,8 @@ namespace Backend.Routes
             // Retrieves authenticated user's information
             app.MapGet("/user/info", async (
                 ClaimsPrincipal user,
-                DatabaseServices db) =>
+                DatabaseServices db,
+                HostedOptions hosted) =>
             {
                 var userId = user.GetUserId();
                 var userInfo = await db.GetUserByUserId(userId);
@@ -156,13 +170,28 @@ namespace Backend.Routes
                     return Results.NotFound(new { error = "User not found" });
 
                 var avatar = await db.GetAvatarAsync(userId);
-                return Results.Ok(new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt,
-                    await db.IsEmailVerifiedAsync(userId)));
+                var showNotice = hosted.IsHosted && await db.ShouldShowHostedNoticeAsync(userId);
+                var verified = await db.IsEmailVerifiedAsync(userId);
+                return Results.Ok(showNotice
+                    ? new HostedUserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified,
+                        true, hosted.InactiveDays, hosted.ContactEmail)
+                    : new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified));
             })
                 .WithTags("Account")
-                .WithSummary("Get the current user's name, email, whether it's confirmed and when their profile picture last changed")
+                .WithSummary("Get the current user's name, email, whether it's confirmed and when their profile picture last changed " +
+                    "(hosted mode adds hostedNotice and hostedContactEmail while the first-login notice is due)")
                 .Produces<UserInfoResponse>()
                 .Produces<ErrorResponse>(404).RequireAuthorization();
+
+            // Hosted mode's first-login notice: remember that this user closed it
+            app.MapPost("/user/notices/hosted/dismiss", async (ClaimsPrincipal user, DatabaseServices db) =>
+            {
+                await db.DismissHostedNoticeAsync(user.GetUserId());
+                return Results.Ok(new { success = "Notice dismissed" });
+            })
+                .WithTags("Account")
+                .WithSummary("Dismiss the hosted-mode notice for the current user")
+                .Produces<SuccessResponse>().RequireAuthorization();
 
             // Updates the authenticated user's name and email
             app.MapPatch("/user/profile", async (
@@ -251,18 +280,15 @@ namespace Backend.Routes
                 HttpContext http,
                 ClaimsPrincipal user,
                 DatabaseServices db,
-                FileServices fs,
-                AvatarService avatars) =>
+                AccountDeletionService deletion) =>
             {
                 var userId = user.GetUserId();
                 if (await db.GetUserByUserId(userId) == null)
                     return Results.NotFound(new { error = "User not found" });
 
-                var response = await db.DeleteUserAndFilesById(userId, fs);
+                var response = await deletion.DeleteAsync(userId);
                 if (!response.Success)
                     return Results.Json(new { error = response.Message }, statusCode: response.StatusCode ?? 500);
-
-                avatars.DeleteFile(userId);
 
                 // Refresh tokens are deleted with the user; clear the cookie too
                 AuthServices.ClearRefreshCookie(http);

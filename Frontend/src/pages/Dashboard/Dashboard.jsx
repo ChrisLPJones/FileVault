@@ -13,6 +13,7 @@ import "./Dashboard.scss";
 import FileManager from "../../FileManager/FileManager";
 import { useHeaderSlot } from "../../contexts/HeaderSlotContext";
 import VerifyEmailBanner from "../../components/VerifyEmailBanner";
+import HostedNotice from "../../components/HostedNotice";
 
 // Matches the API's default Storage:MaxFileBytes until /user/usage responds. Files above 8 MB are
 // uploaded in chunks, so the per-request limit (maxUploadBytes) only applies to smaller ones.
@@ -153,6 +154,7 @@ function DashboardPage() {
                 </div>
             )}
             {!error && <VerifyEmailBanner />}
+            <HostedNotice />
             {notice && !error && (
                 <div className="dashboard-notice" role="status">
                     <span>{notice}</span>

@@ -1,10 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getErrorMessage } from "../../api/api";
-import { getAdminStatsAPI, getAdminUsersAPI, setUserAdminAPI, setUserQuotaAPI } from "../../api/adminAPI";
+import {
+    createUserAPI,
+    deleteUserAPI,
+    getAdminStatsAPI,
+    getAdminUsersAPI,
+    setUserPasswordAPI,
+    setUserPermanentAPI,
+    setUserQuotaAPI,
+    setUserSuspendedAPI,
+} from "../../api/adminAPI";
 import { formatBytes } from "../../utils/formatBytes";
+import { DeleteAccountDialog, SetPasswordDialog } from "./AccountDialogs";
+import CreateAccountForm from "./CreateAccountForm";
+import { UNITS } from "./quotaUnits";
+import UserAvatar from "./UserAvatar";
 import "./Admin.css";
-
-const UNITS = { MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
 
 const formatWhen = (value) =>
     value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Never";
@@ -94,63 +105,61 @@ function QuotaCell({ user, onSave }) {
     );
 }
 
-// One user's admin rights: Make admin, or Remove admin after a confirmation. The server refuses
-// to remove the last administrator (409); its message is shown here.
-function AdminCell({ user, onChange }) {
-    const [confirming, setConfirming] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState(null);
+// The "Actions" button of a row and the choices it opens: set password, permanent, suspend, delete.
+// Administrators have no such menu (it is only rendered for other accounts). A click outside the
+// open menu, or Escape, closes it.
+function RowActions({ user, open, onOpenChange, onChoose }) {
+    const setOpen = (value) => onOpenChange(value ? user.id : null);
+    const name = `${user.firstName} ${user.lastName}`.trim();
+    const container = useRef(null);
 
-    const change = async (isAdmin) => {
-        setSaving(true);
-        setError(null);
-        try {
-            await onChange(user, isAdmin);
-            setConfirming(false);
-        } catch (err) {
-            setConfirming(false);
-            setError(getErrorMessage(err, "Could not change administrator rights"));
-        } finally {
-            setSaving(false);
-        }
+    useEffect(() => {
+        if (!open) return undefined;
+        const onPointerDown = (event) => {
+            if (!container.current?.contains(event.target)) onOpenChange(null);
+        };
+        const onKeyDown = (event) => {
+            if (event.key === "Escape") onOpenChange(null);
+        };
+        document.addEventListener("mousedown", onPointerDown);
+        document.addEventListener("keydown", onKeyDown);
+        return () => {
+            document.removeEventListener("mousedown", onPointerDown);
+            document.removeEventListener("keydown", onKeyDown);
+        };
+    }, [open, onOpenChange]);
+
+    const choose = (action) => {
+        setOpen(false);
+        onChoose(action, user);
     };
 
     return (
-        <div className="admin-rights">
-            {confirming ? (
-                <div className="admin-confirm" role="group" aria-label={`Confirm removing admin from ${user.email}`}>
-                    <span>Remove admin rights from {user.email}?</span>
-                    <div className="admin-confirm-actions">
-                        <button type="button" className="admin-button danger" disabled={saving} onClick={() => change(false)}>
-                            Remove
-                        </button>
-                        <button type="button" className="admin-button secondary" disabled={saving} onClick={() => setConfirming(false)}>
-                            Cancel
-                        </button>
-                    </div>
+        <div className="admin-actions" ref={container}>
+            <button
+                type="button"
+                className="admin-link-button"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-label={`Actions for ${user.email}`}
+                onClick={() => setOpen(!open)}
+            >
+                Actions
+            </button>
+            {open && (
+                <div className="admin-menu" role="menu" aria-label={`Actions for ${name || user.email}`}>
+                    <button type="button" role="menuitem" onClick={() => choose("password")}>Set password</button>
+                    <button type="button" role="menuitem" onClick={() => choose("permanent")}>
+                        {user.isPermanent ? "Remove permanent" : "Make permanent"}
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => choose("suspend")}>
+                        {user.suspendedAt ? "Unsuspend account" : "Suspend account"}
+                    </button>
+                    <button type="button" role="menuitem" className="danger" onClick={() => choose("delete")}>
+                        Delete account
+                    </button>
                 </div>
-            ) : user.isAdmin ? (
-                <button
-                    type="button"
-                    className="admin-link-button"
-                    aria-label={`Remove admin from ${user.email}`}
-                    disabled={saving}
-                    onClick={() => { setError(null); setConfirming(true); }}
-                >
-                    Remove admin
-                </button>
-            ) : (
-                <button
-                    type="button"
-                    className="admin-link-button"
-                    aria-label={`Make ${user.email} an admin`}
-                    disabled={saving}
-                    onClick={() => change(true)}
-                >
-                    Make admin
-                </button>
             )}
-            {error && <div className="admin-error" role="alert">{error}</div>}
         </div>
     );
 }
@@ -160,7 +169,13 @@ function AdminCell({ user, onChange }) {
 export default function Admin() {
     const [data, setData] = useState(null); // { users, stats }
     const [error, setError] = useState(null);
-    const [version, setVersion] = useState(0); // bumped to reload (also resets the rows' admin-rights messages)
+    const [version, setVersion] = useState(0); // bumped to reload
+    const [dialog, setDialog] = useState(null); // { type: "password" | "delete", user }
+    const [openMenuId, setOpenMenuId] = useState(null); // the one row whose Actions menu is open
+    const openerLabel = useRef(null); // Actions button that opened the current dialog
+    const [creating, setCreating] = useState(false);
+    const [notice, setNotice] = useState(null); // what the last action did
+    const [actionError, setActionError] = useState(null); // why the last row action failed
 
     useEffect(() => {
         let cancelled = false;
@@ -186,10 +201,70 @@ export default function Admin() {
         setVersion((v) => v + 1);
     }, []);
 
-    const changeAdmin = useCallback(async (user, isAdmin) => {
-        await setUserAdminAPI(user.id, isAdmin);
-        setVersion((v) => v + 1);
-    }, []);
+    const reload = () => setVersion((v) => v + 1);
+
+    // Close the dialog and give focus back to the Actions button that opened it
+    const closeDialog = () => {
+        setDialog(null);
+        const label = openerLabel.current;
+        if (!label) return;
+        setTimeout(() => {
+            const buttons = document.querySelectorAll("button[aria-haspopup='menu']");
+            Array.from(buttons).find((b) => b.getAttribute("aria-label") === label)?.focus();
+        }, 0);
+    };
+
+    const chooseAction = async (action, user) => {
+        openerLabel.current = `Actions for ${user.email}`;
+        setNotice(null);
+        setActionError(null);
+        if (action === "suspend") {
+            const suspend = !user.suspendedAt;
+            try {
+                await setUserSuspendedAPI(user.id, suspend);
+                setNotice(suspend
+                    ? `${user.email} is suspended and signed out everywhere. Their files are kept.`
+                    : `${user.email} is no longer suspended.`);
+                reload();
+            } catch (err) {
+                setActionError(getErrorMessage(err, suspend ? "Could not suspend the account" : "Could not unsuspend the account"));
+            }
+            return;
+        }
+        if (action !== "permanent") {
+            setDialog({ type: action, user });
+            return;
+        }
+        try {
+            await setUserPermanentAPI(user.id, !user.isPermanent);
+            setNotice(`${user.email} is ${user.isPermanent ? "no longer" : "now"} a permanent account.`);
+            reload();
+        } catch (err) {
+            setActionError(getErrorMessage(err, "Could not change the permanent setting"));
+        }
+    };
+
+    // These throw on failure; their dialog shows the message
+    const savePassword = async (user, password) => {
+        await setUserPasswordAPI(user.id, password);
+        closeDialog();
+        setNotice(`Password set for ${user.email}. They have been signed out everywhere.`);
+    };
+
+    const deleteAccount = async (user) => {
+        await deleteUserAPI(user.id);
+        closeDialog();
+        setNotice(`The account for ${user.email} was deleted.`);
+        reload();
+    };
+
+    const createAccount = async (details) => {
+        await createUserAPI(details);
+        setCreating(false);
+        setActionError(null);
+        setNotice(`Account created for ${details.email}. They can sign in now.`);
+        reload();
+    };
 
     if (error && !data) {
         return (
@@ -203,9 +278,10 @@ export default function Admin() {
     if (!data) return <div className="admin-page"><p className="admin-loading">Loading…</p></div>;
 
     const { users, stats } = data;
+    const hosted = stats.mode === "hosted";
     const diskUsed = stats.diskTotalBytes != null && stats.diskFreeBytes != null ? stats.diskTotalBytes - stats.diskFreeBytes : null;
     const tiles = [
-        ["Users", stats.userCount, `${stats.adminCount} admin${stats.adminCount === 1 ? "" : "s"}`],
+        ["Users", stats.userCount, `${stats.adminCount} admin${stats.adminCount === 1 ? "" : "s"}${stats.suspendedCount ? `, ${stats.suspendedCount} suspended` : ""}`],
         ["Files", stats.fileCount.toLocaleString(), `${stats.folderCount.toLocaleString()} folders`],
         ["Stored", formatBytes(stats.totalStoredBytes), stats.storageBytesOnDisk != null ? `${formatBytes(stats.storageBytesOnDisk)} on disk, encrypted` : "Size of all files"],
         ["Disk", diskUsed != null ? `${formatBytes(stats.diskFreeBytes)} free` : "Unknown",
@@ -227,10 +303,20 @@ export default function Admin() {
             </section>
 
             <section className="admin-card" aria-labelledby="admin-users-heading">
-                <h2 id="admin-users-heading">Users</h2>
+                <div className="admin-users-header">
+                    <h2 id="admin-users-heading">Users</h2>
+                    {!creating && (
+                        <button type="button" className="admin-button" onClick={() => { setNotice(null); setCreating(true); }}>
+                            Create account
+                        </button>
+                    )}
+                </div>
                 <p className="admin-muted">
                     New accounts get {formatBytes(stats.defaultQuotaBytes)} unless you change their quota.
                 </p>
+                {creating && <CreateAccountForm onCreate={createAccount} onCancel={() => setCreating(false)} />}
+                {notice && <div className="admin-notice" role="status">{notice}</div>}
+                {actionError && <div className="admin-error" role="alert">{actionError}</div>}
                 {error && <div className="admin-error" role="alert">{error}</div>}
                 <div className="admin-table-scroll">
                     <table className="admin-table">
@@ -239,10 +325,12 @@ export default function Admin() {
                                 <th scope="col">Name</th>
                                 <th scope="col">Created</th>
                                 <th scope="col">Last login</th>
+                                <th scope="col">Login location</th>
+                                {hosted && <th scope="col">Last active</th>}
+                                {hosted && <th scope="col">Removal due</th>}
                                 <th scope="col" className="numeric">Files</th>
                                 <th scope="col">Storage used</th>
                                 <th scope="col">Quota</th>
-                                <th scope="col">Admin rights</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -251,14 +339,51 @@ export default function Admin() {
                                 return (
                                     <tr key={user.id}>
                                         <td>
-                                            <div className="admin-name">
-                                                {`${user.firstName} ${user.lastName}`.trim()}
-                                                {user.isAdmin && <span className="admin-badge">Admin</span>}
+                                            <div className="admin-person">
+                                                <UserAvatar
+                                                    userId={user.id}
+                                                    name={`${user.firstName} ${user.lastName}`.trim() || user.email}
+                                                    version={user.avatarUpdatedAt}
+                                                />
+                                                <div className="admin-person-text">
+                                                    <div className="admin-name">
+                                                        {`${user.firstName} ${user.lastName}`.trim()}
+                                                        {user.isAdmin && <span className="admin-badge">{user.suspendedAt ? "Admin (suspended)" : "Admin"}</span>}
+                                                        {user.isPermanent && <span className="admin-badge permanent">Permanent</span>}
+                                                        {user.suspendedAt && <span className="admin-badge suspended">Suspended</span>}
+                                                    </div>
+                                                    <div className="admin-muted admin-email">{user.email}</div>
+                                                    {!user.isAdmin && (
+                                                        <RowActions
+                                                            user={user}
+                                                            open={openMenuId === user.id}
+                                                            onOpenChange={setOpenMenuId}
+                                                            onChoose={chooseAction}
+                                                        />
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="admin-muted">{user.email}</div>
                                         </td>
                                         <td>{formatWhen(user.createdAt)}</td>
                                         <td>{formatWhen(user.lastLogin)}</td>
+                                        <td>
+                                            {user.lastLoginIp ? (
+                                                <>
+                                                    <div>{user.lastLoginIp}</div>
+                                                    <div className="admin-muted">{user.lastLoginCountry || "Unknown"}</div>
+                                                </>
+                                            ) : (
+                                                <span className="admin-muted">Unknown</span>
+                                            )}
+                                        </td>
+                                        {hosted && <td>{formatWhen(user.lastActiveAt)}</td>}
+                                        {hosted && (
+                                            <td>
+                                                {user.removalDueAt
+                                                    ? formatWhen(user.removalDueAt)
+                                                    : <span className="admin-muted">Not removed</span>}
+                                            </td>
+                                        )}
                                         <td className="numeric">{user.fileCount.toLocaleString()}</td>
                                         <td>
                                             <div>{formatBytes(user.bytesUsed)}</div>
@@ -274,7 +399,6 @@ export default function Admin() {
                                             </div>
                                         </td>
                                         <td><QuotaCell user={user} onSave={saveQuota} /></td>
-                                        <td><AdminCell key={`${user.id}:${version}`} user={user} onChange={changeAdmin} /></td>
                                     </tr>
                                 );
                             })}
@@ -282,6 +406,13 @@ export default function Admin() {
                     </table>
                 </div>
             </section>
+
+            {dialog?.type === "password" && (
+                <SetPasswordDialog user={dialog.user} onSave={savePassword} onClose={closeDialog} />
+            )}
+            {dialog?.type === "delete" && (
+                <DeleteAccountDialog user={dialog.user} onDelete={deleteAccount} onClose={closeDialog} />
+            )}
         </div>
     );
 }

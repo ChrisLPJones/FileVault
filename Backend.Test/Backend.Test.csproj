@@ -23,6 +23,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- MaxMind's small GeoLite2 *test* database (Apache-2.0 or MIT, see TestData/MaxMind-DB-LICENSE-APACHE.txt);
+         never the real GeoLite2 database -->
+    <None Include="TestData\GeoLite2-Country-Test.mmdb" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Backend\Backend.csproj" />
   </ItemGroup>
 

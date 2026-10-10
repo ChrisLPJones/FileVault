@@ -59,6 +59,10 @@ services:
       Admin__InitialEmail: ${INITIAL_ADMIN_EMAIL:-}
       # Only read so the API can warn that ADMIN_EMAILS is no longer used (empty value doesn't warn)
       Admin__Emails: ${ADMIN_EMAILS:-}
+      # self-hosted (default) or hosted; hosted turns on inactive-account removal and the first-login notice
+      App__Mode: ${FILEVAULT_MODE:-self-hosted}
+      # Hosted mode only: the address users are told to email to ask for a permanent account
+      Hosted__ContactEmail: ${HOSTED_CONTACT_EMAIL:-}
       # Links in emails point here
       App__FrontendUrl: ${FRONTEND_URL:-http://localhost:5173}
       # Optional SMTP for password reset / email confirmation (otherwise logged)
@@ -71,10 +75,29 @@ services:
       Swagger__Enabled: ${SWAGGER_ENABLED:-false}
       ForwardedHeaders__Enabled: ${BEHIND_HTTPS_PROXY:-false}
       Jwt__SecureRefreshCookie: ${BEHIND_HTTPS_PROXY:-false}
+      # Country lookup for the admin page's "Last login" column; optional, see the geoipupdate service
+      GeoIp__DatabasePath: /data/geoip/GeoLite2-Country.mmdb
     ports:
       - "3000:8080"
     volumes:
       - file_storage:/data/storage
+      - geoip_data:/data/geoip:ro
+    restart: unless-stopped
+
+  # Optional: keeps a local GeoLite2 Country database up to date (needs a free MaxMind account).
+  # Start it with:  docker compose --profile geoip up -d
+  # It only downloads the database; no user address ever leaves the server.
+  # Without a MaxMind account you can copy GeoLite2-Country.mmdb into the geoip_data volume instead.
+  geoipupdate:
+    profiles: ["geoip"]
+    image: ghcr.io/maxmind/geoipupdate:v7.1.0
+    environment:
+      GEOIPUPDATE_ACCOUNT_ID: ${GEOIPUPDATE_ACCOUNT_ID:-}
+      GEOIPUPDATE_LICENSE_KEY: ${GEOIPUPDATE_LICENSE_KEY:-}
+      GEOIPUPDATE_EDITION_IDS: GeoLite2-Country
+      GEOIPUPDATE_FREQUENCY: "72"
+    volumes:
+      - geoip_data:/usr/share/GeoIP
     restart: unless-stopped
 
   frontend:
@@ -92,3 +115,5 @@ volumes:
   sql_data:
   # Encrypted files. Back this up together with the database and ENCRYPTION_MASTER_KEY.
   file_storage:
+  # GeoLite2 Country database (never committed or built into the image: MaxMind's licence forbids redistribution)
+  geoip_data:
