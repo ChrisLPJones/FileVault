@@ -44,6 +44,7 @@ public static partial class AppLockDiagnostics
     {
         var text = new StringBuilder();
         text.AppendLine($"=== APPLOCK DIAGNOSTICS {DateTime.UtcNow:O}: {title}");
+        text.AppendLine(await ThreadPoolSummaryAsync());
         try
         {
             // Always from a new connection, so it works when the caller's transaction is dead
@@ -64,6 +65,21 @@ public static partial class AppLockDiagnostics
         }
         text.AppendLine("=== END APPLOCK DIAGNOSTICS");
         return text.ToString();
+    }
+
+    // A stalled thread pool (every thread busy or blocked) delays the continuation after a query
+    // finishes, which would keep a transaction and its lock open although no SQL is running. How
+    // long a new work item waits to start shows whether that is happening in this process.
+    private static async Task<string> ThreadPoolSummaryAsync()
+    {
+        ThreadPool.GetMinThreads(out var minWorker, out _);
+        ThreadPool.GetAvailableThreads(out var availableWorker, out _);
+        ThreadPool.GetMaxThreads(out var maxWorker, out _);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var probe = Task.Run(() => started.ElapsedMilliseconds);
+        var latency = await Task.WhenAny(probe, Task.Delay(5000)) == probe ? $"{await probe} ms" : "> 5000 ms";
+        return $"-- threadpool: threads={ThreadPool.ThreadCount} busyWorkers={maxWorker - availableWorker} minWorkers={minWorker} " +
+               $"queued={ThreadPool.PendingWorkItemCount} queueLatency={latency} cpus={Environment.ProcessorCount}";
     }
 
     private static async Task AppendRowsAsync(SqlDataReader reader, StringBuilder text)
