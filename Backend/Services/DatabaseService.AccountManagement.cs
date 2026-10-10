@@ -13,10 +13,10 @@ public partial class DatabaseServices
     // administrator vouches for it), so the account can sign in straight away. Returns the new
     // user's ID, or null if the email is already used. Takes the admin-membership lock because it
     // can add an administrator.
-    public Task<Guid?> CreateUserByAdminAsync(UserModel user, bool isAdmin, bool isPermanent) =>
-        RetryOnDeadlockAsync(() => CreateUserByAdminOnceAsync(user, isAdmin, isPermanent));
+    public Task<Guid?> CreateUserByAdminAsync(UserModel user, bool isAdmin, bool isPermanent, long? quotaBytes = null) =>
+        RetryOnDeadlockAsync(() => CreateUserByAdminOnceAsync(user, isAdmin, isPermanent, quotaBytes));
 
-    private async Task<Guid?> CreateUserByAdminOnceAsync(UserModel user, bool isAdmin, bool isPermanent)
+    private async Task<Guid?> CreateUserByAdminOnceAsync(UserModel user, bool isAdmin, bool isPermanent, long? quotaBytes)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -35,15 +35,16 @@ public partial class DatabaseServices
         try
         {
             await using var insert = new SqlCommand(@"
-                INSERT INTO Users (FirstName, LastName, Email, PasswordHash, IsAdmin, IsPermanent, EmailVerified)
+                INSERT INTO Users (FirstName, LastName, Email, PasswordHash, IsAdmin, IsPermanent, StorageQuota, EmailVerified)
                 OUTPUT inserted.Id
-                VALUES (@FirstName, @LastName, @Email, @PasswordHash, @IsAdmin, @IsPermanent, 1)", connection, transaction);
+                VALUES (@FirstName, @LastName, @Email, @PasswordHash, @IsAdmin, @IsPermanent, @Quota, 1)", connection, transaction);
             insert.Parameters.AddWithValue("@FirstName", user.FirstName.Trim());
             insert.Parameters.AddWithValue("@LastName", user.LastName.Trim());
             insert.Parameters.AddWithValue("@Email", email);
             insert.Parameters.AddWithValue("@PasswordHash", user.Password);
             insert.Parameters.AddWithValue("@IsAdmin", isAdmin);
-            insert.Parameters.AddWithValue("@IsPermanent", isPermanent);
+            insert.Parameters.AddWithValue("@IsPermanent", isAdmin || isPermanent); // administrators are always permanent
+            insert.Parameters.AddWithValue("@Quota", (object?)quotaBytes ?? DBNull.Value);
             var id = (Guid)(await insert.ExecuteScalarAsync())!;
             await transaction.CommitAsync();
             return id;

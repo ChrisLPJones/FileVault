@@ -52,8 +52,8 @@ namespace Backend.Test
             (await ReadAsync(response)).GetProperty("error").GetString()!;
 
         private static Task<HttpResponseMessage> CreateAsync(HttpClient admin, string email, string password = TestAccounts.Password,
-            bool? isAdmin = null, bool? isPermanent = null, string firstName = "Created", string lastName = "Person") =>
-            admin.PostAsJsonAsync("/admin/users", new { firstName, lastName, email, password, isAdmin, isPermanent });
+            bool? isAdmin = null, bool? isPermanent = null, string firstName = "Created", string lastName = "Person", long? quotaBytes = null) =>
+            admin.PostAsJsonAsync("/admin/users", new { firstName, lastName, email, password, isAdmin, isPermanent, quotaBytes });
 
         private static Task<HttpResponseMessage> SetPasswordAsync(HttpClient admin, string userId, string password) =>
             admin.PutAsJsonAsync($"/admin/users/{userId}/password", new { password });
@@ -117,6 +117,65 @@ namespace Backend.Test
                 row.GetProperty("isPermanent").GetBoolean().Should().BeFalse();
 
                 await created.DeleteAsync("/user");
+            }
+            finally
+            {
+                await admin.Client.DeleteAsync("/user");
+            }
+        }
+
+        [Fact]
+        public async Task Create_AdministratorIsPermanent_EvenWithoutThePermanentFlag()
+        {
+            var admin = await NewAdminAsync();
+            try
+            {
+                var id = (await ReadAsync(await CreateAsync(admin.Client, NewEmail(), isAdmin: true, isPermanent: false))).GetProperty("id").GetString()!;
+                var row = await UserRowAsync(admin.Client, id);
+                row.GetProperty("isAdmin").GetBoolean().Should().BeTrue();
+                row.GetProperty("isPermanent").GetBoolean().Should().BeTrue();
+                await admin.Client.DeleteAsync($"/admin/users/{id}");
+            }
+            finally
+            {
+                await admin.Client.DeleteAsync("/user");
+            }
+        }
+
+        [Fact]
+        public async Task Create_WithQuota_StoresIt_AndWithoutUsesTheDefault()
+        {
+            var admin = await NewAdminAsync();
+            try
+            {
+                var withQuota = (await ReadAsync(await CreateAsync(admin.Client, NewEmail(), quotaBytes: 5_000_000))).GetProperty("id").GetString()!;
+                var row = await UserRowAsync(admin.Client, withQuota);
+                row.GetProperty("quota").GetInt64().Should().Be(5_000_000);
+                row.GetProperty("quotaOverride").GetInt64().Should().Be(5_000_000);
+
+                var without = (await ReadAsync(await CreateAsync(admin.Client, NewEmail()))).GetProperty("id").GetString()!;
+                (await UserRowAsync(admin.Client, without)).GetProperty("quotaOverride").ValueKind.Should().Be(JsonValueKind.Null);
+
+                await admin.Client.DeleteAsync($"/admin/users/{withQuota}");
+                await admin.Client.DeleteAsync($"/admin/users/{without}");
+            }
+            finally
+            {
+                await admin.Client.DeleteAsync("/user");
+            }
+        }
+
+        [Theory]
+        [InlineData(-1L)]
+        [InlineData((1L << 50) + 1)]
+        public async Task Create_WithQuotaOutOfRange_IsRefused_AndCreatesNothing(long quota)
+        {
+            var admin = await NewAdminAsync();
+            var email = NewEmail();
+            try
+            {
+                (await CreateAsync(admin.Client, email, quotaBytes: quota)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                (await LoginStatusAsync(email, TestAccounts.Password)).Should().Be(HttpStatusCode.Unauthorized);
             }
             finally
             {

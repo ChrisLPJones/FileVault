@@ -172,11 +172,10 @@ namespace Backend.Routes
                 var avatar = await db.GetAvatarAsync(userId);
                 var showNotice = hosted.IsHosted && await db.ShouldShowHostedNoticeAsync(userId);
                 var verified = await db.IsEmailVerifiedAsync(userId);
-                var iconTheme = await db.GetIconThemeAsync(userId);
                 return Results.Ok(showNotice
-                    ? new HostedUserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified, iconTheme,
+                    ? new HostedUserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified,
                         true, hosted.InactiveDays, hosted.ContactEmail)
-                    : new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified, iconTheme));
+                    : new UserInfoResponse(userInfo.FirstName, userInfo.LastName, userInfo.Email, avatar?.UpdatedAt, verified));
             })
                 .WithTags("Account")
                 .WithSummary("Get the current user's name, email, whether it's confirmed and when their profile picture last changed " +

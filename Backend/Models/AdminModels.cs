@@ -35,6 +35,7 @@ namespace Backend.Models
         public string? Password { get; set; }
         public bool? IsAdmin { get; set; }
         public bool? IsPermanent { get; set; }
+        public long? QuotaBytes { get; set; } // optional; null = the server default
     }
 
     // POST /admin/users

@@ -124,6 +124,9 @@ namespace Backend.Routes
                 if (validationError != null)
                     return Results.BadRequest(new { error = validationError });
 
+                if (request.QuotaBytes is < 0 or > MaxQuotaBytes)
+                    return Results.BadRequest(new { error = "Quota must be between 0 bytes and 1 PB" });
+
                 var user = new UserModel
                 {
                     FirstName = request.FirstName!.Trim(),
@@ -131,7 +134,7 @@ namespace Backend.Routes
                     Email = request.Email!.Trim(),
                     Password = auth.GeneratePasswordHash(request.Password!)
                 };
-                var id = await db.CreateUserByAdminAsync(user, request.IsAdmin == true, request.IsPermanent == true);
+                var id = await db.CreateUserByAdminAsync(user, request.IsAdmin == true, request.IsPermanent == true, request.QuotaBytes);
                 if (id == null)
                     return Results.Json(new { error = "Email already exists" }, statusCode: StatusCodes.Status409Conflict);
 
@@ -139,7 +142,7 @@ namespace Backend.Routes
                 Audit(http, "create-user", id.Value.ToString());
                 return Results.Ok(new AdminCreatedUserResponse($"Account created for {user.Email.ToLowerInvariant()}", id.Value));
             })
-                .WithSummary("Create an account (body: { firstName, lastName, email, password, isAdmin?, isPermanent? }); " +
+                .WithSummary("Create an account (body: { firstName, lastName, email, password, isAdmin?, isPermanent?, quotaBytes? }); administrators are always permanent; " +
                     "its email counts as confirmed, so it can sign in straight away (admins only)")
                 .Accepts<AdminCreateUserRequest>("application/json")
                 .Produces<AdminCreatedUserResponse>()

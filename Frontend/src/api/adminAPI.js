@@ -21,8 +21,8 @@ export const setUserAdminAPI = (userId, isAdmin) =>
 
 // Create an account that works straight away (its email counts as confirmed).
 // 400 for an invalid name, email or password, 409 if the email is taken.
-export const createUserAPI = async ({ firstName, lastName, email, password, isAdmin = false, isPermanent = false }) =>
-    (await api.post("/admin/users", { firstName, lastName, email, password, isAdmin, isPermanent })).data;
+export const createUserAPI = async ({ firstName, lastName, email, password, isAdmin = false, isPermanent = false, quotaBytes = null }) =>
+    (await api.post("/admin/users", { firstName, lastName, email, password, isAdmin, isPermanent, quotaBytes })).data;
 
 // Delete another user's account and all their files. 409 for the last administrator.
 export const deleteUserAPI = (userId) => api.delete(`/admin/users/${encodeURIComponent(userId)}`);

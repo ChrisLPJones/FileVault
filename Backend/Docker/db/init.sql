@@ -659,17 +659,6 @@ GO
 -- admin to someone else before the setting is applied.
 
 ------------------------------------------------------------
--- ICON THEME: per-user choice of folder/file icon style
-------------------------------------------------------------
--- NULL means the default icons; otherwise windows, macos or ubuntu (checked by the API).
-IF COL_LENGTH('Users', 'IconTheme') IS NULL
-BEGIN
-    ALTER TABLE Users ADD IconTheme NVARCHAR(16) NULL;
-    PRINT 'Column "Users.IconTheme" added.';
-END
-GO
-
-------------------------------------------------------------
 -- ADMIN ACCOUNT MANAGEMENT (added to existing databases too)
 ------------------------------------------------------------
 -- Marks an account the inactive-account removal (hosted mode) must never delete.
@@ -744,4 +733,10 @@ BEGIN
     ALTER TABLE Users ADD HostedNoticeDismissedAt DATETIME2 NULL;
     PRINT 'Column "Users.HostedNoticeDismissedAt" added.';
 END
+GO
+
+------------------------------------------------------------
+-- ADMINISTRATORS ARE PERMANENT (idempotent; also applied to existing databases)
+------------------------------------------------------------
+UPDATE Users SET IsPermanent = 1 WHERE IsAdmin = 1 AND IsPermanent = 0;
 GO

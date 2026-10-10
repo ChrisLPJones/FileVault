@@ -27,8 +27,7 @@ Copied from the package and then modified for FileVault:
 - The details pane is switched on and off only by a toolbar toggle (in the "⋯" menu on phones), which
   the `enableFilePreview` prop gates; selecting or opening a file doesn't open it. While on it shows
   the selected file, or "Select a file to preview"; the choice is kept in `localStorage`
-- Desktop-style file and folder icons (`components/FileTypeIcon`); the per-user icon
-  theme (Settings > Appearance > Icons) is applied inside it, so all icons must go through `FileTypeIcon`
+- Desktop-style file and folder icons (`components/FileTypeIcon`)
 - Collapsible folder tree with the account menu at the bottom (`NavigationPane/NavUser.jsx`)
 - "Folders" is a collapsible section like Favourites and Recent (`NavigationPane/NavSection.jsx`,
   state kept in `localStorage` by `useNavSections.js`); the icons-only pane always shows the tree

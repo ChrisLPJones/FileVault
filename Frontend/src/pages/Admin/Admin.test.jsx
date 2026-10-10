@@ -8,7 +8,6 @@ import {
     getAdminStatsAPI,
     getAdminUsersAPI,
     getUserAvatarBlobAPI,
-    setUserAdminAPI,
     setUserPasswordAPI,
     setUserPermanentAPI,
     setUserQuotaAPI,
@@ -19,7 +18,6 @@ vi.mock("../../api/adminAPI", () => ({
     getAdminStatsAPI: vi.fn(),
     getAdminUsersAPI: vi.fn(),
     setUserQuotaAPI: vi.fn(async () => ({})),
-    setUserAdminAPI: vi.fn(async () => ({})),
     createUserAPI: vi.fn(async () => ({})),
     deleteUserAPI: vi.fn(async () => ({})),
     setUserPasswordAPI: vi.fn(async () => ({})),
@@ -55,7 +53,7 @@ const chooseAction = async (email, item) => {
 };
 
 beforeEach(() => {
-    [setUserAdminAPI, createUserAPI, deleteUserAPI, setUserPasswordAPI, setUserPermanentAPI, setUserSuspendedAPI, getUserAvatarBlobAPI].forEach((mock) => {
+    [createUserAPI, deleteUserAPI, setUserPasswordAPI, setUserPermanentAPI, setUserSuspendedAPI, getUserAvatarBlobAPI].forEach((mock) => {
         mock.mockReset();
         mock.mockResolvedValue({});
     });
@@ -89,7 +87,7 @@ describe("Admin page", () => {
         expect(within(sam).queryByText("(default)")).toBeNull();
     });
 
-    it("shows the last login address and country, with Unknown fallbacks and the GeoLite2 attribution", async () => {
+    it("shows the last login address and country and Unknown fallbacks", async () => {
         getAdminUsersAPI.mockResolvedValue([
             ...users,
             { ...users[1], id: "u3", email: "kim@example.com", lastLoginIp: "10.0.0.5", lastLoginCountry: null, lastLoginCountryCode: null },
@@ -109,8 +107,9 @@ describe("Admin page", () => {
         // Never logged in since the address was recorded
         expect(within(row("sam@example.com")).getByText("Unknown")).toBeInTheDocument();
 
-        expect(screen.getByText(/GeoLite2 data created by MaxMind/)).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: "maxmind.com" })).toHaveAttribute("href", "https://www.maxmind.com");
+        // The MaxMind attribution lives in the README, not on this page
+        expect(screen.queryByText(/MaxMind/)).toBeNull();
+        expect(screen.queryByRole("link", { name: "maxmind.com" })).toBeNull();
     });
 
     it("changes a quota in the chosen unit and reloads", async () => {
@@ -146,67 +145,13 @@ describe("Admin page", () => {
         expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     });
 
-    it("makes a user an admin straight away and reloads", async () => {
+    it("has no Admin rights column or buttons (admin rights are set when creating an account)", async () => {
         render(<Admin />);
-        await userEvent.click(await screen.findByRole("button", { name: "Make sam@example.com an admin" }));
+        await screen.findByText("alex@example.com");
 
-        expect(setUserAdminAPI).toHaveBeenCalledWith("u2", true);
-        expect(getAdminUsersAPI).toHaveBeenCalledTimes(2);
-    });
-
-    it("asks before removing admin, and does nothing if cancelled", async () => {
-        render(<Admin />);
-        await userEvent.click(await screen.findByRole("button", { name: "Remove admin from alex@example.com" }));
-
-        const confirm = screen.getByRole("group", { name: "Confirm removing admin from alex@example.com" });
-        expect(setUserAdminAPI).not.toHaveBeenCalled();
-        await userEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
-
-        expect(setUserAdminAPI).not.toHaveBeenCalled();
-        expect(screen.getByRole("button", { name: "Remove admin from alex@example.com" })).toBeInTheDocument();
-    });
-
-    it("removes admin once confirmed", async () => {
-        render(<Admin />);
-        await userEvent.click(await screen.findByRole("button", { name: "Remove admin from alex@example.com" }));
-        await userEvent.click(screen.getByRole("button", { name: "Remove" }));
-
-        expect(setUserAdminAPI).toHaveBeenCalledWith("u1", false);
-        expect(getAdminUsersAPI).toHaveBeenCalledTimes(2);
-    });
-
-    it("shows the server's message when the last admin can't be removed", async () => {
-        setUserAdminAPI.mockRejectedValue(Object.assign(new Error("Conflict"), {
-            response: { status: 409, data: { error: "There must always be at least one administrator" } },
-        }));
-        render(<Admin />);
-        await userEvent.click(await screen.findByRole("button", { name: "Remove admin from alex@example.com" }));
-        await userEvent.click(screen.getByRole("button", { name: "Remove" }));
-
-        expect(await within(row("alex@example.com")).findByRole("alert"))
-            .toHaveTextContent("There must always be at least one administrator");
-        expect(getAdminUsersAPI).toHaveBeenCalledTimes(1);
-        // Back to the normal button, so it can be tried again
-        expect(screen.getByRole("button", { name: "Remove admin from alex@example.com" })).toBeInTheDocument();
-    });
-
-    it("clears a row's refusal message once the list reloads after another row's change", async () => {
-        setUserAdminAPI.mockImplementation(async (id) => {
-            if (id === "u1")
-                throw Object.assign(new Error("Conflict"), {
-                    response: { status: 409, data: { error: "There must always be at least one administrator" } },
-                });
-            return {};
-        });
-        render(<Admin />);
-        await userEvent.click(await screen.findByRole("button", { name: "Remove admin from alex@example.com" }));
-        await userEvent.click(screen.getByRole("button", { name: "Remove" }));
-        expect(await within(row("alex@example.com")).findByRole("alert")).toBeInTheDocument();
-
-        await userEvent.click(screen.getByRole("button", { name: "Make sam@example.com an admin" }));
-
-        await vi.waitFor(() => expect(getAdminUsersAPI).toHaveBeenCalledTimes(2));
-        expect(within(row("alex@example.com")).queryByRole("alert")).not.toBeInTheDocument();
+        expect(screen.queryByRole("columnheader", { name: "Admin rights" })).toBeNull();
+        expect(screen.queryByRole("button", { name: /make .* an admin/i })).toBeNull();
+        expect(screen.queryByRole("button", { name: /remove admin/i })).toBeNull();
     });
 
     it("shows last active and removal due only in hosted mode", async () => {
@@ -279,11 +224,41 @@ describe("Admin page", () => {
         });
 
         it("keeps only one row's menu open at a time", async () => {
+            getAdminUsersAPI.mockResolvedValue([...users, { ...users[1], id: "u3", email: "kim@example.com" }]);
             render(<Admin />);
             await userEvent.click(await screen.findByRole("button", { name: "Actions for sam@example.com" }));
-            await userEvent.click(screen.getByRole("button", { name: "Actions for alex@example.com" }));
+            await userEvent.click(screen.getByRole("button", { name: "Actions for kim@example.com" }));
             expect(screen.getAllByRole("menu")).toHaveLength(1);
             expect(screen.getByRole("button", { name: "Actions for sam@example.com" })).toHaveAttribute("aria-expanded", "false");
+        });
+
+        it("closes the open menu when you click anywhere outside it", async () => {
+            render(<Admin />);
+            await userEvent.click(await screen.findByRole("button", { name: "Actions for sam@example.com" }));
+            expect(screen.getByRole("menu")).toBeInTheDocument();
+
+            await userEvent.click(screen.getByRole("heading", { name: "Users" }));
+
+            expect(screen.queryByRole("menu")).toBeNull();
+            expect(screen.getByRole("button", { name: "Actions for sam@example.com" })).toHaveAttribute("aria-expanded", "false");
+        });
+
+        it("keeps the menu open when you click inside it on something that isn't a choice, and closes it on Escape", async () => {
+            render(<Admin />);
+            await userEvent.click(await screen.findByRole("button", { name: "Actions for sam@example.com" }));
+            await userEvent.click(screen.getByRole("menu"));
+            expect(screen.getByRole("menu")).toBeInTheDocument();
+
+            await userEvent.keyboard("{Escape}");
+            expect(screen.queryByRole("menu")).toBeNull();
+        });
+
+        it("toggles the menu from its own button", async () => {
+            render(<Admin />);
+            const button = await screen.findByRole("button", { name: "Actions for sam@example.com" });
+            await userEvent.click(button);
+            await userEvent.click(button);
+            expect(screen.queryByRole("menu")).toBeNull();
         });
 
         it("returns focus to the Actions button when its dialog closes", async () => {
@@ -293,14 +268,14 @@ describe("Admin page", () => {
             await vi.waitFor(() => expect(screen.getByRole("button", { name: "Actions for sam@example.com" })).toHaveFocus());
         });
 
-        it("leaves set password and delete out of your own row", async () => {
+        it("gives administrators no Actions menu at all, your own row included", async () => {
+            getAdminUsersAPI.mockResolvedValue([users[0], { ...users[1], id: "u3", email: "root@example.com", isAdmin: true }, users[1]]);
             render(<Admin />);
-            await userEvent.click(await screen.findByRole("button", { name: "Actions for alex@example.com" }));
+            await screen.findByText("alex@example.com");
 
-            const menu = screen.getByRole("menu");
-            expect(within(menu).getByRole("menuitem", { name: "Make permanent" })).toBeInTheDocument();
-            expect(within(menu).queryByRole("menuitem", { name: "Set password" })).toBeNull();
-            expect(within(menu).queryByRole("menuitem", { name: "Delete account" })).toBeNull();
+            expect(screen.queryByRole("button", { name: "Actions for alex@example.com" })).toBeNull(); // yourself
+            expect(screen.queryByRole("button", { name: "Actions for root@example.com" })).toBeNull(); // another admin
+            expect(screen.getByRole("button", { name: "Actions for sam@example.com" })).toBeInTheDocument();
         });
 
         it("shows a Permanent badge", async () => {
@@ -312,12 +287,13 @@ describe("Admin page", () => {
         });
 
         it("toggles permanent straight away and reloads", async () => {
+            getAdminUsersAPI.mockResolvedValue([users[0], { ...users[1], isPermanent: false }]);
             render(<Admin />);
-            await chooseAction("alex@example.com", "Make permanent");
+            await chooseAction("sam@example.com", "Make permanent");
 
-            expect(setUserPermanentAPI).toHaveBeenCalledWith("u1", true);
+            expect(setUserPermanentAPI).toHaveBeenCalledWith("u2", true);
             await vi.waitFor(() => expect(getAdminUsersAPI).toHaveBeenCalledTimes(2));
-            expect(await screen.findByRole("status")).toHaveTextContent("alex@example.com is now a permanent account.");
+            expect(await screen.findByRole("status")).toHaveTextContent("sam@example.com is now a permanent account.");
         });
 
         it("shows why a permanent change failed", async () => {
@@ -371,13 +347,6 @@ describe("Admin page", () => {
 
             expect(setUserSuspendedAPI).toHaveBeenCalledWith("u2", false);
             expect(await screen.findByRole("status")).toHaveTextContent("sam@example.com is no longer suspended.");
-        });
-
-        it("leaves suspending out of your own row", async () => {
-            render(<Admin />);
-            await userEvent.click(await screen.findByRole("button", { name: "Actions for alex@example.com" }));
-
-            expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: /suspend/i })).toBeNull();
         });
 
         it("shows why suspending failed", async () => {
@@ -508,11 +477,50 @@ describe("Admin page", () => {
             await userEvent.click(within(form).getByRole("button", { name: "Create account" }));
 
             expect(createUserAPI).toHaveBeenCalledWith({
-                firstName: "Jo", lastName: "Bloggs", email: "jo@example.com", password: "N3wPassword", isAdmin: false, isPermanent: true,
+                firstName: "Jo", lastName: "Bloggs", email: "jo@example.com", password: "N3wPassword", isAdmin: false, isPermanent: true, quotaBytes: null,
             });
             await vi.waitFor(() => expect(getAdminUsersAPI).toHaveBeenCalledTimes(2));
             expect(await screen.findByRole("status")).toHaveTextContent("Account created for jo@example.com");
             expect(screen.queryByRole("form", { name: "Create account" })).toBeNull();
+        });
+
+        it("ticking Administrator ticks and disables Permanent, and creates a permanent admin", async () => {
+            render(<Admin />);
+            const form = await fill();
+            const permanent = within(form).getByLabelText(/Permanent account/);
+            expect(permanent).toBeEnabled();
+            expect(permanent).not.toBeChecked();
+
+            await userEvent.click(within(form).getByLabelText("Administrator"));
+            expect(permanent).toBeChecked();
+            expect(permanent).toBeDisabled();
+
+            await userEvent.click(within(form).getByRole("button", { name: "Create account" }));
+            expect(createUserAPI).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: true, isPermanent: true }));
+        });
+
+        it("sends the optional quota in bytes, in the chosen unit", async () => {
+            render(<Admin />);
+            const form = await fill();
+            await userEvent.type(within(form).getByLabelText(/^Quota [(]/), "1.5");
+            await userEvent.selectOptions(within(form).getByLabelText("Quota unit"), "GB");
+            await userEvent.click(within(form).getByRole("button", { name: "Create account" }));
+
+            expect(createUserAPI).toHaveBeenCalledWith(expect.objectContaining({ quotaBytes: 1.5 * GB }));
+        });
+
+        it("leaves the quota blank for the server default, and refuses a negative one", async () => {
+            render(<Admin />);
+            const form = await fill();
+            const submit = within(form).getByRole("button", { name: "Create account" });
+            expect(submit).toBeEnabled();
+
+            await userEvent.type(within(form).getByLabelText(/^Quota [(]/), "-2");
+            expect(submit).toBeDisabled();
+
+            await userEvent.clear(within(form).getByLabelText(/^Quota [(]/));
+            await userEvent.click(submit);
+            expect(createUserAPI).toHaveBeenCalledWith(expect.objectContaining({ quotaBytes: null }));
         });
 
         it("shows the duplicate-email message and keeps the form", async () => {

@@ -1,6 +1,4 @@
 import { useId } from "react";
-import { ICON_THEMES, useIconTheme } from "../../utils/iconTheme";
-import { ThemedDocument, ThemedFolder } from "./themedIcons";
 import "./FileTypeIcon.css";
 
 // Desktop-style file and folder icons (Windows 11 / macOS Finder look), drawn as SVG.
@@ -203,28 +201,8 @@ function DocumentIcon({ name, size }) {
   );
 }
 
-function ThemedFolderIcon({ theme, size, open, name, path }) {
-  const special = path === `/${name}` ? SPECIAL_FOLDERS[name?.toLowerCase()] : undefined;
-  return <ThemedFolder theme={theme} size={size} open={open} glyph={special && <Glyph kind={special} color="var(--ic-glyph)" />} />;
-}
-
-function ThemedDocumentIcon({ theme, name, size }) {
-  const extension = getExtension(name);
-  const kind = BY_EXTENSION[extension] ?? GENERIC;
-  const label = size >= 36 && extension ? extension.toUpperCase().slice(0, 4) : null;
-  return <ThemedDocument theme={theme} size={size} label={label} kind={kind} glyph={<Glyph kind={kind.glyph} color={kind.color} />} />;
-}
-
-// path is the item's full path (e.g. "/Music"); it marks top-level special folders.
-// iconTheme overrides the account's choice (used by the previews in Settings).
-export default function FileTypeIcon({ name, path, isDirectory = false, size = 48, open = false, iconTheme }) {
-  const accountTheme = useIconTheme();
-  const theme = iconTheme ?? accountTheme;
-  if (theme !== "default" && ICON_THEMES.includes(theme)) {
-    return isDirectory
-      ? <ThemedFolderIcon theme={theme} size={size} open={open} name={name} path={path} />
-      : <ThemedDocumentIcon theme={theme} name={name} size={size} />;
-  }
+// path is the item's full path (e.g. "/Music"); it marks top-level special folders
+export default function FileTypeIcon({ name, path, isDirectory = false, size = 48, open = false }) {
   return isDirectory
     ? <FolderIcon size={size} open={open} name={name} path={path} />
     : <DocumentIcon name={name} size={size} />;

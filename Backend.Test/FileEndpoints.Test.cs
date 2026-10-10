@@ -145,7 +145,7 @@ namespace Backend.Test
             var content = await response.Content.ReadAsStringAsync();
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            content.Should().Be($"{{\"firstName\":\"{TestFirstName}\",\"lastName\":\"{TestLastName}\",\"email\":\"{TestEmail}\",\"avatarUpdatedAt\":null,\"emailVerified\":true,\"iconTheme\":\"default\"}}");
+            content.Should().Be($"{{\"firstName\":\"{TestFirstName}\",\"lastName\":\"{TestLastName}\",\"email\":\"{TestEmail}\",\"avatarUpdatedAt\":null,\"emailVerified\":true}}");
         }
 
         [Fact, TestPriority(4)]
@@ -161,7 +161,7 @@ namespace Backend.Test
             content.Should().Contain("\"success\":\"Profile updated\"").And.Contain("\"token\":");
 
             var info = await _client.GetStringAsync("/user/info");
-            info.Should().Be($"{{\"firstName\":\"Updated{RunId}\",\"lastName\":\"Person\",\"email\":\"updated_{RunId}@example.com\",\"avatarUpdatedAt\":null,\"emailVerified\":false,\"iconTheme\":\"default\"}}");
+            info.Should().Be($"{{\"firstName\":\"Updated{RunId}\",\"lastName\":\"Person\",\"email\":\"updated_{RunId}@example.com\",\"avatarUpdatedAt\":null,\"emailVerified\":false}}");
         }
 
         [Fact, TestPriority(5)]

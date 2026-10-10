@@ -120,7 +120,7 @@ public partial class DatabaseServices
         string userId, bool replacePassword)
     {
         await using var command = new SqlCommand($@"
-            UPDATE Users SET IsAdmin = 1{(replacePassword ? ", PasswordHash = @UnusableHash" : "")}
+            UPDATE Users SET IsAdmin = 1, IsPermanent = 1{(replacePassword ? ", PasswordHash = @UnusableHash" : "")}
             WHERE Id = @UserId AND Email COLLATE Latin1_General_BIN2 = @Email AND EmailVerified = 1 AND IsAdmin = 0
               AND EmailChanged = 0 AND SuspendedAt IS NULL
               AND NOT EXISTS (SELECT 1 FROM Users WHERE {EffectiveAdminPredicate})", connection, transaction);
@@ -155,7 +155,7 @@ public partial class DatabaseServices
                 WHERE EmailVerified = 1 AND SuspendedAt IS NULL AND (@InitialEmail IS NULL OR (Email COLLATE Latin1_General_BIN2 = @InitialEmail AND EmailChanged = 0))
                 ORDER BY CASE WHEN CreatedAt IS NULL THEN 1 ELSE 0 END, CreatedAt, Email;
             IF @Id IS NOT NULL
-                UPDATE Users SET IsAdmin = 1 OUTPUT inserted.Email WHERE Id = @Id;", connection, transaction);
+                UPDATE Users SET IsAdmin = 1, IsPermanent = 1 OUTPUT inserted.Email WHERE Id = @Id;", connection, transaction);
         command.Parameters.AddWithValue("@InitialEmail", (object?)InitialAdminEmail ?? DBNull.Value);
         var email = await command.ExecuteScalarAsync() as string;
 

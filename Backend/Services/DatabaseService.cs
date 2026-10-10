@@ -463,8 +463,9 @@ public partial class DatabaseServices
         await TakeAdminMembershipLockAsync(connection, transaction);
 
         const string query = @"
-            INSERT INTO Users (FirstName, LastName, Email, PasswordHash, IsAdmin)
+            INSERT INTO Users (FirstName, LastName, Email, PasswordHash, IsAdmin, IsPermanent)
             SELECT @FirstName, @LastName, @Email, @PasswordHash,
+                   CASE WHEN @FirstAccountIsAdmin = 1 AND NOT EXISTS (SELECT 1 FROM Users) THEN 1 ELSE 0 END,
                    CASE WHEN @FirstAccountIsAdmin = 1 AND NOT EXISTS (SELECT 1 FROM Users) THEN 1 ELSE 0 END";
         await using var command = new SqlCommand(query, connection, transaction);
 

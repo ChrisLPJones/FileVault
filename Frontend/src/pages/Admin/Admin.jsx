@@ -5,7 +5,6 @@ import {
     deleteUserAPI,
     getAdminStatsAPI,
     getAdminUsersAPI,
-    setUserAdminAPI,
     setUserPasswordAPI,
     setUserPermanentAPI,
     setUserQuotaAPI,
@@ -14,10 +13,9 @@ import {
 import { formatBytes } from "../../utils/formatBytes";
 import { DeleteAccountDialog, SetPasswordDialog } from "./AccountDialogs";
 import CreateAccountForm from "./CreateAccountForm";
+import { UNITS } from "./quotaUnits";
 import UserAvatar from "./UserAvatar";
 import "./Admin.css";
-
-const UNITS = { MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
 
 const formatWhen = (value) =>
     value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Never";
@@ -107,72 +105,29 @@ function QuotaCell({ user, onSave }) {
     );
 }
 
-// One user's admin rights: Make admin, or Remove admin after a confirmation. The server refuses
-// to remove the last administrator (409); its message is shown here.
-function AdminCell({ user, onChange }) {
-    const [confirming, setConfirming] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState(null);
-
-    const change = async (isAdmin) => {
-        setSaving(true);
-        setError(null);
-        try {
-            await onChange(user, isAdmin);
-            setConfirming(false);
-        } catch (err) {
-            setConfirming(false);
-            setError(getErrorMessage(err, "Could not change administrator rights"));
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    return (
-        <div className="admin-rights">
-            {confirming ? (
-                <div className="admin-confirm" role="group" aria-label={`Confirm removing admin from ${user.email}`}>
-                    <span>Remove admin rights from {user.email}?</span>
-                    <div className="admin-confirm-actions">
-                        <button type="button" className="admin-button danger" disabled={saving} onClick={() => change(false)}>
-                            Remove
-                        </button>
-                        <button type="button" className="admin-button secondary" disabled={saving} onClick={() => setConfirming(false)}>
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            ) : user.isAdmin ? (
-                <button
-                    type="button"
-                    className="admin-link-button"
-                    aria-label={`Remove admin from ${user.email}`}
-                    disabled={saving}
-                    onClick={() => { setError(null); setConfirming(true); }}
-                >
-                    Remove admin
-                </button>
-            ) : (
-                <button
-                    type="button"
-                    className="admin-link-button"
-                    aria-label={`Make ${user.email} an admin`}
-                    disabled={saving}
-                    onClick={() => change(true)}
-                >
-                    Make admin
-                </button>
-            )}
-            {error && <div className="admin-error" role="alert">{error}</div>}
-        </div>
-    );
-}
-
 // The "Actions" button of a row and the choices it opens: set password, permanent, suspend, delete.
-// You can't set your own password or delete your own account here (Settings does that).
-function RowActions({ user, isSelf, open, onOpenChange, onChoose }) {
+// Administrators have no such menu (it is only rendered for other accounts). A click outside the
+// open menu, or Escape, closes it.
+function RowActions({ user, open, onOpenChange, onChoose }) {
     const setOpen = (value) => onOpenChange(value ? user.id : null);
     const name = `${user.firstName} ${user.lastName}`.trim();
+    const container = useRef(null);
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const onPointerDown = (event) => {
+            if (!container.current?.contains(event.target)) onOpenChange(null);
+        };
+        const onKeyDown = (event) => {
+            if (event.key === "Escape") onOpenChange(null);
+        };
+        document.addEventListener("mousedown", onPointerDown);
+        document.addEventListener("keydown", onKeyDown);
+        return () => {
+            document.removeEventListener("mousedown", onPointerDown);
+            document.removeEventListener("keydown", onKeyDown);
+        };
+    }, [open, onOpenChange]);
 
     const choose = (action) => {
         setOpen(false);
@@ -180,7 +135,7 @@ function RowActions({ user, isSelf, open, onOpenChange, onChoose }) {
     };
 
     return (
-        <div className="admin-actions">
+        <div className="admin-actions" ref={container}>
             <button
                 type="button"
                 className="admin-link-button"
@@ -188,37 +143,21 @@ function RowActions({ user, isSelf, open, onOpenChange, onChoose }) {
                 aria-expanded={open}
                 aria-label={`Actions for ${user.email}`}
                 onClick={() => setOpen(!open)}
-                onKeyDown={(event) => {
-                    if (event.key === "Escape") setOpen(false);
-                }}
             >
                 Actions
             </button>
             {open && (
-                <div
-                    className="admin-menu"
-                    role="menu"
-                    aria-label={`Actions for ${name || user.email}`}
-                    onKeyDown={(event) => {
-                        if (event.key === "Escape") setOpen(false);
-                    }}
-                >
-                    {!isSelf && (
-                        <button type="button" role="menuitem" onClick={() => choose("password")}>Set password</button>
-                    )}
+                <div className="admin-menu" role="menu" aria-label={`Actions for ${name || user.email}`}>
+                    <button type="button" role="menuitem" onClick={() => choose("password")}>Set password</button>
                     <button type="button" role="menuitem" onClick={() => choose("permanent")}>
                         {user.isPermanent ? "Remove permanent" : "Make permanent"}
                     </button>
-                    {!isSelf && (
-                        <button type="button" role="menuitem" onClick={() => choose("suspend")}>
-                            {user.suspendedAt ? "Unsuspend account" : "Suspend account"}
-                        </button>
-                    )}
-                    {!isSelf && (
-                        <button type="button" role="menuitem" className="danger" onClick={() => choose("delete")}>
-                            Delete account
-                        </button>
-                    )}
+                    <button type="button" role="menuitem" onClick={() => choose("suspend")}>
+                        {user.suspendedAt ? "Unsuspend account" : "Suspend account"}
+                    </button>
+                    <button type="button" role="menuitem" className="danger" onClick={() => choose("delete")}>
+                        Delete account
+                    </button>
                 </div>
             )}
         </div>
@@ -230,7 +169,7 @@ function RowActions({ user, isSelf, open, onOpenChange, onChoose }) {
 export default function Admin() {
     const [data, setData] = useState(null); // { users, stats }
     const [error, setError] = useState(null);
-    const [version, setVersion] = useState(0); // bumped to reload (also resets the rows' admin-rights messages)
+    const [version, setVersion] = useState(0); // bumped to reload
     const [dialog, setDialog] = useState(null); // { type: "password" | "delete", user }
     const [openMenuId, setOpenMenuId] = useState(null); // the one row whose Actions menu is open
     const openerLabel = useRef(null); // Actions button that opened the current dialog
@@ -259,11 +198,6 @@ export default function Admin() {
 
     const saveQuota = useCallback(async (user, quotaBytes) => {
         await setUserQuotaAPI(user.id, quotaBytes);
-        setVersion((v) => v + 1);
-    }, []);
-
-    const changeAdmin = useCallback(async (user, isAdmin) => {
-        await setUserAdminAPI(user.id, isAdmin);
         setVersion((v) => v + 1);
     }, []);
 
@@ -397,7 +331,6 @@ export default function Admin() {
                                 <th scope="col" className="numeric">Files</th>
                                 <th scope="col">Storage used</th>
                                 <th scope="col">Quota</th>
-                                <th scope="col">Admin rights</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -420,13 +353,14 @@ export default function Admin() {
                                                         {user.suspendedAt && <span className="admin-badge suspended">Suspended</span>}
                                                     </div>
                                                     <div className="admin-muted admin-email">{user.email}</div>
-                                                    <RowActions
-                                                        user={user}
-                                                        isSelf={user.id === stats.currentUserId}
-                                                        open={openMenuId === user.id}
-                                                        onOpenChange={setOpenMenuId}
-                                                        onChoose={chooseAction}
-                                                    />
+                                                    {!user.isAdmin && (
+                                                        <RowActions
+                                                            user={user}
+                                                            open={openMenuId === user.id}
+                                                            onOpenChange={setOpenMenuId}
+                                                            onChoose={chooseAction}
+                                                        />
+                                                    )}
                                                 </div>
                                             </div>
                                         </td>
@@ -465,17 +399,12 @@ export default function Admin() {
                                             </div>
                                         </td>
                                         <td><QuotaCell user={user} onSave={saveQuota} /></td>
-                                        <td><AdminCell key={`${user.id}:${version}`} user={user} onChange={changeAdmin} /></td>
                                     </tr>
                                 );
                             })}
                         </tbody>
                     </table>
                 </div>
-                <p className="admin-muted admin-footnote">
-                    Login countries use GeoLite2 data created by MaxMind, available from{" "}
-                    <a href="https://www.maxmind.com" target="_blank" rel="noopener noreferrer">maxmind.com</a>.
-                </p>
             </section>
 
             {dialog?.type === "password" && (

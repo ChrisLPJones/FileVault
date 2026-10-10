@@ -7,7 +7,6 @@ import {
     deleteAvatarAPI,
     getUsageAPI,
     getUserInfoAPI,
-    setIconThemeAPI,
     updateProfileAPI,
     uploadAvatarAPI,
 } from "../../api/accountAPI";
@@ -17,15 +16,12 @@ import { formatBytes } from "../../utils/formatBytes";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
 import { MdColorize } from "react-icons/md";
 import { ACCENT_PRESETS, THEME_OPTIONS, setAccent, setThemePreference, useAccent, useTheme } from "../../utils/theme";
-import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
-import { ICON_THEMES, setIconTheme, useIconTheme } from "../../utils/iconTheme";
 import TwoFactorCard from "./TwoFactorCard";
 import SessionsCard from "./SessionsCard";
 import "./Settings.css";
 
 const DELETE_CONFIRMATION = "DELETE";
 const THEME_LABELS = { system: "System", light: "Light", dark: "Dark" };
-const ICON_THEME_LABELS = { default: "Default", windows: "Windows", macos: "macOS", ubuntu: "Ubuntu" };
 
 // Success/error message under a form
 const Status = ({ status }) =>
@@ -39,8 +35,6 @@ function Settings() {
     const navigate = useNavigate();
     const { preference } = useTheme();
     const accent = useAccent();
-    const iconTheme = useIconTheme();
-    const [iconThemeStatus, setIconThemeStatus] = useState(null);
 
     // Esc goes back to the files (unless typing in a field)
     useEffect(() => {
@@ -81,7 +75,6 @@ function Settings() {
                 setProfile({ firstName: info.firstName, lastName: info.lastName, email: info.email });
                 setSavedEmail(info.email);
                 setHasAvatar(!!info.avatarUpdatedAt);
-                setIconTheme(info.iconTheme);
                 setUsage(usageData);
             })
             .catch((err) => !cancelled && setLoadError(getErrorMessage(err, "Could not load your account")))
@@ -91,19 +84,6 @@ function Settings() {
             cancelled = true;
         };
     }, []);
-
-    // Applies at once and is saved on the account; goes back if the server refuses
-    const handleIconThemeChange = async (value) => {
-        const previous = iconTheme;
-        setIconThemeStatus(null);
-        setIconTheme(value);
-        try {
-            await setIconThemeAPI(value);
-        } catch (err) {
-            setIconTheme(previous);
-            setIconThemeStatus({ type: "danger", message: getErrorMessage(err, "Could not save your icon style") });
-        }
-    };
 
     const handleAvatarChange = async (event) => {
         const file = event.target.files?.[0];
@@ -285,29 +265,6 @@ function Settings() {
                         />
                     </label>
                 </div>
-
-                <h3 id="icons-heading" className="accent-heading">Icons</h3>
-                <div className="icon-theme-options" role="radiogroup" aria-labelledby="icons-heading">
-                    {ICON_THEMES.map((option) => (
-                        <label key={option} className={`icon-theme-option ${iconTheme === option ? "selected" : ""}`}>
-                            <input
-                                type="radio"
-                                className="visually-hidden"
-                                name="icon-theme"
-                                value={option}
-                                checked={iconTheme === option}
-                                onChange={() => handleIconThemeChange(option)}
-                            />
-                            <span className="icon-theme-preview" aria-hidden="true">
-                                <FileTypeIcon name="Documents" path="/Documents" isDirectory size={32} iconTheme={option} />
-                                <FileTypeIcon name="report.pdf" size={32} iconTheme={option} />
-                            </span>
-                            <span className="icon-theme-name">{ICON_THEME_LABELS[option]}</span>
-                        </label>
-                    ))}
-                </div>
-                <p className="settings-hint">The style of folder and file icons. Saved on your account.</p>
-                <Status status={iconThemeStatus} />
             </section>
 
             <section className="settings-card" aria-labelledby="profile-heading">

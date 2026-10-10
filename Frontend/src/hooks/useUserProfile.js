@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { PROFILE_CHANGED_EVENT, getAvatarBlobAPI, getUserInfoAPI } from "../api/accountAPI";
 import { getAdminStatusAPI } from "../api/adminAPI";
-import { setIconTheme } from "../utils/iconTheme";
 
 // The logged-in user's name, email, picture and whether they're an admin, fetched once and shared by everything that
 // shows them (avatars, the account menu, the folder tree footer). Reloaded when the profile
@@ -44,7 +43,6 @@ const load = async () => {
             hostedContactEmail: info.hostedContactEmail || null,
             hostedInactiveDays: info.hostedInactiveDays || 30,
         };
-        setIconTheme(info.iconTheme); // the account's icon style applies everywhere icons show
         emit();
     } catch {
         // Keep whatever is showing
@@ -65,7 +63,6 @@ const subscribe = (listener) => {
         loadId++; // ignore a load still in flight
         if (profile.imageUrl) URL.revokeObjectURL(profile.imageUrl);
         profile = EMPTY;
-        setIconTheme("default"); // don't carry this account's icons over to the next one
     };
 };
 
