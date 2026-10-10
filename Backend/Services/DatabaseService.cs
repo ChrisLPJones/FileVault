@@ -759,8 +759,14 @@ public partial class DatabaseServices
     // password change, reset or administrator password set can't leave a live session behind. Returns false if it was
     // refused for that reason, or because the user is suspended (checked on every insert so a login
     // in flight when a suspension commits can't leave a token behind), or the user is gone.
-    public async Task<bool> StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
-        bool requireUnchangedTokensValidAfter = false, DateTime? seenTokensValidAfter = null)
+    // One batch (one implicit transaction), so a deadlock victim rolls back whole and is simply retried.
+    public Task<bool> StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
+        bool requireUnchangedTokensValidAfter = false, DateTime? seenTokensValidAfter = null) =>
+        RetryOnDeadlockAsync(() => StoreRefreshTokenOnceAsync(userId, sessionId, tokenHash, expiresAtUtc,
+            requireUnchangedTokensValidAfter, seenTokensValidAfter));
+
+    private async Task<bool> StoreRefreshTokenOnceAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
+        bool requireUnchangedTokensValidAfter, DateTime? seenTokensValidAfter)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
