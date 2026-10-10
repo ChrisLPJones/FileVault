@@ -44,7 +44,7 @@
 
 ## Screenshots
 
-The file manager, with Favourites and Recent above the folder tree and thumbnails for images:
+The file manager, with the folder tree, Favourites and Recent on the left and thumbnails for images:
 
 ![File manager in grid view, light theme](docs/screenshots/files-grid-light.png)
 
@@ -79,10 +79,6 @@ Logging in, and the Settings page (storage, theme and accent colour, profile; tw
 ![Settings page](docs/screenshots/settings.png)
 
 ![Two-factor authentication and active sessions in Settings](docs/screenshots/settings-security.png)
-
-The admin page, for the server owner:
-
-![Admin page](docs/screenshots/admin.png)
 
 On a phone, the folder tree opens as a drawer and the less-used toolbar actions move into a menu:
 
