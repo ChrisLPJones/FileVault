@@ -268,8 +268,10 @@ address first (for example with `ß` instead of `ss`) can't become administrator
 registering that address. Fix it by choosing a different `INITIAL_ADMIN_EMAIL` or removing that
 account.
 
-Once there is an administrator, they can grant or remove admin rights for other accounts on the
-Admin page ("Admin rights" column). There must always be at least one administrator: removing the
+Once there is an administrator, they can create further administrator accounts on the Admin page
+(Administrator tick box when creating an account); admin rights can't be changed afterwards in the
+app. Administrator accounts are always permanent (never removed for inactivity) and have no row
+actions on the Admin page. There must always be at least one administrator: removing the
 last one, or the last administrator deleting their own account, is refused.
 
 Administrators can also create accounts (active immediately, email already confirmed), set a user's
@@ -291,7 +293,7 @@ writes an audit line to the API log under the `Backend.AdminAudit` category, usi
   that install leave the setting unset, or lower-case the address in the database.
 - The upgrade adds `Users.EmailChanged`, `Users.TokensValidAfter`, `Users.IsPermanent` and `Users.SuspendedAt` columns;
   re-running `init.sql` (`docker compose up --build -d`) applies them.
-- Changing admin rights takes a short database lock. If it can't be had in time the API answers
+- Admin membership changes take a short database lock. If it can't be had in time the API answers
   `503` with a `Retry-After` header; retrying a moment later works.
 
 ## 8. Last login location (GeoIP)
@@ -349,7 +351,7 @@ In hosted mode:
 - 7 days before the removal a warning email is sent, only to an address that was confirmed and only
   if SMTP is set up (the `SMTP_*` settings). Without SMTP no warning is sent, but the removal still
   happens (the API logs a warning at startup in that case). A user who signs in again before then
-  keeps the account. Unsuspending an account, or removing its admin rights or permanent mark,
+  keeps the account. Unsuspending an account, or removing its permanent mark,
   restarts its clock.
 - New users see a dismissible notice on the dashboard on first login saying unused accounts are
   removed. Administrators and permanent accounts don't see it. `HOSTED_CONTACT_EMAIL` adds the
