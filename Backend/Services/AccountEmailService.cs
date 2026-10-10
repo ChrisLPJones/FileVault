@@ -66,19 +66,25 @@ public partial class AccountEmailService(IConfiguration config, EmailQueue queue
     }
 
     // Email the NEW address a link to confirm it for this account. Sent to an address the requester
-    // typed, so it carries no user-controlled text (not even their name). Returns when the link expires.
-    public async Task<DateTime> SendEmailChangeConfirmationAsync(UserModel user, string newEmail, DatabaseServices db)
+    // typed, so it carries no user-controlled text (not even their name). The send limits are checked
+    // and the link stored in one step (see TryStoreEmailChangeTokenAsync); the email is only queued
+    // when stored. Returns the outcome and, when stored, when the link expires.
+    public async Task<(DatabaseServices.EmailChangeStoreOutcome Outcome, DateTime Expires)> TrySendEmailChangeConfirmationAsync(
+        UserModel user, string newEmail, DatabaseServices db, int maxPerDay, TimeSpan cooldown)
     {
         var token = NewToken();
         var expires = DateTime.UtcNow + ChangeLifetime;
-        await db.StoreAccountTokenAsync(user.Id.ToString(), ChangePurpose, HashToken(token), newEmail, expires);
+        var outcome = await db.TryStoreEmailChangeTokenAsync(user.Id.ToString(), HashToken(token), newEmail, expires,
+            DateTime.UtcNow - TimeSpan.FromHours(24), maxPerDay, cooldown);
+        if (outcome != DatabaseServices.EmailChangeStoreOutcome.Stored)
+            return (outcome, expires);
 
         queue.Enqueue(new EmailMessage(newEmail, "Confirm your new FileVault email address",
             "Someone asked to use this email address for their FileVault account.\n\n" +
             "If that was you, sign in to FileVault with your current details and open this link to confirm it:\n\n" +
             $"{FrontendUrl}/confirm-email?token={token}\n\n" +
             "The link expires in 24 hours. If it wasn't you, ignore this email; nothing will change."));
-        return expires;
+        return (outcome, expires);
     }
 
     // Tell the OLD address (the caller checks that it is a confirmed one) that a change was asked

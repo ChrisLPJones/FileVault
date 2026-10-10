@@ -546,21 +546,6 @@ public partial class DatabaseServices
 
 
 
-    // Replace a user's password hash
-    public async Task UpdatePasswordHashAsync(string userId, string passwordHash)
-    {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        const string query = "UPDATE Users SET PasswordHash = @PasswordHash WHERE Id = @UserId";
-        await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@PasswordHash", passwordHash);
-        command.Parameters.AddWithValue("@UserId", userId);
-        await command.ExecuteNonQueryAsync();
-    }
-
-
-
     // Bytes stored by the user, and their quota override (null = use the default)
     public Task<(long used, long? quota)> GetStorageUsageAsync(string userId) =>
         RetryOnDeadlockAsync(() => GetStorageUsageOnceAsync(userId));
@@ -770,7 +755,7 @@ public partial class DatabaseServices
     // tokens and the sessions left without any. When rotating a token, pass the user's
     // TokensValidAfter as read before the old token was consumed (RefreshTokenUse): the new
     // token is stored only if that value is unchanged, so a refresh that was in flight while an
-    // administrator set the password can't leave a live session behind. Returns false if it was
+    // password change, reset or administrator password set can't leave a live session behind. Returns false if it was
     // refused for that reason, or because the user is suspended (checked on every insert so a login
     // in flight when a suspension commits can't leave a token behind), or the user is gone.
     public async Task<bool> StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
@@ -817,7 +802,7 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        // Read before consuming: if an administrator sets the password after this point, the
+        // Read before consuming: if the password is changed or set after this point, the
         // value changes and the replacement token is refused (see StoreRefreshTokenAsync). If the
         // change committed before, the token was revoked with the rest and the consume below fails.
         DateTime? tokensValidAfter = null;
@@ -862,10 +847,57 @@ public partial class DatabaseServices
                     false,
                     reader.IsDBNull(1) ? null : TimeSpan.FromMilliseconds(reader.GetInt64(1)),
                     reader.IsDBNull(2) ? null : reader.GetGuid(2),
-                    reader.GetInt32(3) == 1);
+                    reader.GetInt32(3) == 1, tokensValidAfter);
         }
 
         return null;
+    }
+
+
+
+    // A rotated-away token was presented again within the grace window (a reload during a refresh
+    // lost the new cookie): end the session's live token and store a new one in the same
+    // transaction, so a session never has two live tokens. Refused (false) when the session has no
+    // live token left (logged out, signed out, password changed, or another call got here first),
+    // or when the user is gone, suspended or had a password change since seenTokensValidAfter
+    // (read before the old token was looked up; see RefreshTokenUse).
+    public Task<bool> ReplaceSessionTokenWithinGraceAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
+        DateTime? seenTokensValidAfter) =>
+        RetryOnDeadlockAsync(() => ReplaceSessionTokenWithinGraceOnceAsync(userId, sessionId, tokenHash, expiresAtUtc, seenTokensValidAfter));
+
+    private async Task<bool> ReplaceSessionTokenWithinGraceOnceAsync(string userId, Guid sessionId, string tokenHash,
+        DateTime expiresAtUtc, DateTime? seenTokensValidAfter)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+
+        await using var command = new SqlCommand(@"
+            UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
+            WHERE SessionId = @SessionId AND UserId = @UserId AND RevokedAt IS NULL AND ExpiresAt > SYSUTCDATETIME();
+            IF @@ROWCOUNT = 0
+            BEGIN
+                SELECT 0;
+                RETURN;
+            END
+            INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt)
+            SELECT @UserId, @SessionId, @TokenHash, @ExpiresAt
+            WHERE EXISTS (
+                SELECT 1 FROM Users WHERE Id = @UserId AND SuspendedAt IS NULL
+                AND ((TokensValidAfter IS NULL AND @Seen IS NULL) OR TokensValidAfter = @Seen));
+            SELECT @@ROWCOUNT;", connection, transaction);
+        command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@SessionId", sessionId);
+        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        command.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
+        command.Parameters.Add("@Seen", System.Data.SqlDbType.DateTime2).Value = (object?)seenTokensValidAfter ?? DBNull.Value;
+        var stored = Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+
+        if (stored)
+            await transaction.CommitAsync();
+        else
+            await transaction.RollbackAsync();
+        return stored;
     }
 
 

@@ -8,9 +8,11 @@ import { makeToken } from "../test/tokens";
 // uses) goes to `server`, which returns { status, data } or a promise of one.
 let server;
 const requests = [];
+const refreshTimeouts = [];
 
 const fakeAdapter = async (config) => {
     requests.push({ method: config.method, url: config.url, auth: config.headers?.Authorization });
+    if (config.url.endsWith("/user/refresh")) refreshTimeouts.push(config.timeout);
     const { status = 200, data = null } = await server(config);
     const response = { status, statusText: String(status), data, headers: {}, config, request: {} };
     if (status >= 400 && !config.validateStatus?.(status)) {
@@ -27,6 +29,7 @@ let originalAdapters;
 
 beforeEach(() => {
     requests.length = 0;
+    refreshTimeouts.length = 0;
     originalAdapters = [api.defaults.adapter, axios.defaults.adapter];
     api.defaults.adapter = fakeAdapter;
     axios.defaults.adapter = fakeAdapter;
@@ -210,6 +213,59 @@ describe("refresh failures", () => {
         await expect(api.get("/files")).rejects.toMatchObject({ response: { status: 401 } });
         expect(getToken()).toBe(token);
         expect(hasSessionHint()).toBe(true);
+        expect(assign).not.toHaveBeenCalled();
+    });
+
+    it("gives the refresh request a 15 second timeout", async () => {
+        startSession(makeToken({ expiresIn: -60 }));
+        server = () => ({ data: { success: makeToken() } });
+
+        await refreshAccessToken();
+        expect(refreshTimeouts).toEqual([15000]);
+    });
+
+    it("treats a refresh timeout as transient: session kept, no redirect", async () => {
+        const token = makeToken();
+        startSession(token);
+        server = (config) => {
+            if (urlOf(config) === "/user/refresh") throw new axios.AxiosError("timeout of 15000ms exceeded", "ECONNABORTED");
+            return { status: 401, data: { error: "Invalid token" } };
+        };
+
+        await expect(refreshAccessToken()).rejects.toMatchObject({ code: "ECONNABORTED" });
+        await expect(api.get("/files")).rejects.toMatchObject({ response: { status: 401 } });
+        expect(getToken()).toBe(token);
+        expect(hasSessionHint()).toBe(true);
+        expect(assign).not.toHaveBeenCalled();
+    });
+
+    it("rejects without redirecting when the session ends on a page that is not protected", async () => {
+        vi.stubGlobal("location", { ...window.location, pathname: "/confirm-email", assign });
+        startSession(makeToken({ expiresIn: 10 }));
+        server = (config) => (urlOf(config) === "/user/refresh" ? { status: 401, data: { error: "Session expired" } } : { data: [] });
+
+        await expect(api.get("/user/email/confirm")).rejects.toMatchObject({ sessionExpired: true });
+        expect(requests).toHaveLength(1);
+        expect(assign).not.toHaveBeenCalled();
+    });
+
+    it("sends no request and goes to the login page when the refresh finds the session over", async () => {
+        vi.stubGlobal("location", { ...window.location, pathname: "/dashboard", assign });
+        startSession(makeToken({ expiresIn: 10 }));
+        server = (config) =>
+            urlOf(config) === "/user/refresh" ? { status: 401, data: { error: "Session expired" } } : { data: ["file"] };
+
+        await expect(api.get("/files")).rejects.toMatchObject({ sessionExpired: true });
+        expect(requests.map((r) => r.url)).toEqual(["http://api.test/user/refresh"]);
+        expect(assign).toHaveBeenCalledWith("/login");
+        expect(getToken()).toBeNull();
+    });
+
+    it("does not redirect for a public request made without a session", async () => {
+        server = () => ({ status: 401, data: { error: "Unauthorized" } });
+
+        await expect(api.get("/shares/abc")).rejects.toMatchObject({ response: { status: 401 } });
+        expect(requests.map((r) => r.url)).toEqual(["/shares/abc"]);
         expect(assign).not.toHaveBeenCalled();
     });
 

@@ -167,23 +167,129 @@ namespace Backend.Test
             (await RefreshAsync(client, second)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
 
+        private async Task<long> ActiveTokensAsync(string email) =>
+            Convert.ToInt64(await TestDatabase.ScalarAsync(_baseFactory,
+                "SELECT COUNT(*) FROM RefreshTokens r JOIN Users u ON u.Id = r.UserId WHERE u.Email = @Email AND r.RevokedAt IS NULL",
+                ("@Email", email.ToLowerInvariant())));
+
         [Fact]
-        public async Task RefreshToken_ReusedWithinGrace_IsRejectedWithoutEndingOtherSessions()
+        public async Task RefreshToken_ReusedWithinGrace_IssuesANewToken_AndKeepsOneLiveTokenPerSession()
         {
-            var (client, _, first) = await NewUserSessionAsync();
+            var client = NewClient(_factory);
+            var email = NewEmail();
+            await RegisterAsync(client, email);
+            var (_, first, _) = await LoginAsync(client, email);
+            var (_, otherSession, _) = await LoginAsync(client, email);
 
             var refresh = await RefreshAsync(client, first);
+            refresh.StatusCode.Should().Be(HttpStatusCode.OK);
             var second = RefreshCookie(refresh);
+            (await ActiveTokensAsync(email)).Should().Be(2);
 
-            // e.g. two tabs refreshing at the same moment
+            // The new cookie was lost (a reload during the refresh): the old token still gets in
+            var again = await RefreshAsync(client, first);
+            again.StatusCode.Should().Be(HttpStatusCode.OK);
+            RefreshCookie(again).Should().NotBe(second);
+            var token = await ReadTokenAsync(again);
+            (await GetInfoAsync(client, token)).StatusCode.Should().Be(HttpStatusCode.OK);
+            _usersToDelete.Add((client, token));
+
+            // The token it replaced was ended, not forked: one live token per session, other sessions untouched
+            (await ActiveTokensAsync(email)).Should().Be(2);
+
+            // The same old token again in the window supersedes the newest one: still one per session
+            (await RefreshAsync(client, first)).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await ActiveTokensAsync(email)).Should().Be(2);
+
+            (await RefreshAsync(client, otherSession)).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public async Task RefreshToken_SupersededOneUsedAfterGrace_RevokesEverySession()
+        {
+            var factory = WithSettings(
+                ("RateLimiting:auth:PermitLimit", "1000"),
+                ("Jwt:RefreshReuseGraceSeconds", "2"));
+            var client = NewClient(factory);
+            var email = NewEmail();
+            await RegisterAsync(client, email);
+            var (_, first, _) = await LoginAsync(client, email);
+            var (_, other, _) = await LoginAsync(client, email);
+
+            var second = RefreshCookie(await RefreshAsync(client, first));
+            var third = RefreshCookie(await RefreshAsync(client, first)); // within grace: supersedes second
+            await Task.Delay(TimeSpan.FromSeconds(2.5));
+
+            // A replay of the superseded token once the window has passed looks like theft
+            (await RefreshAsync(client, second)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            (await RefreshAsync(client, third)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            (await RefreshAsync(client, other)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        [Fact]
+        public async Task RefreshToken_ReusedWithinGrace_AfterLogout_IsRefusedAndKeepsTheCookie()
+        {
+            var client = NewClient(_factory);
+            var email = NewEmail();
+            await RegisterAsync(client, email);
+            var (_, first, _) = await LoginAsync(client, email);
+
+            var second = RefreshCookie(await RefreshAsync(client, first));
+            var logout = new HttpRequestMessage(HttpMethod.Post, "/user/logout");
+            logout.Headers.Add("Cookie", second);
+            (await client.SendAsync(logout)).StatusCode.Should().Be(HttpStatusCode.OK);
+
             var raced = await RefreshAsync(client, first);
             raced.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-            // The losing tab must not delete the cookie the winning tab just received
+            // The client is told to retry once, and no cookie is issued or cleared
+            (await raced.Content.ReadAsStringAsync()).Should().Contain("\"raced\":true");
             raced.Headers.TryGetValues("Set-Cookie", out var setCookies);
             (setCookies ?? Array.Empty<string>()).Should().NotContain(c => c.StartsWith("fv_refresh="));
-            // ...and is told the 401 is a race, so it retries instead of signing out
-            (await raced.Content.ReadAsStringAsync()).Should().Contain("\"raced\":true");
-            (await RefreshAsync(client, second)).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await ActiveTokensAsync(email)).Should().Be(0);
+        }
+
+        [Fact]
+        public async Task RefreshToken_ReusedWithinGrace_AfterPasswordChange_IsRefused()
+        {
+            var client = NewClient(_factory);
+            var email = NewEmail();
+            await RegisterAsync(client, email);
+            var (_, first, _) = await LoginAsync(client, email);
+            var (tokenB, cookieB, _) = await LoginAsync(client, email);
+            (await RefreshAsync(client, first)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var change = Authed(HttpMethod.Post, "/user/password", tokenB, new { currentPassword = Password, newPassword = "Changed1Pass" });
+            change.Headers.Add("Cookie", cookieB);
+            var changed = await client.SendAsync(change);
+            changed.StatusCode.Should().Be(HttpStatusCode.OK);
+            _usersToDelete.Add((client, await ReadTokenAsync(changed)));
+
+            (await RefreshAsync(client, first)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            (await ActiveTokensAsync(email)).Should().Be(1, "only the session the change was made from");
+        }
+
+        [Fact]
+        public async Task RefreshToken_ReusedWithinGrace_ForASuspendedUser_IsRefused()
+        {
+            var client = NewClient(_factory);
+            var email = NewEmail();
+            await RegisterAsync(client, email);
+            var (token, first, _) = await LoginAsync(client, email);
+            _usersToDelete.Add((client, token));
+            (await RefreshAsync(client, first)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            await TestDatabase.ExecuteAsync(_baseFactory, "UPDATE Users SET SuspendedAt = SYSUTCDATETIME() WHERE Email = @Email", ("@Email", email));
+            try
+            {
+                var response = await RefreshAsync(client, first);
+                response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+                response.Headers.TryGetValues("Set-Cookie", out var setCookies);
+                (setCookies ?? Array.Empty<string>()).Should().NotContain(c => c.StartsWith("fv_refresh=") && !c.StartsWith("fv_refresh=;"));
+            }
+            finally
+            {
+                await TestDatabase.ExecuteAsync(_baseFactory, "UPDATE Users SET SuspendedAt = NULL WHERE Email = @Email", ("@Email", email));
+            }
         }
 
         [Fact]
@@ -268,6 +374,45 @@ namespace Backend.Test
             (await client.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password }))
                 .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
             await LoginAsync(client, email, "Changed1Pass");
+        }
+
+        [Theory]
+        [InlineData("0")]
+        [InlineData("60")]
+        public async Task PasswordChange_StopsOtherSessionsAccessTokens_AndKeepsThisOne(string cacheSeconds)
+        {
+            // With the user-state cache on, the change must evict what was cached for the user
+            var factory = WithSettings(
+                ("RateLimiting:auth:PermitLimit", "1000"),
+                ("Auth:UserStateCacheSeconds", cacheSeconds));
+            var client = NewClient(factory);
+            var email = NewEmail();
+            await RegisterAsync(client, email);
+            var (tokenA, cookieA, _) = await LoginAsync(client, email);
+            var (tokenB, cookieB, _) = await LoginAsync(client, email);
+            (await GetInfoAsync(client, tokenB)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var update = new HttpRequestMessage(HttpMethod.Post, "/user/password")
+            {
+                Content = JsonContent.Create(new { currentPassword = Password, newPassword = "Changed1Pass" })
+            };
+            update.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokenA);
+            update.Headers.Add("Cookie", cookieA);
+            var response = await client.SendAsync(update);
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            var newToken = await ReadTokenAsync(response);
+            var newCookie = RefreshCookie(response);
+            _usersToDelete.Add((client, newToken));
+
+            (await GetInfoAsync(client, tokenB)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            (await GetInfoAsync(client, tokenA)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            (await RefreshAsync(client, cookieB)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+            // The client that changed it carries on with the returned token and cookie
+            (await GetInfoAsync(client, newToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+            var refreshed = await RefreshAsync(client, newCookie);
+            refreshed.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await GetInfoAsync(client, await ReadTokenAsync(refreshed))).StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         private static HttpRequestMessage Authed(HttpMethod method, string url, string token, object? body = null)

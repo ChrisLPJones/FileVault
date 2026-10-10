@@ -13,19 +13,27 @@ namespace Backend.Routes
             "This confirmation link is invalid, has expired, or was sent for a different account. " +
             "Sign in as the account that asked for the change and open the link again, or ask for a new one.";
 
-        // A 429 message if the account has asked for too many links lately, else null.
-        // EmailChange:MaxPerDay (5) links per 24 hours, EmailChange:ResendCooldownSeconds (60) between them.
-        private static async Task<string?> CheckSendLimitAsync(string userId, DatabaseServices db, IConfiguration config)
+        // Sends the link to the new address unless the account has asked for too many lately
+        // (EmailChange:MaxPerDay (5) links per 24 hours, EmailChange:ResendCooldownSeconds (60) between
+        // them). The check and the storing are one step, so parallel requests can't all pass it.
+        // Returns the expiry, or the 429 result.
+        private static async Task<(DateTime? Expires, IResult? Limited)> TrySendConfirmationAsync(
+            Backend.Models.UserModel account, string email, DatabaseServices db, AccountEmailService emails, IConfiguration config)
         {
             var maxPerDay = config.GetValue("EmailChange:MaxPerDay", 5);
             var cooldown = TimeSpan.FromSeconds(config.GetValue("EmailChange:ResendCooldownSeconds", 60));
 
-            var (count, last) = await db.GetEmailChangeSendStatsAsync(userId, DateTime.UtcNow - TimeSpan.FromHours(24));
-            if (count >= maxPerDay)
-                return "Too many email change requests today. Please try again later.";
-            if (cooldown > TimeSpan.Zero && last is { } sent && DateTime.UtcNow - sent < cooldown)
-                return "Please wait a minute before asking for another link.";
-            return null;
+            var (outcome, expires) = await emails.TrySendEmailChangeConfirmationAsync(account, email, db, maxPerDay, cooldown);
+            return outcome switch
+            {
+                DatabaseServices.EmailChangeStoreOutcome.DailyLimit => (null,
+                    Results.Json(new { error = "Too many email change requests today. Please try again later." }, statusCode: 429)),
+                DatabaseServices.EmailChangeStoreOutcome.NotFound => (null,
+                    Results.NotFound(new { error = "User not found" })),
+                DatabaseServices.EmailChangeStoreOutcome.Cooldown => (null,
+                    Results.Json(new { error = "Please wait a minute before asking for another link." }, statusCode: 429)),
+                _ => (expires, null)
+            };
         }
 
         public static void MapEmailChangeRoutes(this IEndpointRouteBuilder app)
@@ -62,19 +70,17 @@ namespace Backend.Routes
                 if (conflict != null)
                     return Results.Conflict(new { error = conflict });
 
-                var limit = await CheckSendLimitAsync(userId, db, config);
-                if (limit != null)
-                    return Results.Json(new { error = limit }, statusCode: 429);
-
                 // Asking again for the address already pending just sends its link again
                 var pending = await db.GetPendingEmailAsync(userId);
                 var again = pending != null && string.Equals(pending.Email, email, StringComparison.OrdinalIgnoreCase);
 
-                var expires = await emails.SendEmailChangeConfirmationAsync(account, email, db);
+                var (expires, limited) = await TrySendConfirmationAsync(account, email, db, emails, config);
+                if (limited != null)
+                    return limited;
                 if (!again && await db.IsEmailVerifiedAsync(userId))
                     await emails.SendEmailChangeRequestedNoticeAsync(account, email, db);
 
-                return Results.Ok(new EmailChangeRequestedResponse($"We've sent a confirmation link to {email}", email, expires));
+                return Results.Ok(new EmailChangeRequestedResponse($"We've sent a confirmation link to {email}", email, expires!.Value));
             })
                 .WithTags("Account")
                 .WithSummary("Ask to change the email address (needs the current password). The new address is pending until " +
@@ -104,12 +110,10 @@ namespace Backend.Routes
                 if (conflict != null)
                     return Results.Conflict(new { error = conflict });
 
-                var limit = await CheckSendLimitAsync(userId, db, config);
-                if (limit != null)
-                    return Results.Json(new { error = limit }, statusCode: 429);
-
-                var expires = await emails.SendEmailChangeConfirmationAsync(account, pending.Email, db);
-                return Results.Ok(new EmailChangeRequestedResponse($"We've sent a new confirmation link to {pending.Email}", pending.Email, expires));
+                var (expires, limited) = await TrySendConfirmationAsync(account, pending.Email, db, emails, config);
+                if (limited != null)
+                    return limited;
+                return Results.Ok(new EmailChangeRequestedResponse($"We've sent a new confirmation link to {pending.Email}", pending.Email, expires!.Value));
             })
                 .WithTags("Account")
                 .WithSummary("Send the confirmation link for the pending email change again")

@@ -140,7 +140,7 @@ See `Backend/appsettings.json` for the full list and defaults.
 
 Changing the email address from Settings is limited per account to `EmailChange__MaxPerDay`
 confirmation links per 24 hours (default 5) and `EmailChange__ResendCooldownSeconds` between them
-(default 60), on top of the per-IP `RateLimiting__email__PermitLimit`. The link goes to the new
+(default 60), checked and counted in one step per account so parallel requests can't exceed them, on top of the per-IP `RateLimiting__email__PermitLimit`. The link goes to the new
 address and must be opened while signed in as that account (it points at `App:FrontendUrl`, like the
 other email links); the old address stays the login until then. No database change is needed.
 

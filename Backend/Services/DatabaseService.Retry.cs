@@ -8,7 +8,7 @@ public partial class DatabaseServices
 
     // SQL error 1205, or losing the admin-membership lock as a deadlock victim (sp_getapplock -3)
     private static bool IsDeadlock(Exception ex) =>
-        ex is SqlException { Number: DeadlockErrorNumber } or AdminLockDeadlockException;
+        ex is SqlException { Number: DeadlockErrorNumber } or AppLockDeadlockException;
 
     // Run a database action again if SQL Server picked it as a deadlock victim. Deletes can
     // deadlock with each other when several users delete at once (the delete triggers walk the

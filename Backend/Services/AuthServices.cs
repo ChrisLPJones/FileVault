@@ -158,17 +158,21 @@ namespace Backend.Services
             }
 
             // When rotating, the token is stored only if no administrator password change landed
-            // since the old one was consumed; null means refused
+            // since the old one was consumed (password change, reset or administrator); null means refused
             if (!await db.StoreRefreshTokenAsync(userId, sessionId.Value, HashToken(token), expiresAt,
                     rotatedFrom != null, rotatedFrom?.UserTokensValidAfter))
                 return null;
 
-            // Signing in, and renewing the access token while the app is open, count as use (hosted mode's
-            // inactivity clock); written at most about hourly
-            await db.TouchActivityAsync(userId);
-
-            http.Response.Cookies.Append(RefreshCookieName, token, RefreshCookieOptions(http, expiresAt));
+            await FinishRefreshTokenAsync(userId, db, http, token, expiresAt);
             return sessionId.Value;
+        }
+
+        // Signing in, and renewing the access token while the app is open, count as use (hosted mode's
+        // inactivity clock); written at most about hourly. Then hand the browser its new cookie.
+        private async Task FinishRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http, string token, DateTime expiresAt)
+        {
+            await db.TouchActivityAsync(userId);
+            http.Response.Cookies.Append(RefreshCookieName, token, RefreshCookieOptions(http, expiresAt));
         }
 
         // The session the request's refresh cookie belongs to, or null without a known cookie
@@ -195,8 +199,8 @@ namespace Backend.Services
 
         // Exchange the refresh cookie for a new access token and a new refresh cookie.
         // User is null if the cookie is missing, expired, revoked or unknown. RacedWithinGrace is true
-        // when the token was just rotated away (e.g. a second tab refreshing at the same moment): the
-        // caller must not clear the cookie then, as it now holds the winner's fresh token.
+        // when the token was just rotated away and could not be replaced (e.g. a second tab refreshing at
+        // the same moment): the caller must not clear the cookie then, as it holds the winner's fresh token.
         public async Task<(UserModel? User, bool RacedWithinGrace)> RotateRefreshTokenAsync(DatabaseServices db, HttpContext http)
         {
             if (!http.Request.Cookies.TryGetValue(RefreshCookieName, out var token) || string.IsNullOrEmpty(token))
@@ -220,6 +224,26 @@ namespace Backend.Services
                 {
                     await db.RevokeAllRefreshTokensAsync(use.UserId);
                     return (null, false);
+                }
+                // Within the window a rotated-away token still gets in (the new cookie may have been
+                // lost to a reload or an aborted request): the session's live token is replaced, so
+                // there is still only one per session and a replay is caught by the next refresh.
+                // Refused (the session was signed out meanwhile, or another call won): the client retries once.
+                if (use.Replaced && use.SessionId != null)
+                {
+                    var rejoining = await db.GetUserByUserId(use.UserId);
+                    if (rejoining == null || (await db.GetUserAuthStateAsync(use.UserId)).Suspended)
+                        return (null, false);
+
+                    var newToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+                    var expiresAt = DateTime.UtcNow.Add(RefreshLifetime);
+                    if (await db.ReplaceSessionTokenWithinGraceAsync(use.UserId, use.SessionId.Value, HashToken(newToken),
+                            expiresAt, use.UserTokensValidAfter))
+                    {
+                        await db.TouchSessionAsync(use.SessionId.Value, DeviceDescription.IpAddress(http));
+                        await FinishRefreshTokenAsync(use.UserId, db, http, newToken, expiresAt);
+                        return (rejoining, false);
+                    }
                 }
                 return (null, true);
             }

@@ -45,7 +45,8 @@ namespace Backend.Routes
             app.MapPost("/user/reset-password", async (
                 ResetPasswordRequest request,
                 DatabaseServices db,
-                AuthServices auth) =>
+                AuthServices auth,
+                AccessTokenGate tokenGate) =>
             {
                 // Check the new password first so a weak one doesn't use up the link
                 var passwordError = AuthServices.ValidatePassword(request?.NewPassword);
@@ -57,8 +58,11 @@ namespace Backend.Routes
                 if (use == null || user == null || (await db.GetUserAuthStateAsync(use.UserId)).Suspended)
                     return Results.BadRequest(new { error = "This reset link is invalid or has expired. Please ask for a new one." });
 
-                await db.UpdatePasswordHashAsync(use.UserId, auth.GeneratePasswordHash(request.NewPassword));
-                await db.RevokeAllRefreshTokensAsync(use.UserId);
+                // Signs out every session and stops the access tokens already issued
+                var result = await db.SetPasswordAndSignOutAsync(use.UserId, auth.GeneratePasswordHash(request.NewPassword));
+                if (!result.Success)
+                    return Results.BadRequest(new { error = "This reset link is invalid or has expired. Please ask for a new one." });
+                tokenGate.Evict(use.UserId);
 
                 // A pending email change may have been started by someone else: drop it
                 await db.CancelPendingEmailChangeAsync(use.UserId);
@@ -72,7 +76,7 @@ namespace Backend.Routes
                 return Results.Ok(new { success = "Password changed. You can log in with your new password." });
             })
                 .WithTags("Account")
-                .WithSummary("Choose a new password with the token from a reset email (ends every session)")
+                .WithSummary("Choose a new password with the token from a reset email (ends every session and stops the access tokens already issued)")
                 .Produces<SuccessResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(429).RequireRateLimiting("auth");

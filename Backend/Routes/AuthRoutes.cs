@@ -128,7 +128,8 @@ namespace Backend.Routes
                 var (user, racedWithinGrace) = await auth.RotateRefreshTokenAsync(db, http);
                 if (user == null)
                 {
-                    // Keep the cookie when another tab just rotated it: it holds that tab's fresh token
+                    // Keep the cookie when another tab just rotated it: it holds that tab's fresh token.
+                    // (A rotated-away token used within the grace window normally succeeds, see RotateRefreshTokenAsync.)
                     if (!racedWithinGrace)
                         AuthServices.ClearRefreshCookie(http);
                     // raced tells the client this is transient: retry once before treating the session as over
@@ -241,7 +242,8 @@ namespace Backend.Routes
                 ClaimsPrincipal user,
                 PasswordChangeRequest request,
                 DatabaseServices db,
-                AuthServices auth) =>
+                AuthServices auth,
+                AccessTokenGate tokenGate) =>
             {
                 var userId = user.GetUserId();
                 var account = await db.GetUserByUserId(userId);
@@ -256,19 +258,22 @@ namespace Backend.Routes
                 if (passwordError != null || request.NewPassword is null)
                     return Results.BadRequest(new { error = passwordError ?? "New password is required" });
 
-                await db.UpdatePasswordHashAsync(userId, auth.GeneratePasswordHash(request.NewPassword));
+                // Ends every session and the access tokens issued so far (TokensValidAfter), then
+                // this client gets a fresh session and an access token issued after that moment
+                var result = await db.SetPasswordAndSignOutAsync(userId, auth.GeneratePasswordHash(request.NewPassword));
+                if (!result.Success)
+                    return Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
+                tokenGate.Evict(userId);
 
                 // A pending email change was started with the old password: drop it
                 await db.CancelPendingEmailChangeAsync(userId);
 
-                // End every other session, then start a fresh one for this client
-                await db.RevokeAllRefreshTokensAsync(userId);
                 await auth.IssueRefreshTokenAsync(userId, db, http);
 
                 return Results.Ok(new { Success = "Password changed", Token = auth.GetJWTToken(account) });
             })
                 .WithTags("Account")
-                .WithSummary("Change password (ends other sessions, returns a new access token)")
+                .WithSummary("Change password (ends other sessions and stops their access tokens working, returns a new access token)")
                 .Produces<TokenUpdateResponse>()
                 .Produces<ErrorResponse>(400).RequireAuthorization();
 
