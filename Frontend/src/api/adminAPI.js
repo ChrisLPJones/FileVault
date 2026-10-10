@@ -4,11 +4,11 @@ import { api } from "./api";
 export const getAdminStatusAPI = async () => (await api.get("/admin/me")).data;
 
 // [{ id, firstName, lastName, email, createdAt, lastLogin, bytesUsed, fileCount, quota, quotaOverride,
-//    isAdmin, isPermanent, avatarUpdatedAt }]
+//    isAdmin, isPermanent, avatarUpdatedAt, suspendedAt }]
 export const getAdminUsersAPI = async () => (await api.get("/admin/users")).data;
 
 // { userCount, adminCount, fileCount, folderCount, totalStoredBytes, defaultQuotaBytes,
-//   storageBytesOnDisk, diskTotalBytes, diskFreeBytes, currentUserId }
+//   storageBytesOnDisk, diskTotalBytes, diskFreeBytes, currentUserId, suspendedCount }
 export const getAdminStatsAPI = async () => (await api.get("/admin/stats")).data;
 
 // quotaBytes: a number of bytes, or null for the server's default
@@ -34,6 +34,11 @@ export const setUserPasswordAPI = (userId, password) =>
 // Mark an account permanent (skipped by inactive-account removal) or not
 export const setUserPermanentAPI = (userId, isPermanent) =>
     api.put(`/admin/users/${encodeURIComponent(userId)}/permanent`, { isPermanent });
+
+// Suspend an account (it can't sign in; its files are kept) or lift the suspension. 409 for the
+// last administrator; 400 for your own account.
+export const setUserSuspendedAPI = (userId, suspended) =>
+    api.put(`/admin/users/${encodeURIComponent(userId)}/suspended`, { suspended });
 
 // A user's profile picture as a Blob (404 if they have none). Fetched through the API client so the
 // access token travels in the Authorization header, never in an image URL.

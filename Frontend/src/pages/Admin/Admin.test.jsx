@@ -12,6 +12,7 @@ import {
     setUserPasswordAPI,
     setUserPermanentAPI,
     setUserQuotaAPI,
+    setUserSuspendedAPI,
 } from "../../api/adminAPI";
 
 vi.mock("../../api/adminAPI", () => ({
@@ -23,6 +24,7 @@ vi.mock("../../api/adminAPI", () => ({
     deleteUserAPI: vi.fn(async () => ({})),
     setUserPasswordAPI: vi.fn(async () => ({})),
     setUserPermanentAPI: vi.fn(async () => ({})),
+    setUserSuspendedAPI: vi.fn(async () => ({})),
     getUserAvatarBlobAPI: vi.fn(),
 }));
 
@@ -53,7 +55,7 @@ const chooseAction = async (email, item) => {
 };
 
 beforeEach(() => {
-    [setUserAdminAPI, createUserAPI, deleteUserAPI, setUserPasswordAPI, setUserPermanentAPI, getUserAvatarBlobAPI].forEach((mock) => {
+    [setUserAdminAPI, createUserAPI, deleteUserAPI, setUserPasswordAPI, setUserPermanentAPI, setUserSuspendedAPI, getUserAvatarBlobAPI].forEach((mock) => {
         mock.mockReset();
         mock.mockResolvedValue({});
     });
@@ -300,6 +302,66 @@ describe("Admin page", () => {
             await chooseAction("sam@example.com", "Remove permanent");
 
             expect(await screen.findByRole("alert")).toHaveTextContent("User not found");
+            expect(getAdminUsersAPI).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe("suspending", () => {
+        const suspendedUsers = [users[0], { ...users[1], suspendedAt: "2026-05-01T10:00:00Z" }];
+
+        it("shows a Suspended badge only on suspended accounts", async () => {
+            getAdminUsersAPI.mockResolvedValue(suspendedUsers);
+            getAdminStatsAPI.mockResolvedValue({ ...stats, suspendedCount: 1 });
+            render(<Admin />);
+            await screen.findByText("sam@example.com");
+
+            expect(within(row("sam@example.com")).getByText("Suspended")).toBeInTheDocument();
+            expect(within(row("alex@example.com")).queryByText("Suspended")).toBeNull();
+            expect(screen.getByText(/1 suspended/)).toBeInTheDocument();
+        });
+
+        it("suspends straight away and reloads", async () => {
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Suspend account");
+
+            expect(setUserSuspendedAPI).toHaveBeenCalledWith("u2", true);
+            await vi.waitFor(() => expect(getAdminUsersAPI).toHaveBeenCalledTimes(2));
+            expect(await screen.findByRole("status")).toHaveTextContent("sam@example.com is suspended");
+        });
+
+        it("labels a suspended administrator as Admin (suspended)", async () => {
+            getAdminUsersAPI.mockResolvedValue([users[0], { ...users[1], isAdmin: true, suspendedAt: "2026-05-01T10:00:00Z" }]);
+            render(<Admin />);
+            await screen.findByText("sam@example.com");
+
+            const samRow = within(row("sam@example.com"));
+            expect(samRow.getByText("Admin (suspended)")).toBeInTheDocument();
+            expect(samRow.getByText("Suspended")).toBeInTheDocument();
+            expect(within(row("alex@example.com")).getByText("Admin")).toBeInTheDocument();
+        });
+
+        it("offers Unsuspend for a suspended account and lifts the suspension", async () => {
+            getAdminUsersAPI.mockResolvedValue(suspendedUsers);
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Unsuspend account");
+
+            expect(setUserSuspendedAPI).toHaveBeenCalledWith("u2", false);
+            expect(await screen.findByRole("status")).toHaveTextContent("sam@example.com is no longer suspended.");
+        });
+
+        it("leaves suspending out of your own row", async () => {
+            render(<Admin />);
+            await userEvent.click(await screen.findByRole("button", { name: "Actions for alex@example.com" }));
+
+            expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: /suspend/i })).toBeNull();
+        });
+
+        it("shows why suspending failed", async () => {
+            setUserSuspendedAPI.mockRejectedValue(failure(409, "There must always be at least one administrator"));
+            render(<Admin />);
+            await chooseAction("sam@example.com", "Suspend account");
+
+            expect(await screen.findByRole("alert")).toHaveTextContent("There must always be at least one administrator");
             expect(getAdminUsersAPI).toHaveBeenCalledTimes(1);
         });
     });

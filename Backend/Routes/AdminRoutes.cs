@@ -201,6 +201,35 @@ namespace Backend.Routes
                 .Produces<ErrorResponse>(403)
                 .Produces<ErrorResponse>(404);
 
+            // Suspend an account (it can't sign in; its data is kept) or lift the suspension
+            admin.MapPut("/users/{userId}/suspended", async (string userId, HttpContext http, DatabaseServices db,
+                AccessTokenGate tokenGate) =>
+            {
+                var request = await ReadJsonAsync<AdminSuspendRequest>(http.Request);
+                if (request?.Suspended == null)
+                    return Results.BadRequest(new { error = "Invalid JSON" });
+                if (!Guid.TryParse(userId, out var id))
+                    return Results.NotFound(new { error = "User not found" });
+                if (id.ToString() == http.User.GetUserId())
+                    return Results.BadRequest(new { error = "You can't suspend your own account" });
+
+                var result = await db.SetSuspendedAsync(id.ToString(), request.Suspended.Value);
+                if (!result.Success)
+                    return Results.Json(new { error = result.Message }, statusCode: result.StatusCode ?? 400);
+
+                tokenGate.Evict(id.ToString()); // the change applies to their access tokens at once
+                Audit(http, request.Suspended.Value ? "suspend" : "unsuspend", id.ToString());
+                return Results.Ok(new { success = result.Message });
+            })
+                .WithSummary("Suspend or unsuspend an account (body: { suspended }); a suspended user is signed out everywhere and can't sign in, " +
+                    "their files are kept; not your own, and never the last administrator (admins only)")
+                .Accepts<AdminSuspendRequest>("application/json")
+                .Produces<SuccessResponse>()
+                .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(403)
+                .Produces<ErrorResponse>(404)
+                .Produces<ErrorResponse>(409);
+
             // Mark an account permanent, so inactive-account removal (hosted mode) skips it
             admin.MapPut("/users/{userId}/permanent", async (string userId, HttpContext http, DatabaseServices db) =>
             {
@@ -239,10 +268,10 @@ namespace Backend.Routes
             // Totals and disk space
             admin.MapGet("/stats", async (ClaimsPrincipal user, DatabaseServices db, IConfiguration config) =>
             {
-                var (users, admins, files, folders, bytes) = await db.GetAdminTotalsAsync();
+                var (users, admins, files, folders, bytes, suspended) = await db.GetAdminTotalsAsync();
                 var (onDisk, total, free) = DiskUsage(config.GetValue<string>("StorageRoot") ?? "");
                 return Results.Ok(new AdminStats(users, admins, files, folders, bytes, DefaultQuota(config), onDisk, total, free,
-                    Guid.Parse(user.GetUserId())));
+                    Guid.Parse(user.GetUserId()), suspended));
             })
                 .WithSummary("User and file counts, bytes stored, and disk use of the storage folder (admins only)")
                 .Produces<AdminStats>()

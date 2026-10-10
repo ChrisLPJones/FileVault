@@ -33,7 +33,7 @@
 - Log in with email; first and last name, profile picture, password change, account deletion
 - Light, dark and system themes, and a choice of accent colour
 - Per-user icon themes (Default, Windows, macOS, Ubuntu style) for file and folder icons, chosen in Settings
-- An admin page for the server owner: every account's avatar, storage use and quota, each user's last login IP address and country (looked up in a local database, nothing sent to a third party), and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark accounts permanent, and delete accounts (type the email to confirm; the last admin can't be deleted)
+- An admin page for the server owner: every account's avatar, storage use and quota, each user's last login IP address and country (looked up in a local database, nothing sent to a third party), and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark accounts permanent, suspend and unsuspend accounts (a suspended user is signed out at once and can't sign in; files and shares are kept, share links show "not found" until unsuspended), and delete accounts (type the email to confirm; the last admin can't be deleted)
 
 **Tooling**
 - Interactive API docs (Swagger) at `/swagger` in development, or with `SWAGGER_ENABLED=true`
@@ -220,7 +220,7 @@ To try protected endpoints, call `POST /user/login`, then click **Authorize** an
 - **Uploads**: chunked, resumable uploads for big files
 - **Recycle bin**: list, restore, delete for good, empty
 - **Shares**: create, list and revoke share links, and the public endpoints a link uses
-- **Admin**: every account's usage and quota, change quotas, grant or remove admin rights, create and delete accounts, set a user's password, mark accounts permanent, server totals
+- **Admin**: every account's usage and quota, change quotas, grant or remove admin rights, create and delete accounts, set a user's password, mark accounts permanent, suspend or unsuspend accounts (`PUT /admin/users/{id}/suspended`), server totals
 - **Health**: `/ping` and `/pingsql`
 
 ## Project layout

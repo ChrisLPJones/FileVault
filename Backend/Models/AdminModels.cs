@@ -19,6 +19,7 @@ namespace Backend.Models
         bool IsAdmin,
         bool IsPermanent,
         DateTime? AvatarUpdatedAt,
+        DateTime? SuspendedAt = null, // non-null = suspended (can't sign in; data kept)
         string? LastLoginIp = null,
         string? LastLoginCountryCode = null,
         string? LastLoginCountry = null);
@@ -41,6 +42,12 @@ namespace Backend.Models
     public class AdminSetPasswordRequest
     {
         public string? Password { get; set; }
+    }
+
+    // PUT /admin/users/{id}/suspended
+    public class AdminSuspendRequest
+    {
+        public bool? Suspended { get; set; }
     }
 
     // PUT /admin/users/{id}/permanent
@@ -72,5 +79,6 @@ namespace Backend.Models
         long? StorageBytesOnDisk,
         long? DiskTotalBytes,
         long? DiskFreeBytes,
-        Guid CurrentUserId); // the administrator asking, so the page can leave their own row's account actions out
+        Guid CurrentUserId, // the administrator asking, so the page can leave their own row's account actions out
+        int SuspendedCount = 0);
 }

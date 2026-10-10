@@ -137,7 +137,7 @@ Other API settings can be passed as environment variables on the `api` service u
 See `Backend/appsettings.json` for the full list and defaults.
 
 `Auth__UserStateCacheSeconds` (default 30) is how long the API caches each user's sign-in state when
-checking access tokens. When an administrator sets a user's password, that user's current access
+checking access tokens. When an administrator sets a user's password or suspends an account, that user's current access
 token stops working immediately; changes made on another API instance or directly in the database can take up
 to this many seconds.
 
@@ -271,7 +271,8 @@ Admin page ("Admin rights" column). There must always be at least one administra
 last one, or the last administrator deleting their own account, is refused.
 
 Administrators can also create accounts (active immediately, email already confirmed), set a user's
-password (signs them out everywhere), mark accounts permanent, and delete accounts. Each of these
+password (signs them out everywhere), suspend and unsuspend accounts, mark accounts permanent, and
+delete accounts. A suspended administrator doesn't count as an administrator until unsuspended. Each of these
 writes an audit line to the API log under the `Backend.AdminAudit` category, using account ids only
 (no emails or passwords), so you can watch that category for admin activity.
 
@@ -286,7 +287,7 @@ writes an audit line to the API log under the `Backend.AdminAudit` category, usi
   confirmed account is promoted, or set `IsAdmin` in the database.
 - An account stored with capital letters by an old version won't match `INITIAL_ADMIN_EMAIL`. For
   that install leave the setting unset, or lower-case the address in the database.
-- The upgrade adds `Users.EmailChanged`, `Users.TokensValidAfter` and `Users.IsPermanent` columns;
+- The upgrade adds `Users.EmailChanged`, `Users.TokensValidAfter`, `Users.IsPermanent` and `Users.SuspendedAt` columns;
   re-running `init.sql` (`docker compose up --build -d`) applies them.
 - Changing admin rights takes a short database lock. If it can't be had in time the API answers
   `503` with a `Retry-After` header; retrying a moment later works.

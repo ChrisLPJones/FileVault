@@ -701,3 +701,16 @@ BEGIN
     PRINT 'Column "Users.LastLoginIp" added.';
 END
 GO
+
+------------------------------------------------------------
+-- ACCOUNT SUSPENSION (added to existing databases too)
+------------------------------------------------------------
+-- When the account was suspended (UTC). NULL = not suspended. A suspended account can't sign in
+-- and its access is cut at once; its files, shares and quota are kept. A suspended administrator
+-- doesn't count towards the "at least one administrator" rule.
+IF COL_LENGTH('Users', 'SuspendedAt') IS NULL
+BEGIN
+    ALTER TABLE Users ADD SuspendedAt DATETIME2 NULL;
+    PRINT 'Column "Users.SuspendedAt" added.';
+END
+GO

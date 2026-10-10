@@ -13,7 +13,7 @@ public sealed class AdminLockTimeoutException(string message) : Exception(messag
 // The admin page: who is an administrator, every user's usage, quotas and totals
 public partial class DatabaseServices
 {
-    // True if the user exists and is an administrator (checked on every admin request)
+    // True if the user exists, is an administrator and is not suspended (checked on every admin request)
     public async Task<bool> IsAdminAsync(string userId)
     {
         if (!Guid.TryParse(userId, out _))
@@ -22,7 +22,7 @@ public partial class DatabaseServices
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = "SELECT IsAdmin FROM Users WHERE Id = @UserId";
+        var query = $"SELECT CASE WHEN {EffectiveAdminPredicate} THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END FROM Users WHERE Id = @UserId";
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
         return await command.ExecuteScalarAsync() is bool isAdmin && isAdmin;
@@ -36,9 +36,9 @@ public partial class DatabaseServices
     // administrators are. The lock is released when that transaction ends.
     private const string AdminMembershipLock = "fv-admin-membership";
 
-    // What counts as an administrator for the "at least one" rule. Account suspension is meant to
-    // be added here, so a suspended admin stops counting.
-    private const string EffectiveAdminPredicate = "IsAdmin = 1";
+    // What counts as an administrator for the "at least one" rule and for admin access: a
+    // suspended admin doesn't count.
+    private const string EffectiveAdminPredicate = "IsAdmin = 1 AND SuspendedAt IS NULL";
 
     public const string LastAdminMessage = "There must always be at least one administrator";
 
@@ -122,7 +122,7 @@ public partial class DatabaseServices
         await using var command = new SqlCommand($@"
             UPDATE Users SET IsAdmin = 1{(replacePassword ? ", PasswordHash = @UnusableHash" : "")}
             WHERE Id = @UserId AND Email COLLATE Latin1_General_BIN2 = @Email AND EmailVerified = 1 AND IsAdmin = 0
-              AND EmailChanged = 0
+              AND EmailChanged = 0 AND SuspendedAt IS NULL
               AND NOT EXISTS (SELECT 1 FROM Users WHERE {EffectiveAdminPredicate})", connection, transaction);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@Email", InitialAdminEmail!);
@@ -152,7 +152,7 @@ public partial class DatabaseServices
             DECLARE @Id UNIQUEIDENTIFIER;
             IF NOT EXISTS (SELECT 1 FROM Users WHERE {EffectiveAdminPredicate})
                 SELECT TOP 1 @Id = Id FROM Users
-                WHERE EmailVerified = 1 AND (@InitialEmail IS NULL OR (Email COLLATE Latin1_General_BIN2 = @InitialEmail AND EmailChanged = 0))
+                WHERE EmailVerified = 1 AND SuspendedAt IS NULL AND (@InitialEmail IS NULL OR (Email COLLATE Latin1_General_BIN2 = @InitialEmail AND EmailChanged = 0))
                 ORDER BY CASE WHEN CreatedAt IS NULL THEN 1 ELSE 0 END, CreatedAt, Email;
             IF @Id IS NOT NULL
                 UPDATE Users SET IsAdmin = 1 OUTPUT inserted.Email WHERE Id = @Id;", connection, transaction);
@@ -175,16 +175,23 @@ public partial class DatabaseServices
 
         await TakeAdminMembershipLockAsync(connection, transaction);
 
-        bool? current;
-        await using (var read = new SqlCommand("SELECT IsAdmin FROM Users WHERE Id = @UserId", connection, transaction))
+        bool? current = null;
+        var effective = false;
+        await using (var read = new SqlCommand("SELECT IsAdmin, SuspendedAt FROM Users WHERE Id = @UserId", connection, transaction))
         {
             read.Parameters.AddWithValue("@UserId", userId);
-            current = await read.ExecuteScalarAsync() as bool?;
+            await using var reader = await read.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                current = reader.GetBoolean(0);
+                effective = current == true && reader.IsDBNull(1);
+            }
         }
         if (current == null)
             return HttpReturnResult.NotFound("User not found");
 
-        if (!isAdmin && current == true)
+        // Only an administrator who counts (not suspended) can be the last one
+        if (!isAdmin && effective)
         {
             await using var others = new SqlCommand(
                 $"SELECT COUNT(*) FROM Users WHERE {EffectiveAdminPredicate} AND Id <> @UserId", connection, transaction);
@@ -222,11 +229,11 @@ public partial class DatabaseServices
             SELECT u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin,
                    COALESCE(SUM(CASE WHEN f.IsDirectory = 0 THEN f.Size END), 0) AS BytesUsed,
                    COUNT(CASE WHEN f.IsDirectory = 0 THEN 1 END) AS FileCount,
-                   u.IsPermanent, u.AvatarUpdatedAt, u.LastLoginIp
+                   u.IsPermanent, u.AvatarUpdatedAt, u.SuspendedAt, u.LastLoginIp
             FROM Users u
             LEFT JOIN Files f ON f.UserId = u.Id
             GROUP BY u.Id, u.FirstName, u.LastName, u.Email, u.CreatedAt, u.LastLogin, u.StorageQuota, u.IsAdmin,
-                     u.IsPermanent, u.AvatarUpdatedAt, u.LastLoginIp
+                     u.IsPermanent, u.AvatarUpdatedAt, u.SuspendedAt, u.LastLoginIp
             ORDER BY u.CreatedAt, u.Email";
 
         await using var command = new SqlCommand(query, connection);
@@ -248,7 +255,8 @@ public partial class DatabaseServices
                 reader.GetBoolean(7),
                 reader.GetBoolean(10),
                 reader.IsDBNull(11) ? null : DateTime.SpecifyKind(reader.GetDateTime(11), DateTimeKind.Utc),
-                reader.IsDBNull(12) ? null : reader.GetString(12)));
+                reader.IsDBNull(12) ? null : DateTime.SpecifyKind(reader.GetDateTime(12), DateTimeKind.Utc),
+                reader.IsDBNull(13) ? null : reader.GetString(13)));
         }
 
         return users;
@@ -271,27 +279,28 @@ public partial class DatabaseServices
 
 
 
-    // Totals across all users: (users, admins, files, folders, bytes stored). Retried on a
+    // Totals across all users: (users, administrators who aren't suspended, files, folders, bytes stored, suspended accounts). Retried on a
     // deadlock, like GetUsersForAdminAsync.
-    public Task<(int users, int admins, int files, int folders, long bytes)> GetAdminTotalsAsync() =>
+    public Task<(int users, int admins, int files, int folders, long bytes, int suspended)> GetAdminTotalsAsync() =>
         RetryOnDeadlockAsync(ReadAdminTotalsAsync);
 
-    private async Task<(int users, int admins, int files, int folders, long bytes)> ReadAdminTotalsAsync()
+    private async Task<(int users, int admins, int files, int folders, long bytes, int suspended)> ReadAdminTotalsAsync()
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        const string query = @"
+        var query = $@"
             SELECT
                 (SELECT COUNT(*) FROM Users),
-                (SELECT COUNT(*) FROM Users WHERE IsAdmin = 1),
+                (SELECT COUNT(*) FROM Users WHERE {EffectiveAdminPredicate}),
                 (SELECT COUNT(*) FROM Files WHERE IsDirectory = 0),
                 (SELECT COUNT(*) FROM Files WHERE IsDirectory = 1),
-                (SELECT COALESCE(SUM(Size), 0) FROM Files WHERE IsDirectory = 0)";
+                (SELECT COALESCE(SUM(Size), 0) FROM Files WHERE IsDirectory = 0),
+                (SELECT COUNT(*) FROM Users WHERE SuspendedAt IS NOT NULL)";
 
         await using var command = new SqlCommand(query, connection);
         await using var reader = await command.ExecuteReaderAsync();
         await reader.ReadAsync();
-        return (reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt64(4));
+        return (reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt64(4), reader.GetInt32(5));
     }
 }

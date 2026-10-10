@@ -94,6 +94,20 @@ describe("Login form", () => {
         expect(hasSessionHint()).toBe(true);
     });
 
+    it("tells a suspended account's owner it is suspended, without offering to resend a confirmation", async () => {
+        login.mockResolvedValue({ status: 403, data: { error: "This account has been suspended", suspended: true } });
+        renderLogin();
+        await userEvent.type(email(), "alex@example.com");
+        await userEvent.type(password(), "Passw0rd");
+        await submit();
+
+        const alert = await screen.findByRole("alert");
+        expect(alert).toHaveTextContent("This account has been suspended");
+        expect(alert).toHaveTextContent("Contact an administrator");
+        expect(screen.queryByRole("button", { name: "Resend confirmation email" })).toBeNull();
+        expect(getToken()).toBeNull();
+    });
+
     it("shows the server's error, e.g. a wrong password", async () => {
         login.mockResolvedValue({ status: 401, data: { error: "Invalid email or password" } });
         renderLogin();
