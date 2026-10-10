@@ -85,6 +85,50 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task ReplaceSessionTokenWithinGrace_IsRefused_WhenSignedOutSuspendedOrPasswordChanged()
+        {
+            var account = await TestAccounts.CreateAsync(_factory, "racegrace");
+            try
+            {
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<DatabaseServices>();
+                var sessionId = await db.CreateSessionAsync(account.UserId, "test", "127.0.0.1");
+                var expires = DateTime.UtcNow.AddDays(1);
+                var seen = (await db.GetUserAuthStateAsync(account.UserId)).TokensValidAfter;
+
+                // No live token in the session (signed out): refused, nothing stored
+                var none = "grace-none-" + Guid.NewGuid();
+                (await db.ReplaceSessionTokenWithinGraceAsync(account.UserId, sessionId, none, expires, seen)).Should().BeFalse();
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE TokenHash = @H", ("@H", none))).Should().Be(0);
+
+                (await db.StoreRefreshTokenAsync(account.UserId, sessionId, "grace-live-" + Guid.NewGuid(), expires)).Should().BeTrue();
+
+                // Suspended: refused, and the live token is left as it was (the transaction rolled back)
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET SuspendedAt = SYSUTCDATETIME() WHERE Id = @Id", ("@Id", account.UserId));
+                (await db.ReplaceSessionTokenWithinGraceAsync(account.UserId, sessionId, "grace-susp-" + Guid.NewGuid(), expires, seen)).Should().BeFalse();
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET SuspendedAt = NULL WHERE Id = @Id", ("@Id", account.UserId));
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE SessionId = @S AND RevokedAt IS NULL", ("@S", sessionId))).Should().Be(1);
+
+                // A password change since it was read: refused
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET TokensValidAfter = SYSUTCDATETIME() WHERE Id = @Id", ("@Id", account.UserId));
+                (await db.ReplaceSessionTokenWithinGraceAsync(account.UserId, sessionId, "grace-late-" + Guid.NewGuid(), expires, seen)).Should().BeFalse();
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE SessionId = @S AND RevokedAt IS NULL", ("@S", sessionId))).Should().Be(1);
+
+                // Seeing the current value: the live token is replaced by exactly one new one
+                var current = (await db.GetUserAuthStateAsync(account.UserId)).TokensValidAfter;
+                var fresh = "grace-ok-" + Guid.NewGuid();
+                (await db.ReplaceSessionTokenWithinGraceAsync(account.UserId, sessionId, fresh, expires, current)).Should().BeTrue();
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE SessionId = @S AND RevokedAt IS NULL", ("@S", sessionId))).Should().Be(1);
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE TokenHash = @H AND RevokedAt IS NULL", ("@H", fresh))).Should().Be(1);
+            }
+            finally
+            {
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET SuspendedAt = NULL WHERE Id = @Id", ("@Id", account.UserId));
+                (await account.Client.DeleteAsync("/user")).Dispose();
+            }
+        }
+
+        [Fact]
         public async Task Gate_DoesNotCacheAStateReadBeforeAnEvict()
         {
             using var cache = new MemoryCache(new MemoryCacheOptions());

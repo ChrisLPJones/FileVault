@@ -31,24 +31,78 @@ public partial class DatabaseServices
             : null;
     }
 
-    // How many confirmation links were sent for this user since the given time, and when the
-    // latest was sent (rows are kept until they expire, which is longer than the daily window)
-    public async Task<(int Count, DateTime? LastSentUtc)> GetEmailChangeSendStatsAsync(string userId, DateTime sinceUtc)
+    public enum EmailChangeStoreOutcome { Stored, DailyLimit, Cooldown, NotFound }
+
+    // Check the send limits and store a new confirmation link as one step, so parallel requests
+    // can't all pass the check: at most maxPerDay links since sinceUtc (the caller passes 24 hours
+    // ago; rows are kept until they expire, which is longer than that), and one per cooldown. The user's row is locked for the transaction (the same Users-then-AccountTokens
+    // order as ConfirmEmailChangeAsync), which serialises requests for one account only.
+    // Storing works like StoreAccountTokenAsync: earlier unused links stop working.
+    public Task<EmailChangeStoreOutcome> TryStoreEmailChangeTokenAsync(string userId, string tokenHash, string email,
+        DateTime expiresAtUtc, DateTime sinceUtc, int maxPerDay, TimeSpan cooldown) =>
+        RetryOnDeadlockAsync(() => TryStoreEmailChangeTokenOnceAsync(userId, tokenHash, email, expiresAtUtc, sinceUtc, maxPerDay, cooldown));
+
+    private async Task<EmailChangeStoreOutcome> TryStoreEmailChangeTokenOnceAsync(string userId, string tokenHash, string email,
+        DateTime expiresAtUtc, DateTime sinceUtc, int maxPerDay, TimeSpan cooldown)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
-        const string query = @"
+        await using (var lockUser = new SqlCommand("SELECT 1 FROM Users WITH (UPDLOCK, HOLDLOCK) WHERE Id = @UserId", connection, transaction))
+        {
+            lockUser.Parameters.AddWithValue("@UserId", userId);
+            // No row: the account was deleted meanwhile
+            if (await lockUser.ExecuteScalarAsync() == null)
+            {
+                await transaction.RollbackAsync();
+                return EmailChangeStoreOutcome.NotFound;
+            }
+        }
+
+        int count;
+        DateTime? last;
+        await using (var stats = new SqlCommand(@"
             SELECT COUNT(*), MAX(CreatedAt) FROM AccountTokens
-            WHERE UserId = @UserId AND Purpose = @Purpose AND CreatedAt > @Since";
-        await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Purpose", AccountEmailService.ChangePurpose);
-        command.Parameters.Add("@Since", System.Data.SqlDbType.DateTime2).Value = sinceUtc;
+            WHERE UserId = @UserId AND Purpose = @Purpose AND CreatedAt > @Since", connection, transaction))
+        {
+            stats.Parameters.AddWithValue("@UserId", userId);
+            stats.Parameters.AddWithValue("@Purpose", AccountEmailService.ChangePurpose);
+            stats.Parameters.Add("@Since", System.Data.SqlDbType.DateTime2).Value = sinceUtc;
+            await using var reader = await stats.ExecuteReaderAsync();
+            await reader.ReadAsync();
+            count = reader.GetInt32(0);
+            last = reader.IsDBNull(1) ? null : DateTime.SpecifyKind(reader.GetDateTime(1), DateTimeKind.Utc);
+        }
 
-        await using var reader = await command.ExecuteReaderAsync();
-        await reader.ReadAsync();
-        return (reader.GetInt32(0), reader.IsDBNull(1) ? null : DateTime.SpecifyKind(reader.GetDateTime(1), DateTimeKind.Utc));
+        if (count >= maxPerDay)
+        {
+            await transaction.RollbackAsync();
+            return EmailChangeStoreOutcome.DailyLimit;
+        }
+        if (cooldown > TimeSpan.Zero && last is { } sent && DateTime.UtcNow - sent < cooldown)
+        {
+            await transaction.RollbackAsync();
+            return EmailChangeStoreOutcome.Cooldown;
+        }
+
+        await using (var store = new SqlCommand(@"
+            DELETE FROM AccountTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
+            UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
+            WHERE UserId = @UserId AND Purpose = @Purpose AND UsedAt IS NULL;
+            INSERT INTO AccountTokens (UserId, Purpose, TokenHash, Email, ExpiresAt)
+            VALUES (@UserId, @Purpose, @TokenHash, @Email, @ExpiresAt);", connection, transaction))
+        {
+            store.Parameters.AddWithValue("@UserId", userId);
+            store.Parameters.AddWithValue("@Purpose", AccountEmailService.ChangePurpose);
+            store.Parameters.AddWithValue("@TokenHash", tokenHash);
+            store.Parameters.AddWithValue("@Email", email);
+            store.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
+            await store.ExecuteNonQueryAsync();
+        }
+
+        await transaction.CommitAsync();
+        return EmailChangeStoreOutcome.Stored;
     }
 
     // Drop the pending change: both of its links stop working

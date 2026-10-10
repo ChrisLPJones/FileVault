@@ -131,6 +131,46 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task ResettingThePassword_StopsEveryAccessToken_AndRefreshCookie()
+        {
+            var email = NewEmail();
+            await NewUserAsync(_app, email);
+            var anonymous = Anonymous(_app);
+
+            var sessions = new List<(string Token, string Cookie)>();
+            for (var i = 0; i < 2; i++)
+            {
+                var login = await anonymous.PostAsJsonAsync("/user/login", new LoginModel { Email = email, Password = Password });
+                var token = (await ReadJsonAsync(login)).GetProperty("success").GetString()!;
+                sessions.Add((token, login.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("fv_refresh=")).Split(';')[0]));
+            }
+
+            async Task<HttpStatusCode> InfoAsync(string token)
+            {
+                var request = new HttpRequestMessage(HttpMethod.Get, "/user/info");
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                return (await anonymous.SendAsync(request)).StatusCode;
+            }
+
+            foreach (var session in sessions)
+                (await InfoAsync(session.Token)).Should().Be(HttpStatusCode.OK);
+
+            (await anonymous.PostAsJsonAsync("/user/forgot-password", new { email })).StatusCode.Should().Be(HttpStatusCode.OK);
+            var resetToken = await WaitForTokenAsync(email, "reset-password");
+            (await anonymous.PostAsJsonAsync("/user/reset-password", new { token = resetToken, newPassword = "N3wPassword!" }))
+                .StatusCode.Should().Be(HttpStatusCode.OK);
+
+            foreach (var session in sessions)
+            {
+                (await InfoAsync(session.Token)).Should().Be(HttpStatusCode.Unauthorized);
+                var refresh = new HttpRequestMessage(HttpMethod.Post, "/user/refresh");
+                refresh.Headers.Add("Cookie", session.Cookie);
+                (await anonymous.SendAsync(refresh)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            }
+            (await LoginStatusAsync(email, "N3wPassword!")).Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
         public async Task ResettingThePassword_AlsoConfirmsTheAddress()
         {
             var email = NewEmail();

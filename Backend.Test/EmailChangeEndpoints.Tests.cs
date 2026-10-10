@@ -309,6 +309,32 @@ namespace Backend.Test
             (await capped.PostAsync("/user/email/resend", null)).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         }
 
+        [Theory]
+        [InlineData("0", "2", 2)]
+        [InlineData("60", "5", 1)]
+        public async Task ParallelRequests_CannotGetPastTheLimits(string cooldownSeconds, string maxPerDay, int expected)
+        {
+            var app = AppWith(("EmailChange:ResendCooldownSeconds", cooldownSeconds), ("EmailChange:MaxPerDay", maxPerDay));
+            var email = NewEmail();
+            var client = await NewUserAsync(app, email);
+            var targets = Enumerable.Range(0, 8).Select(_ => NewEmail()).ToList();
+
+            var responses = await Task.WhenAll(targets.Select(target => ChangeAsync(client, target)));
+
+            responses.Count(r => r.StatusCode == HttpStatusCode.OK).Should().Be(expected);
+            responses.Count(r => r.StatusCode == HttpStatusCode.TooManyRequests).Should().Be(targets.Count - expected);
+
+            (await TestDatabase.ScalarAsync(Factory,
+                "SELECT COUNT(*) FROM AccountTokens t JOIN Users u ON u.Id = t.UserId WHERE u.Email = @Email AND t.Purpose = @Purpose",
+                ("@Email", email), ("@Purpose", AccountEmailService.ChangePurpose))).Should().Be(expected);
+
+            // Only the stored requests send a link
+            for (var i = 0; i < 100 && targets.Sum(t => LinksTo(t, "confirm-email")) < expected; i++)
+                await Task.Delay(50);
+            await Task.Delay(300);
+            targets.Sum(t => LinksTo(t, "confirm-email")).Should().Be(expected);
+        }
+
         [Fact]
         public async Task CancellingInTheApp_ClearsThePendingChange_AndKillsBothLinks()
         {
@@ -366,6 +392,11 @@ namespace Backend.Test
 
             var change = await client.PostAsJsonAsync("/user/password", new { currentPassword = Password, newPassword = "N3wPassword!" });
             change.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            // The access token held before the change no longer works; the one it returns does
+            (await client.GetAsync("/user/info")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", (await ReadJsonAsync(change)).GetProperty("token").GetString());
 
             (await InfoAsync(client)).TryGetProperty("pendingEmail", out _).Should().BeFalse();
             (await ConfirmAsync(client, token)).StatusCode.Should().Be(HttpStatusCode.BadRequest);

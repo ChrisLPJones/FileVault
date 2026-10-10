@@ -304,11 +304,11 @@ namespace Backend.Test
             _db.StartApi(_baseFactory, Owner);
             (await _db.AdminCountAsync()).Should().Be(0);
 
-            // Resetting the password (the mail goes to the squatter's account now) doesn't promote it, and their token stays powerless
+            // Resetting the password (the mail goes to the squatter's account now) doesn't promote it, and their token is no use (the reset ends it)
             await ResetPasswordAsync(api, Owner, OwnerPassword);
             (await _db.IsAdminAsync(Owner)).Should().BeFalse();
             (await _db.AdminCountAsync()).Should().Be(0);
-            (await squatter.Client.GetAsync("/admin/users")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await squatter.Client.GetAsync("/admin/users")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
 
         [Fact]

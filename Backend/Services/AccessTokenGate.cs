@@ -5,7 +5,7 @@ namespace Backend.Services;
 
 // Decides whether an access token that is otherwise valid (signature, expiry) may still be used.
 // It is refused when its user no longer exists (the account was deleted), or is suspended, or when it was issued
-// before the user's TokensValidAfter (an administrator set their password). Access tokens are
+// before the user's TokensValidAfter (their password was changed or reset, or an administrator set it). Access tokens are
 // self-contained, so without this they would keep working until they expire.
 //
 // The check reads one row per request, so each user's answer is kept in memory for
@@ -16,7 +16,7 @@ public sealed class AccessTokenGate(IMemoryCache cache, IConfiguration config)
 {
     // Access tokens carry their issue time to the millisecond in this claim. The standard "iat"
     // claim has one-second resolution, which would refuse a token issued just after the change
-    // in the same second (a login right after an administrator sets the password).
+    // in the same second (a login right after the password is changed).
     public const string IssuedAtMillisecondsClaim = "fv_iat_ms";
 
     private static string CacheKey(string userId) => $"user-auth-state:{userId}";

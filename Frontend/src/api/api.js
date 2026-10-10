@@ -26,7 +26,11 @@ let refreshPromise = null;
 const LOCK_NAME = "fv-refresh";
 const withRefreshLock = (task) => (navigator.locks?.request ? navigator.locks.request(LOCK_NAME, task) : task());
 
-const postRefresh = () => axios.post(`${API_BASE_URL}/user/refresh`, null, { withCredentials: true });
+// The timeout keeps a hung request from holding the refresh lock (and every request waiting on it);
+// it rejects without a response, so it counts as transient and the session is kept
+const REFRESH_TIMEOUT_MS = 15000;
+const postRefresh = () =>
+    axios.post(`${API_BASE_URL}/user/refresh`, null, { withCredentials: true, timeout: REFRESH_TIMEOUT_MS });
 
 // A 401 the server marks raced lost a rotation race with another tab, which holds a valid cookie
 const isRaced = (error) => error?.response?.status === 401 && error.response.data?.raced === true;
@@ -131,7 +135,17 @@ window.addEventListener("storage", (event) => {
 api.interceptors.request.use(async (config) => {
     if (config.skipAuth) return config;
 
+    const hadToken = Boolean(getToken());
     const token = await getFreshToken();
+    if (hadToken && !token) {
+        // The refresh found the session over: don't send the request unauthenticated (a 401 would
+        // surface as an empty list or a generic error); go to the login page instead
+        // Only protected pages are sent away; elsewhere (e.g. /confirm-email) the caller shows its own error
+        if (PROTECTED_PATHS.some((path) => window.location.pathname.startsWith(path))) redirectToLogin();
+        const error = new Error("Session expired");
+        error.sessionExpired = true;
+        throw error;
+    }
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
