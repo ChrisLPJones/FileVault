@@ -1,0 +1,135 @@
+# FileVault on a server: runs the released images from GHCR, nothing is built here.
+# Keep in sync with ../docker-compose.yml (the build-from-source stack); CI compares the settings.
+#
+#   curl -fsSLO https://raw.githubusercontent.com/ChrisLPJones/FileVault/<tag>/deploy/docker-compose.yml
+#   curl -fsSL  https://raw.githubusercontent.com/ChrisLPJones/FileVault/<tag>/.env.example -o .env   # then fill it in
+#   docker compose up -d
+#
+# FILEVAULT_VERSION picks the release (default latest; pin it, e.g. 1.2.3, to update on purpose).
+# The API and the frontend are published on 127.0.0.1 only: put a TLS reverse proxy in front
+# (docs/DEPLOYMENT.md, "Deploy to a VPS").
+
+name: filevault
+
+x-required: &sa-password ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env (see .env.example)}
+# The API's own, least-privilege SQL login (see Backend/Docker/db/app-login.sql). Upgrading an existing install: add this to .env
+x-app-password: &app-password ${MSSQL_APP_PASSWORD:?Set MSSQL_APP_PASSWORD in .env (a new password for the API database login, different from MSSQL_SA_PASSWORD; openssl rand -base64 24; see .env.example and docs/DEPLOYMENT.md "Upgrading")}
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: *sa-password
+    volumes:
+      - sql_data:/var/opt/mssql
+    # Not published: only the API talks to the database
+    # Healthy only once logins work AND SecureVaultDb (if it exists) has finished
+    # recovery; otherwise db-init can hit 'USE SecureVaultDb' mid-recovery (Msg 904).
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q \"IF EXISTS (SELECT 1 FROM sys.databases WHERE name = 'SecureVaultDb' AND state_desc <> 'ONLINE') THROW 50000, 'SecureVaultDb not online yet', 1\" -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  # Creates/updates the schema and the API's database login once SQL Server is healthy, then exits.
+  # This is the only service (besides sqlserver) that has the sa password.
+  db-init:
+    image: ghcr.io/chrislpjones/filevault-db-init:${FILEVAULT_VERSION:-latest}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      SQLCMDPASSWORD: *sa-password
+      FV_APP_PASSWORD: *app-password
+    restart: "no"
+
+  api:
+    image: ghcr.io/chrislpjones/filevault-api:${FILEVAULT_VERSION:-latest}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=SecureVaultDb;User Id=filevault_app;Password=${MSSQL_APP_PASSWORD};TrustServerCertificate=True;Connection Timeout=5;"
+      Jwt__Key: ${JWT_KEY:?Set JWT_KEY in .env (see .env.example)}
+      Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:?Set ENCRYPTION_MASTER_KEY in .env (see .env.example)}
+      # Only for the rotate-master-key command (docker compose run --rm api rotate-master-key); leave unset otherwise
+      Encryption__NewMasterKey: ${ENCRYPTION_MASTER_KEY_NEW:-}
+      Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:5173}
+      # Optional: the one email that becomes the first administrator, once confirmed
+      Admin__InitialEmail: ${INITIAL_ADMIN_EMAIL:-}
+      # Only read so the API can warn that ADMIN_EMAILS is no longer used (empty value doesn't warn)
+      Admin__Emails: ${ADMIN_EMAILS:-}
+      # self-hosted (default) or hosted; hosted turns on inactive-account removal and the first-login notice
+      App__Mode: ${FILEVAULT_MODE:-self-hosted}
+      # Hosted mode only: the address users are told to email to ask for a permanent account
+      Hosted__ContactEmail: ${HOSTED_CONTACT_EMAIL:-}
+      # Where to report abuse, shown on the sign-in, sign-up, share and settings pages. Empty: none
+      # (hosted mode falls back to HOSTED_CONTACT_EMAIL)
+      App__AbuseContactEmail: ${ABUSE_CONTACT_EMAIL:-}
+      # Uploads are refused once the storage drive is this percent full (1-99; 0 = no limit; empty = 80)
+      Storage__MaxDiskUsePercent: ${STORAGE_MAX_DISK_USE_PERCENT:-}
+      # Links in emails point here
+      App__FrontendUrl: ${FRONTEND_URL:-http://localhost:5173}
+      # SMTP for password reset / email confirmation. Required in hosted mode (the API refuses to start without it);
+      # self-hosted without it logs the emails, links included
+      Email__Smtp__Host: ${SMTP_HOST:-}
+      Email__Smtp__Port: ${SMTP_PORT:-587}
+      Email__Smtp__User: ${SMTP_USER:-}
+      Email__Smtp__Password: ${SMTP_PASSWORD:-}
+      Email__Smtp__From: ${SMTP_FROM:-}
+      # Off unless set in .env; see docs/DEPLOYMENT.md
+      Swagger__Enabled: ${SWAGGER_ENABLED:-false}
+      ForwardedHeaders__Enabled: ${BEHIND_HTTPS_PROXY:-false}
+      Jwt__SecureRefreshCookie: ${BEHIND_HTTPS_PROXY:-false}
+      # Country lookup for the admin page's "Last login" column; optional, see the geoipupdate service
+      GeoIp__DatabasePath: /data/geoip/GeoLite2-Country.mmdb
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:8080"
+    volumes:
+      - file_storage:/data/storage
+      - geoip_data:/data/geoip:ro
+    # Emailed links (when SMTP isn't set up) and sign-in IPs end up in this log: keep it from growing forever
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  # Optional: keeps a local GeoLite2 Country database up to date (needs a free MaxMind account).
+  # Start it with:  docker compose --profile geoip up -d
+  # It only downloads the database; no user address ever leaves the server.
+  # Without a MaxMind account you can copy GeoLite2-Country.mmdb into the geoip_data volume instead.
+  geoipupdate:
+    profiles: ["geoip"]
+    image: ghcr.io/maxmind/geoipupdate:v7.1.0
+    environment:
+      GEOIPUPDATE_ACCOUNT_ID: ${GEOIPUPDATE_ACCOUNT_ID:-}
+      GEOIPUPDATE_LICENSE_KEY: ${GEOIPUPDATE_LICENSE_KEY:-}
+      GEOIPUPDATE_EDITION_IDS: GeoLite2-Country
+      GEOIPUPDATE_FREQUENCY: "72"
+    volumes:
+      - geoip_data:/usr/share/GeoIP
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/chrislpjones/filevault-frontend:${FILEVAULT_VERSION:-latest}
+    # Read when the container starts (nginx writes it into /config.js and the CSP), so changing it needs no rebuild
+    environment:
+      API_URL: ${API_URL:-http://localhost:3000}
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+    restart: unless-stopped
+
+volumes:
+  sql_data:
+  # Encrypted files. Back this up together with the database and ENCRYPTION_MASTER_KEY.
+  file_storage:
+  # GeoLite2 Country database (never committed or built into the image: MaxMind's licence forbids redistribution)
+  geoip_data:

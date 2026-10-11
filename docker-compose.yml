@@ -35,35 +35,13 @@ services:
   # Creates/updates the schema and the API's database login once SQL Server is healthy, then exits.
   # This is the only service (besides sqlserver) that has the sa password.
   db-init:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    build: ./Backend/Docker/db
     depends_on:
       sqlserver:
         condition: service_healthy
     environment:
       SQLCMDPASSWORD: *sa-password
       FV_APP_PASSWORD: *app-password
-    volumes:
-      - ./Backend/Docker/db/init.sql:/init.sql:ro
-      - ./Backend/Docker/db/app-login.sql:/app-login.sql:ro
-    # Retries both scripts: the database can still be recovering right after a restart.
-    # sqlcmd reads $(FV_APP_PASSWORD) from the environment, so the password is not on a command line.
-    # The login password goes into a T-SQL literal and the API's connection string, so refuse characters that would break either.
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        case "$$FV_APP_PASSWORD" in
-          ""|*[\'\"\;\$$\ ]*) echo "MSSQL_APP_PASSWORD must not be empty or contain quotes, semicolons, dollar signs or spaces" >&2; exit 1;;
-        esac
-        for i in 1 2 3 4 5 6 7 8 9 10; do
-          /opt/mssql-tools18/bin/sqlcmd -C -S sqlserver -U sa -b -i /init.sql \
-            && /opt/mssql-tools18/bin/sqlcmd -C -S sqlserver -U sa -b -i /app-login.sql -v FV_APP_LOGIN=filevault_app \
-            && exit 0
-          echo "database setup failed (attempt $$i/10), retrying in 3s"
-          sleep 3
-        done
-        echo "database setup failed; if the messages above mention the password, MSSQL_APP_PASSWORD must meet SQL Server's policy (8+ characters, three of: upper, lower, digit, symbol)" >&2
-        exit 1
     restart: "no"
 
   api:
@@ -139,8 +117,9 @@ services:
   frontend:
     build:
       context: ./Frontend
-      args:
-        VITE_API_BASE_URL: ${API_URL:-http://localhost:3000}
+    # Read when the container starts (nginx writes it into /config.js and the CSP), so changing it needs no rebuild
+    environment:
+      API_URL: ${API_URL:-http://localhost:3000}
     depends_on:
       - api
     ports:

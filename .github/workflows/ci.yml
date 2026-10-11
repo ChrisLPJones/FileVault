@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend build & tests
@@ -23,9 +26,9 @@ jobs:
           - 1433:1433
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 8.0.x
 
@@ -65,9 +68,9 @@ jobs:
         working-directory: Frontend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -93,15 +96,97 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Validate compose file
+      - name: Validate compose files
         run: |
           printf 'MSSQL_SA_PASSWORD=x\nMSSQL_APP_PASSWORD=x\nJWT_KEY=x\nENCRYPTION_MASTER_KEY=x\n' > .env
           docker compose config --quiet
+          docker compose -f deploy/docker-compose.yml --env-file .env config --quiet
+
+      # The server file repeats the source file's services: their settings must not drift apart
+      - name: Compare the two compose files
+        run: |
+          strip='.services | map_values(del(.build, .image, .ports))'
+          docker compose config --format json | jq -S "$strip" > src.json
+          docker compose -f deploy/docker-compose.yml --env-file .env config --format json | jq -S "$strip" > dep.json
+          diff src.json dep.json || { echo "::error::docker-compose.yml and deploy/docker-compose.yml differ (other than build, image and ports)"; exit 1; }
 
       - name: Build API image
         run: docker build -t filevault-api ./Backend
 
+      - name: Build db-init image
+        run: docker build -t filevault-db-init ./Backend/Docker/db
+
       - name: Build frontend image
         run: docker build -t filevault-frontend ./Frontend
+
+      # API_URL is read at container start: the config the app loads and the CSP must follow it,
+      # and a value that could break out of either must stop the container
+      - name: Frontend runtime config
+        run: |
+          id=$(docker run -d -p 127.0.0.1:8080:80 -e API_URL=https://api.example.test/ filevault-frontend)
+          trap 'docker rm -f "$id" > /dev/null' EXIT
+          for i in $(seq 1 20); do curl -fsS -o /dev/null http://127.0.0.1:8080/config.js && break; sleep 1; done
+          curl -fsS -D headers.txt -o config.js http://127.0.0.1:8080/config.js
+          [ "$(cat config.js)" = 'window.__FILEVAULT_CONFIG__ = Object.freeze({ apiUrl: "https://api.example.test" });' ] || { cat config.js; exit 1; }
+          grep -qi '^cache-control: no-store' headers.txt
+          grep -qi '^content-type: .*javascript' headers.txt
+          curl -fsS -D - -o /dev/null http://127.0.0.1:8080/ | grep -i '^content-security-policy:' | grep -q "connect-src 'self' https://api.example.test;"
+          for bad in 'x";alert(1)//' 'javascript:1' 'https://a.test/x y' 'https://a.test?x=1' "$(printf 'x"}),alert(1)//\nhttps://a.test')" "$(printf 'https://a.test\r')"; do
+            bid=$(docker run -d -e API_URL="$bad" filevault-frontend)
+            code=$(timeout 60 docker wait "$bid" || echo timeout)
+            docker rm -f "$bid" > /dev/null
+            [ "$code" != 0 ] && [ "$code" != timeout ] || { echo "::error::frontend accepted API_URL=$bad"; exit 1; }
+          done
+
+  # Runs only for a version tag such as v1.2.3 (pushed to the repository), after everything above passed
+  publish:
+    name: Publish images
+    needs: [backend, frontend, docker]
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        include:
+          - image: filevault-api
+            context: ./Backend
+          - image: filevault-frontend
+            context: ./Frontend
+          - image: filevault-db-init
+            context: ./Backend/Docker/db
+
+    steps:
+      # Only vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-prerelease publishes; any other v* tag fails here
+      - name: Check the tag is a version
+        run: |
+          echo "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || { echo "::error::tag $GITHUB_REF_NAME is not vMAJOR.MINOR.PATCH[-prerelease]; nothing published"; exit 1; }
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # v1.2.3 -> 1.2.3 and latest; a pre-release such as v1.2.3-rc.1 gets only its own tag
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: type=semver,pattern={{version}}
+
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

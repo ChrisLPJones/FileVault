@@ -20,9 +20,9 @@ npm run dev             # http://localhost:5173
 | `npm run lint` | ESLint (CI fails on errors) |
 | `npm test` | Vitest and Testing Library tests, run once (CI runs these too); `npm run test:watch` reruns on changes |
 
-`VITE_API_BASE_URL` is compiled into the bundle, so rebuild after changing it. In Docker, nginx serves the
-build with a Content-Security-Policy that allows the API's origin, worked out from the same URL
-(`nginx/default.conf.template`).
+`VITE_API_BASE_URL` is compiled into the bundle and is used by `npm run dev` and the tests. In Docker it is not: the
+container reads `API_URL` at start-up, writes `/config.js` (loaded before the app) and builds the
+Content-Security-Policy from the same URL (`nginx/15-api-origin.envsh`, `nginx/default.conf.template`).
 
 ## Where things are
 

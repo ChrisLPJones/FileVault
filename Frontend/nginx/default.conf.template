@@ -1,5 +1,5 @@
 # FileVault frontend (nginx). This is a template: when the container starts, the nginx image
-# substitutes the API_ORIGIN environment variable (worked out from API_URL by 15-api-origin.envsh)
+# substitutes the API_ORIGIN environment variable (worked out from API_URL by 15-api-origin.envsh, which also writes /config.js)
 # and writes the result to /etc/nginx/conf.d/default.conf.
 
 # HSTS only when the request reached the HTTPS proxy in front of this container over HTTPS.
@@ -32,6 +32,14 @@ server {
     location /assets/ {
         include /etc/nginx/snippets/security-headers.conf;
         add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # Runtime settings written at start-up from API_URL (15-api-origin.envsh); never cached, so
+    # changing API_URL takes effect on the next page load
+    location = /config.js {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-store" always;
         try_files $uri =404;
     }
 
