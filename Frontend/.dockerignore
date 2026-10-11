@@ -5,7 +5,7 @@ electron/
 .vite/
 .vscode/
 
-# Local env files: the API URL is passed as a build argument instead
+# Local env files: the API URL comes from the API_URL environment variable at run time
 .env
 .env.*
 !.env.example

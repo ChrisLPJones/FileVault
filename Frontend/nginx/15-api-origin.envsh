@@ -1,6 +1,25 @@
 #!/bin/sh
 # Sourced by the nginx image's entrypoint before it fills in /etc/nginx/templates/*.template.
-# The Content-Security-Policy needs the API's origin (scheme, host and port) rather than its
-# full URL: "https://example.com/api" -> "https://example.com". Empty if the API is on this origin.
-API_ORIGIN=$(printf '%s' "${API_URL:-}" | sed -nE 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/?#]+).*#\1#p')
+# Reads API_URL (where the browser reaches the API; empty = same origin) and
+#  - checks it against an allowlist, so nothing that could break out of a JavaScript string or an
+#    nginx directive gets through; an invalid value stops the container (exit in a sourced file),
+#  - writes /usr/share/nginx/html/config.js, which the app reads instead of a build-time URL,
+#  - sets API_ORIGIN (scheme, host and port) for the Content-Security-Policy:
+#    "https://example.com/api" -> "https://example.com". Empty if the API is on this origin.
+fv_api_url=${API_URL:-}
+fv_api_url=${fv_api_url%/}
+fv_nl='
+'
+fv_cr=$(printf '\r')
+# grep matches line by line, so a value with a line break must be refused before it
+case "$fv_api_url" in *"$fv_nl"*|*"$fv_cr"*) fv_bad=1;; *) fv_bad=;; esac
+if [ -n "$fv_bad" ] || { [ -n "$fv_api_url" ] && ! printf '%s' "$fv_api_url" | grep -Eq '^https?://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?(/[A-Za-z0-9._~%/-]*)?$'; }; then
+  echo "API_URL must be empty or an http(s) URL such as https://api.example.com (letters, digits, '.', '-', optional port and path; no query string, spaces or quotes)" >&2
+  exit 1
+fi
+API_ORIGIN=$(printf '%s' "$fv_api_url" | sed -nE 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/?#]+).*#\1#p')
 export API_ORIGIN
+fv_config=/usr/share/nginx/html/config.js
+printf 'window.__FILEVAULT_CONFIG__ = Object.freeze({ apiUrl: "%s" });\n' "$fv_api_url" > "$fv_config.tmp"
+mv "$fv_config.tmp" "$fv_config"
+unset fv_api_url fv_config fv_nl fv_cr fv_bad

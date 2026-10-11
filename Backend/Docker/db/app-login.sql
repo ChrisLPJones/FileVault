@@ -6,7 +6,7 @@
 --   FV_APP_LOGIN     the login name (docker-compose.yml: filevault_app)
 --   FV_APP_PASSWORD  its password (MSSQL_APP_PASSWORD in .env)
 -- The values go into T-SQL literals, so they must not contain a quote;
--- the db-init shell command refuses a password with one.
+-- Backend/Docker/db/db-init.sh refuses a password with one.
 --
 -- The login can read and write the data in the dbo schema and nothing else:
 -- no DDL, not db_owner, not sysadmin. Safe to run repeatedly; changing the

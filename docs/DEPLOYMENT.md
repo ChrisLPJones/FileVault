@@ -4,6 +4,60 @@ How to run FileVault for real: behind HTTPS, with the right secrets, backed up, 
 security settings that matter. The quick start in the [README](../README.md#run-everything-with-docker)
 gets it running on `localhost`; this guide picks up from there.
 
+## Deploy to a VPS (released images)
+
+The quickest way to a real server: no source code, no build. A release publishes three images to
+the GitHub Container Registry (`ghcr.io/chrislpjones/filevault-api`, `-frontend` and `-db-init`),
+and `deploy/docker-compose.yml` runs them with SQL Server. Sections 1 to 9 below still apply
+(HTTPS, secrets, backups, keys); this section is the short path.
+
+**You need:** an amd64 server (the images are not built for ARM) with at least 2 GB RAM, Docker with
+Compose 2.24 or later, two hostnames on one registrable domain (for example `files.example.com` and
+`api.files.example.com`, see section 1) pointing at it, and a firewall that allows only 22, 80 and 443.
+
+1. **Fetch the compose file and settings** for the release you want (here `v1.0.0`; `<tag>` is the
+   release tag):
+
+   ```bash
+   mkdir filevault && cd filevault
+   curl -fsSLO https://raw.githubusercontent.com/ChrisLPJones/FileVault/v1.0.0/deploy/docker-compose.yml
+   curl -fsSL https://raw.githubusercontent.com/ChrisLPJones/FileVault/v1.0.0/.env.example -o .env
+   chmod 600 .env
+   ```
+
+2. **Fill in `.env`** (section 2): the four secrets, plus for a public server
+   `FRONTEND_URL=https://files.example.com`, `API_URL=https://api.files.example.com`,
+   `BEHIND_HTTPS_PROXY=true`, `INITIAL_ADMIN_EMAIL` (section 7) and the `SMTP_*` settings.
+   `FILEVAULT_VERSION` picks the release, e.g. `FILEVAULT_VERSION=1.0.0` (without the `v`). Without
+   it you get `latest`, the newest non-pre-release; pinning means a server only changes when you
+   decide. Optional `API_PORT` and `FRONTEND_PORT` change the loopback ports (3000 and 5173).
+
+3. **Registry access.** If the packages are public, nothing to do. New GHCR packages start out
+   private: the owner makes each one public once, in GitHub under the package's settings. While they
+   are private, log in on the server with a personal access token that has only the `read:packages`
+   scope: `echo "$TOKEN" | docker login ghcr.io -u <github-user> --password-stdin`.
+
+4. **Start it:** `docker compose up -d`. The API and the frontend listen on `127.0.0.1` only, so
+   nothing is reachable until you add the reverse proxy: use the Caddy or nginx examples in
+   section 1 (`reverse_proxy 127.0.0.1:5173` and `127.0.0.1:3000`), then register the first
+   administrator (section 7).
+
+5. **Update:** set the new `FILEVAULT_VERSION` (or keep `latest`), then
+   `docker compose pull && docker compose up -d`. `db-init` applies schema changes first; `init.sql`
+   only adds, so the old version still runs against the upgraded database. **Roll back** by setting
+   the previous version and running the same two commands. Back up first (section 3).
+
+Changing `API_URL` later needs no new image: edit `.env` and run `docker compose up -d`.
+
+**Releasing (maintainers).** Push a tag like `v1.2.3` to the repository. CI runs all checks and then
+publishes the three images tagged `1.2.3` and `latest`; a pre-release tag such as `v1.2.3-rc.1`
+publishes only `1.2.3-rc.1`. After the first release, set each package public if you want servers to
+pull without a login.
+
+The source stack (`docker-compose.yml` in the repository) builds the same images locally. After
+pulling schema changes there, use `docker compose up --build -d` (the `db-init` image carries
+`init.sql`, so without `--build` it would be stale).
+
 ## 1. Serve it over HTTPS
 
 FileVault's containers speak plain HTTP. Put a reverse proxy in front of them that terminates TLS,
@@ -20,11 +74,11 @@ In `.env`:
 
 ```bash
 FRONTEND_URL=https://files.example.com        # CORS: the only origin allowed to call the API
-API_URL=https://api.files.example.com         # compiled into the frontend, and used in its CSP
+API_URL=https://api.files.example.com         # read by the frontend container at start-up (config.js and its CSP)
 BEHIND_HTTPS_PROXY=true                       # see below
 ```
 
-`API_URL` is a build argument, so rebuild after changing it: `docker compose up --build -d`.
+`API_URL` is read when the frontend container starts, so after changing it `docker compose up -d` is enough (no rebuild). It must be empty or an `http(s)://host[:port][/path]` URL (letters, digits, `.`, `-`; no query string, spaces or quotes); anything else stops the container with a message in its log.
 
 `BEHIND_HTTPS_PROXY=true` makes the API:
 
@@ -127,7 +181,9 @@ without the first four.
 | `ENCRYPTION_MASTER_KEY` | Encrypts every file's key, the two-factor secrets and share-link secrets. Exactly 32 bytes, base64: `openssl rand -base64 32`. The API refuses to start with a key other than the one the database was encrypted with |
 | `ENCRYPTION_MASTER_KEY_NEW` | Only while rotating the master key (section 4): the new key. Remove it afterwards |
 | `FRONTEND_URL` | Where the browser loads the app; the only origin the API accepts calls from |
-| `API_URL` | Where the browser reaches the API. Build-time: rebuild after changing it |
+| `API_URL` | Where the browser reaches the API. Read at container start: `docker compose up -d` after changing it |
+| `FILEVAULT_VERSION` | Server compose file only (`deploy/docker-compose.yml`): the image version to run (default `latest`); pin it, e.g. `1.0.0` |
+| `API_PORT`, `FRONTEND_PORT` | Server compose file only: loopback ports for the API and frontend (3000 and 5173) |
 | `BEHIND_HTTPS_PROXY` | `true` behind an HTTPS reverse proxy (section 1) |
 | `SWAGGER_ENABLED` | `true` to serve the API docs (section 5). Off by default |
 | `FILEVAULT_MODE` | Optional: `self-hosted` (default) or `hosted` (section 9). Anything else stops the API starting |
@@ -346,7 +402,8 @@ authentication, so leaving them off in production is about not advertising the A
   or `preload` in your proxy only if every subdomain is HTTPS too.
 
 The nginx config is a template (`/etc/nginx/templates/default.conf.template`); at start-up the
-container works out the API origin from `API_URL` and writes the real config. To check the headers:
+container validates `API_URL`, works out the API origin from it and writes the real config, plus
+`/config.js` (the API URL for the app; served `no-store`, same origin so the CSP covers it). To check the headers:
 
 ```bash
 curl -sI https://files.example.com/ | grep -iE "content-security|strict-transport|x-frame|referrer|permissions"
