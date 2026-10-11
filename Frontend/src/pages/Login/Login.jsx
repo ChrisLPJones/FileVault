@@ -46,6 +46,7 @@ function Login() {
         setLoginError(null);
         setUnverifiedEmail(null);
         setResendStatus(null);
+        setSuspended(false);
 
         const formErrors = validateForm();
         setErrors(formErrors);

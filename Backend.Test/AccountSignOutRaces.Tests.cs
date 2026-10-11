@@ -18,44 +18,7 @@ namespace Backend.Test
             _factory = TestAccounts.WithoutLoginLimit(factory);
 
         [Fact]
-        public async Task StoreRefreshToken_IsRefused_WhenTokensValidAfterChangedSinceItWasRead()
-        {
-            var account = await TestAccounts.CreateAsync(_factory, "race");
-            try
-            {
-                using var scope = _factory.Services.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<DatabaseServices>();
-                var sessionId = await db.CreateSessionAsync(account.UserId, "test", "127.0.0.1");
-                var expires = DateTime.UtcNow.AddDays(1);
-
-                // Unchanged since it was read (null): stored
-                (await db.StoreRefreshTokenAsync(account.UserId, sessionId, "race-ok-" + Guid.NewGuid(), expires, true, null))
-                    .Should().BeTrue();
-
-                // The administrator sets a password between the consume and the issue
-                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET TokensValidAfter = SYSUTCDATETIME() WHERE Id = @Id", ("@Id", account.UserId));
-
-                var hash = "race-late-" + Guid.NewGuid();
-                (await db.StoreRefreshTokenAsync(account.UserId, sessionId, hash, expires, true, null))
-                    .Should().BeFalse();
-                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE TokenHash = @H", ("@H", hash)))
-                    .Should().Be(0);
-
-                // Seeing the current value is fine, and an unguarded store (login) is unaffected
-                var current = (await db.GetUserAuthStateAsync(account.UserId)).TokensValidAfter;
-                (await db.StoreRefreshTokenAsync(account.UserId, sessionId, "race-cur-" + Guid.NewGuid(), expires, true, current))
-                    .Should().BeTrue();
-                (await db.StoreRefreshTokenAsync(account.UserId, sessionId, "race-open-" + Guid.NewGuid(), expires))
-                    .Should().BeTrue();
-            }
-            finally
-            {
-                (await account.Client.DeleteAsync("/user")).Dispose();
-            }
-        }
-
-        [Fact]
-        public async Task StoreRefreshToken_IsRefused_ForASuspendedUser_EvenWithoutTheGuard()
+        public async Task StoreRefreshToken_IsRefused_ForASuspendedUser()
         {
             var account = await TestAccounts.CreateAsync(_factory, "racesusp");
             try
@@ -76,6 +39,63 @@ namespace Backend.Test
                 // Unsuspended: stored again
                 await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET SuspendedAt = NULL WHERE Id = @Id", ("@Id", account.UserId));
                 (await db.StoreRefreshTokenAsync(account.UserId, sessionId, "race-unsusp-" + Guid.NewGuid(), expires)).Should().BeTrue();
+            }
+            finally
+            {
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET SuspendedAt = NULL WHERE Id = @Id", ("@Id", account.UserId));
+                (await account.Client.DeleteAsync("/user")).Dispose();
+            }
+        }
+
+        [Fact]
+        public async Task ConsumeAndReplace_ConsumesButStoresNothing_ForASuspendedUserOrAnExpiredToken()
+        {
+            var account = await TestAccounts.CreateAsync(_factory, "raceswap");
+            try
+            {
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<DatabaseServices>();
+                var sessionId = await db.CreateSessionAsync(account.UserId, "test", "127.0.0.1");
+                var expires = DateTime.UtcNow.AddDays(1);
+                var live = "swap-live-" + Guid.NewGuid();
+                (await db.StoreRefreshTokenAsync(account.UserId, sessionId, live, expires)).Should().BeTrue();
+
+                // Suspended: the old token is consumed, no replacement
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET SuspendedAt = SYSUTCDATETIME() WHERE Id = @Id", ("@Id", account.UserId));
+                var suspendedHash = "swap-susp-" + Guid.NewGuid();
+                var use = await db.ConsumeAndReplaceRefreshTokenAsync(live, suspendedHash, expires, "127.0.0.1", "test");
+                use.Should().NotBeNull();
+                use!.Valid.Should().BeTrue();
+                use.Stored.Should().BeFalse();
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE TokenHash = @H", ("@H", suspendedHash))).Should().Be(0);
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE TokenHash = @H AND RevokedAt IS NOT NULL", ("@H", live))).Should().Be(1);
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE Users SET SuspendedAt = NULL WHERE Id = @Id", ("@Id", account.UserId));
+
+                // Expired: consumed, not valid, no replacement
+                var expired = "swap-exp-" + Guid.NewGuid();
+                (await db.StoreRefreshTokenAsync(account.UserId, sessionId, expired, expires)).Should().BeTrue();
+                await TestDatabase.ExecuteAsync(_factory, "UPDATE RefreshTokens SET ExpiresAt = DATEADD(minute, -5, SYSUTCDATETIME()) WHERE TokenHash = @H", ("@H", expired));
+                var expiredReplacement = "swap-exp2-" + Guid.NewGuid();
+                use = await db.ConsumeAndReplaceRefreshTokenAsync(expired, expiredReplacement, expires, "127.0.0.1", "test");
+                use!.Valid.Should().BeFalse();
+                use.Stored.Should().BeFalse();
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE TokenHash = @H", ("@H", expiredReplacement))).Should().Be(0);
+
+                // Unknown token: nothing
+                (await db.ConsumeAndReplaceRefreshTokenAsync("swap-unknown-" + Guid.NewGuid(), "x", expires, null, "test")).Should().BeNull();
+
+                // Normal case: old revoked, new stored in the same session, a second use is a rotated-away one
+                var good = "swap-good-" + Guid.NewGuid();
+                var next = "swap-next-" + Guid.NewGuid();
+                (await db.StoreRefreshTokenAsync(account.UserId, sessionId, good, expires)).Should().BeTrue();
+                use = await db.ConsumeAndReplaceRefreshTokenAsync(good, next, expires, "127.0.0.1", "test");
+                use!.Valid.Should().BeTrue();
+                use.Stored.Should().BeTrue();
+                use.SessionId.Should().Be(sessionId);
+                (await TestDatabase.ScalarAsync(_factory, "SELECT COUNT(*) FROM RefreshTokens WHERE SessionId = @S AND RevokedAt IS NULL", ("@S", sessionId))).Should().Be(1);
+                use = await db.ConsumeAndReplaceRefreshTokenAsync(good, "swap-again-" + Guid.NewGuid(), expires, "127.0.0.1", "test");
+                use!.Valid.Should().BeFalse();
+                use.Replaced.Should().BeTrue();
             }
             finally
             {

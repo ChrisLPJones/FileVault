@@ -6,7 +6,7 @@ public partial class DatabaseServices
 {
     private const int DeadlockErrorNumber = 1205;
 
-    // SQL error 1205, or losing the admin-membership lock as a deadlock victim (sp_getapplock -3)
+    // SQL error 1205, or losing an applock (admin membership or email address) as a deadlock victim (sp_getapplock -3)
     private static bool IsDeadlock(Exception ex) =>
         ex is SqlException { Number: DeadlockErrorNumber } or AppLockDeadlockException;
 

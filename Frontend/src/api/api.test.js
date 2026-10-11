@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import axios from "axios";
-import { api, ensureSession, getErrorMessage, logout, refreshAccessToken } from "./api";
+import { api, ensureSession, getErrorMessage, getRequestToken, logout, refreshAccessToken } from "./api";
 import { SESSION_HINT_KEY, getToken, hasSessionHint, setToken, startSession } from "../utils/auth";
 import { makeToken } from "../test/tokens";
 
@@ -224,7 +224,7 @@ describe("refresh failures", () => {
         expect(refreshTimeouts).toEqual([15000]);
     });
 
-    it("treats a refresh timeout as transient: session kept, no redirect", async () => {
+    it("treats a refresh timeout as transient: retried once, then session kept, no redirect", async () => {
         const token = makeToken();
         startSession(token);
         server = (config) => {
@@ -233,10 +233,74 @@ describe("refresh failures", () => {
         };
 
         await expect(refreshAccessToken()).rejects.toMatchObject({ code: "ECONNABORTED" });
+        expect(requests.filter((r) => r.url.endsWith("/user/refresh"))).toHaveLength(2);
         await expect(api.get("/files")).rejects.toMatchObject({ response: { status: 401 } });
         expect(getToken()).toBe(token);
         expect(hasSessionHint()).toBe(true);
         expect(assign).not.toHaveBeenCalled();
+    });
+
+    it("retries a timed-out refresh once inside the same lock hold", async () => {
+        startSession(makeToken({ expiresIn: -60 }));
+        const request = vi.fn((name, task) => task());
+        Object.defineProperty(navigator, "locks", { value: { request }, configurable: true });
+        const fresh = makeToken();
+        let calls = 0;
+        server = () => {
+            if (++calls === 1) throw new axios.AxiosError("timeout of 15000ms exceeded", "ECONNABORTED");
+            return { data: { success: fresh } };
+        };
+
+        try {
+            await expect(refreshAccessToken()).resolves.toBe(fresh);
+        } finally {
+            delete navigator.locks;
+        }
+        expect(calls).toBe(2);
+        expect(request).toHaveBeenCalledTimes(1);
+        expect(getToken()).toBe(fresh);
+    });
+
+    it("retries a refresh that failed with a network error once", async () => {
+        startSession(makeToken({ expiresIn: -60 }));
+        const fresh = makeToken();
+        let calls = 0;
+        server = () => {
+            if (++calls === 1) throw networkError();
+            return { data: { success: fresh } };
+        };
+
+        await expect(refreshAccessToken()).resolves.toBe(fresh);
+        expect(calls).toBe(2);
+    });
+
+    it.each([429, 500])("does not retry a refresh answered with %i", async (status) => {
+        startSession(makeToken({ expiresIn: -60 }));
+        server = () => ({ status, data: { error: "no" } });
+
+        await expect(refreshAccessToken()).rejects.toMatchObject({ response: { status } });
+        expect(requests).toHaveLength(1);
+        expect(hasSessionHint()).toBe(true);
+    });
+
+    describe("getRequestToken", () => {
+        it("rejects with sessionExpired and goes to the login page when the refresh finds the session over", async () => {
+            vi.stubGlobal("location", { ...window.location, pathname: "/dashboard", assign });
+            startSession(makeToken({ expiresIn: 10 }));
+            server = () => ({ status: 401, data: { error: "Session expired" } });
+
+            await expect(getRequestToken()).rejects.toMatchObject({ sessionExpired: true });
+            expect(assign).toHaveBeenCalledWith("/login");
+        });
+
+        it("returns the old token when the refresh fails for a transient reason", async () => {
+            const token = makeToken({ expiresIn: 10 });
+            startSession(token);
+            server = () => ({ status: 500, data: { error: "boom" } });
+
+            await expect(getRequestToken()).resolves.toBe(token);
+            expect(assign).not.toHaveBeenCalled();
+        });
     });
 
     it("rejects without redirecting when the session ends on a page that is not protected", async () => {

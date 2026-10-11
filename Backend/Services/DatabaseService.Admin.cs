@@ -3,12 +3,12 @@ using Microsoft.Data.SqlClient;
 
 namespace Backend.Services;
 
-// The admin-membership lock was lost as a deadlock victim; the whole action is safe to run again
+// An applock (admin membership or email address) was lost as a deadlock victim; the whole action is safe to run again
 // (RetryOnDeadlockAsync does)
 public sealed class AppLockDeadlockException(string message) : Exception(message);
 
-// The admin-membership lock couldn't be had in time; the API answers 503
-public sealed class AdminLockTimeoutException(string message) : Exception(message);
+// An applock (admin membership or email address) couldn't be had in time; the API answers 503
+public sealed class AppLockTimeoutException(string message) : Exception(message);
 
 // The admin page: who is an administrator, every user's usage, quotas and totals
 public partial class DatabaseServices
@@ -45,7 +45,7 @@ public partial class DatabaseServices
     // Wait for the admin-membership lock. SQL Server returns < 0 when it can't be had:
     // -1 timeout, -2 cancelled, -3 deadlock victim, -999 error. A deadlock victim throws
     // AppLockDeadlockException, which RetryOnDeadlockAsync retries like a SQL deadlock, so every
-    // caller of this runs inside RetryOnDeadlockAsync. A timeout throws AdminLockTimeoutException
+    // caller of this runs inside RetryOnDeadlockAsync. A timeout throws AppLockTimeoutException
     // (the API answers 503).
     private async Task TakeAdminMembershipLockAsync(SqlConnection connection, SqlTransaction transaction)
     {
@@ -67,7 +67,7 @@ public partial class DatabaseServices
         throw result switch
         {
             -3 => new AppLockDeadlockException("Chosen as a deadlock victim waiting for the admin membership lock"),
-            -1 => new AdminLockTimeoutException("Timed out waiting for the admin membership lock"),
+            -1 => new AppLockTimeoutException("Timed out waiting for the admin membership lock"),
             _ => new InvalidOperationException($"Could not take the admin membership lock (sp_getapplock returned {result})")
         };
     }

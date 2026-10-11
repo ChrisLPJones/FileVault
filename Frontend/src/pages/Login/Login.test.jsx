@@ -130,6 +130,22 @@ describe("Login form", () => {
         expect(getToken()).toBeNull();
     });
 
+    it("drops the suspended hint when a later attempt fails for another reason", async () => {
+        login.mockResolvedValueOnce({ status: 403, data: { error: "This account has been suspended", suspended: true } });
+        login.mockImplementationOnce(async () => {
+            throw new Error("Network Error");
+        });
+        renderLogin();
+        await userEvent.type(email(), "alex@example.com");
+        await userEvent.type(password(), "Passw0rd");
+        await submit();
+        expect(await screen.findByRole("alert")).toHaveTextContent("Contact an administrator");
+
+        await submit();
+        await screen.findByText(/Can't reach the server/);
+        expect(screen.getByRole("alert")).not.toHaveTextContent("Contact an administrator");
+    });
+
     it("shows the server's error, e.g. a wrong password", async () => {
         login.mockResolvedValue({ status: 401, data: { error: "Invalid email or password" } });
         renderLogin();

@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import UploadItem from "./UploadItem";
+import { getRequestToken } from "../../../api/api";
 import { FilesProvider } from "../../../contexts/FilesContext";
 import { TranslationProvider } from "../../../contexts/TranslationProvider";
 
 vi.mock("../../../api/api", () => ({
     getErrorMessage: vi.fn(),
-    getFreshToken: vi.fn(() => new Promise(() => {})),
+    getRequestToken: vi.fn(() => new Promise(() => {})),
 }));
 
 // Retrying a cancelled upload checks the space again before uploading
@@ -54,5 +55,40 @@ describe("UploadItem retry", () => {
 
         const updates = setFiles.mock.calls.map(([fn]) => fn([{}]));
         expect(updates.at(-1)[0]).toMatchObject({ error: false, cancelled: false });
+    });
+
+    it("stays quiet when the session ended: no request is opened and no error is shown", async () => {
+        getRequestToken.mockRejectedValue(Object.assign(new Error("Session expired"), { sessionExpired: true }));
+        const open = vi.fn();
+        vi.stubGlobal("XMLHttpRequest", function () {
+            this.upload = {};
+            this.open = open;
+            this.send = vi.fn();
+        });
+        const onError = vi.fn();
+        const checkSpace = () => null;
+        render(
+            <TranslationProvider language="en-US">
+                <FilesProvider filesData={[]} onError={onError}>
+                    <UploadItem
+                        index={0}
+                        fileData={{ file: new File(["x"], "a.txt"), appendData: {} }}
+                        setFiles={vi.fn()}
+                        setIsUploading={vi.fn()}
+                        fileUploadConfig={{ url: "/upload" }}
+                        onFileUploaded={vi.fn()}
+                        handleFileRemove={vi.fn()}
+                        checkSpace={checkSpace}
+                    />
+                </FilesProvider>
+            </TranslationProvider>
+        );
+        await waitFor(() => expect(getRequestToken).toHaveBeenCalled());
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        expect(open).not.toHaveBeenCalled();
+        expect(screen.queryByText(/fail|error|lost/i)).toBeNull();
+        expect(onError).not.toHaveBeenCalled();
+        vi.unstubAllGlobals();
     });
 });

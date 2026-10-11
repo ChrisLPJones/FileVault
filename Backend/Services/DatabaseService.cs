@@ -666,7 +666,7 @@ public partial class DatabaseServices
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex) when (!IsDeadlock(ex) && ex is not AdminLockTimeoutException) // deadlocks are retried by the caller; a lock timeout becomes a 503
+        catch (Exception ex) when (!IsDeadlock(ex) && ex is not AppLockTimeoutException) // deadlocks are retried by the caller; a lock timeout becomes a 503
         {
             await transaction.RollbackAsync();
             _logger.LogError(ex, "Failed to delete user {UserId} and their files", userId);
@@ -751,22 +751,17 @@ public partial class DatabaseServices
 
 
 
-    // Store a new refresh token (hash only) for a session, and drop this user's expired
-    // tokens and the sessions left without any. When rotating a token, pass the user's
-    // TokensValidAfter as read before the old token was consumed (RefreshTokenUse): the new
-    // token is stored only if that value is unchanged, so a refresh that was in flight while an
-    // password change, reset or administrator password set can't leave a live session behind. Returns false if it was
-    // refused for that reason, or because the user is suspended (checked on every insert so a login
-    // in flight when a suspension commits can't leave a token behind), or the user is gone.
-    // The batch runs in one explicit transaction (XACT_ABORT ON), so a deadlock victim rolls back
-    // the delete, insert and session cleanup together and the retry starts clean.
-    public Task<bool> StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
-        bool requireUnchangedTokensValidAfter = false, DateTime? seenTokensValidAfter = null) =>
-        RetryOnDeadlockAsync(() => StoreRefreshTokenOnceAsync(userId, sessionId, tokenHash, expiresAtUtc,
-            requireUnchangedTokensValidAfter, seenTokensValidAfter));
+    // Store a new refresh token (hash only) for a session at login or sign-in (rotation stores its own
+    // in ConsumeAndReplaceRefreshTokenAsync), and drop this user's expired tokens and the sessions left
+    // without any. Returns false if the user is suspended (checked on every insert so a login in
+    // flight when a suspension commits can't leave a token behind) or gone.
+    // The batch runs in one explicit transaction (XACT_ABORT ON) that locks the user's Users row first
+    // (like every token writer), so a deadlock victim rolls back the delete, insert and session
+    // cleanup together and the retry starts clean.
+    public Task<bool> StoreRefreshTokenAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc) =>
+        RetryOnDeadlockAsync(() => StoreRefreshTokenOnceAsync(userId, sessionId, tokenHash, expiresAtUtc));
 
-    private async Task<bool> StoreRefreshTokenOnceAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
-        bool requireUnchangedTokensValidAfter, DateTime? seenTokensValidAfter)
+    private async Task<bool> StoreRefreshTokenOnceAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -774,12 +769,12 @@ public partial class DatabaseServices
         const string query = @"
             SET XACT_ABORT ON;
             BEGIN TRAN;
+            DECLARE @L INT;
+            SELECT @L = 1 FROM Users WITH (UPDLOCK, ROWLOCK) WHERE Id = @UserId;
             DELETE FROM RefreshTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
             INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt)
             SELECT @UserId, @SessionId, @TokenHash, @ExpiresAt
-            WHERE EXISTS (
-                SELECT 1 FROM Users WHERE Id = @UserId AND SuspendedAt IS NULL
-                AND (@Guard = 0 OR (TokensValidAfter IS NULL AND @Seen IS NULL) OR TokensValidAfter = @Seen));
+            WHERE EXISTS (SELECT 1 FROM Users WHERE Id = @UserId AND SuspendedAt IS NULL);
             DECLARE @Stored INT = @@ROWCOUNT;
             DELETE FROM Sessions WHERE UserId = @UserId
                 AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);
@@ -791,8 +786,6 @@ public partial class DatabaseServices
         command.Parameters.AddWithValue("@SessionId", sessionId);
         command.Parameters.AddWithValue("@TokenHash", tokenHash);
         command.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
-        command.Parameters.AddWithValue("@Guard", requireUnchangedTokensValidAfter);
-        command.Parameters.Add("@Seen", System.Data.SqlDbType.DateTime2).Value = (object?)seenTokensValidAfter ?? DBNull.Value;
         return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
     }
 
@@ -801,66 +794,146 @@ public partial class DatabaseServices
     // SinceRevoked is measured by the database clock, so it isn't affected by clock differences with the API.
     // SessionId is null for tokens from before sessions existed. Replaced is true if the token was
     // rotated (a newer token exists in its session), as opposed to revoked by logging out or signing
-    // the session out.
+    // the session out. UserTokensValidAfter is read under the user's row lock (see below).
+    // Stored is true when the replacement token was stored in the same transaction as the consume.
     public record RefreshTokenUse(string UserId, bool Valid, TimeSpan? SinceRevoked, Guid? SessionId = null, bool Replaced = false,
-        DateTime? UserTokensValidAfter = null);
+        DateTime? UserTokensValidAfter = null, bool Stored = false);
 
-    // Atomically revoke a refresh token so it can only be used once.
-    // Returns null if the token doesn't exist. Valid is true only if this call revoked an active, unexpired token.
-    public async Task<RefreshTokenUse?> ConsumeRefreshTokenAsync(string tokenHash)
+    // Rotate a refresh token: revoke the old one so it can only be used once and store its replacement
+    // in the same transaction, so no request can see "revoked, no newer token". Returns null if the
+    // token doesn't exist (or its user is gone). Valid is true only if this call revoked an active,
+    // unexpired token; Stored is true if the replacement was stored, which is refused (false) for a
+    // suspended user (the old token is still consumed). The transaction first locks the user's Users
+    // row (UPDLOCK), the serialisation point for every refresh of that user and the same order as
+    // SetPasswordAndSignOut and SetSuspended take (Users, then RefreshTokens): a password change or
+    // suspension that committed earlier has already revoked the token, so the consume finds nothing;
+    // one that comes later waits. A token that isn't active gets the lookup in the same transaction.
+    // A legacy token without a session starts one. Deadlock victims roll back and are retried.
+    public Task<RefreshTokenUse?> ConsumeAndReplaceRefreshTokenAsync(string oldHash, string newHash, DateTime newExpiresAtUtc,
+        string? ipAddress, string device) =>
+        RetryOnDeadlockAsync(() => ConsumeAndReplaceRefreshTokenOnceAsync(oldHash, newHash, newExpiresAtUtc, ipAddress, device));
+
+    private async Task<RefreshTokenUse?> ConsumeAndReplaceRefreshTokenOnceAsync(string oldHash, string newHash,
+        DateTime newExpiresAtUtc, string? ipAddress, string device)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
-        // Read before consuming: if the password is changed or set after this point, the
-        // value changes and the replacement token is refused (see StoreRefreshTokenAsync). If the
-        // change committed before, the token was revoked with the rest and the consume below fails.
-        DateTime? tokensValidAfter = null;
-        await using (var read = new SqlCommand(
-            "SELECT u.TokensValidAfter FROM RefreshTokens t JOIN Users u ON u.Id = t.UserId WHERE t.TokenHash = @TokenHash", connection))
+        Guid userId;
+        await using (var find = new SqlCommand("SELECT UserId FROM RefreshTokens WHERE TokenHash = @TokenHash", connection, transaction))
         {
-            read.Parameters.AddWithValue("@TokenHash", tokenHash);
-            if (await read.ExecuteScalarAsync() is DateTime seen)
-                tokensValidAfter = seen;
+            find.Parameters.AddWithValue("@TokenHash", oldHash);
+            if (await find.ExecuteScalarAsync() is not Guid found)
+            {
+                await transaction.RollbackAsync();
+                return null;
+            }
+            userId = found;
         }
 
-        const string consume = @"
-            UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
-            OUTPUT inserted.UserId, inserted.ExpiresAt, inserted.SessionId
-            WHERE TokenHash = @TokenHash AND RevokedAt IS NULL;";
-
-        await using (var command = new SqlCommand(consume, connection))
+        DateTime? tokensValidAfter;
+        bool suspended;
+        await using (var lockUser = new SqlCommand(
+            "SELECT TokensValidAfter, SuspendedAt FROM Users WITH (UPDLOCK, ROWLOCK) WHERE Id = @UserId", connection, transaction))
         {
-            command.Parameters.AddWithValue("@TokenHash", tokenHash);
-            await using var reader = await command.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
+            lockUser.Parameters.AddWithValue("@UserId", userId);
+            await using var reader = await lockUser.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
             {
-                var expiresAt = reader.GetDateTime(1);
-                return new RefreshTokenUse(reader.GetGuid(0).ToString(), expiresAt > DateTime.UtcNow, null,
-                    reader.IsDBNull(2) ? null : reader.GetGuid(2), false, tokensValidAfter);
+                await reader.CloseAsync();
+                await transaction.RollbackAsync();
+                return null;
+            }
+            tokensValidAfter = reader.IsDBNull(0) ? null : reader.GetDateTime(0);
+            suspended = !reader.IsDBNull(1);
+        }
+
+        bool consumed;
+        DateTime expiresAt = default;
+        Guid? sessionId = null;
+        await using (var consume = new SqlCommand(@"
+            UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
+            OUTPUT inserted.ExpiresAt, inserted.SessionId
+            WHERE TokenHash = @TokenHash AND RevokedAt IS NULL;", connection, transaction))
+        {
+            consume.Parameters.AddWithValue("@TokenHash", oldHash);
+            await using var reader = await consume.ExecuteReaderAsync();
+            consumed = await reader.ReadAsync();
+            if (consumed)
+            {
+                expiresAt = reader.GetDateTime(0);
+                sessionId = reader.IsDBNull(1) ? null : reader.GetGuid(1);
             }
         }
 
-        // Not active: either unknown or already used/revoked
-        const string lookup = @"
+        if (consumed)
+        {
+            var valid = expiresAt > DateTime.UtcNow;
+            if (!valid || suspended)
+            {
+                await transaction.CommitAsync();
+                return new RefreshTokenUse(userId.ToString(), valid, null, sessionId, false, tokensValidAfter);
+            }
+
+            if (sessionId == null)
+            {
+                await using var create = new SqlCommand(
+                    "INSERT INTO Sessions (UserId, Device, IpAddress) OUTPUT inserted.Id VALUES (@UserId, @Device, @IpAddress)",
+                    connection, transaction);
+                create.Parameters.AddWithValue("@UserId", userId);
+                create.Parameters.AddWithValue("@Device", device);
+                create.Parameters.AddWithValue("@IpAddress", (object?)ipAddress ?? DBNull.Value);
+                sessionId = (Guid)(await create.ExecuteScalarAsync())!;
+            }
+            else
+            {
+                await using var touch = new SqlCommand(@"
+                    UPDATE Sessions SET LastUsedAt = SYSUTCDATETIME(), IpAddress = COALESCE(@IpAddress, IpAddress)
+                    WHERE Id = @SessionId", connection, transaction);
+                touch.Parameters.AddWithValue("@SessionId", sessionId.Value);
+                touch.Parameters.AddWithValue("@IpAddress", (object?)ipAddress ?? DBNull.Value);
+                await touch.ExecuteNonQueryAsync();
+            }
+
+            await using (var store = new SqlCommand(@"
+                DELETE FROM RefreshTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
+                INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt)
+                VALUES (@UserId, @SessionId, @TokenHash, @ExpiresAt);
+                DELETE FROM Sessions WHERE UserId = @UserId
+                    AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);", connection, transaction))
+            {
+                store.Parameters.AddWithValue("@UserId", userId);
+                store.Parameters.AddWithValue("@SessionId", sessionId.Value);
+                store.Parameters.AddWithValue("@TokenHash", newHash);
+                store.Parameters.AddWithValue("@ExpiresAt", newExpiresAtUtc);
+                await store.ExecuteNonQueryAsync();
+            }
+            await transaction.CommitAsync();
+            return new RefreshTokenUse(userId.ToString(), true, null, sessionId, false, tokensValidAfter, true);
+        }
+
+        // Not active: either already used/revoked (the user's lock means any rotation that was in
+        // flight has committed, replacement included)
+        RefreshTokenUse? result = null;
+        await using (var lookup = new SqlCommand(@"
             SELECT t.UserId, DATEDIFF_BIG(millisecond, t.RevokedAt, SYSUTCDATETIME()), t.SessionId,
                    CASE WHEN EXISTS (SELECT 1 FROM RefreshTokens n WHERE n.SessionId = t.SessionId AND n.Id > t.Id)
                         THEN 1 ELSE 0 END
-            FROM RefreshTokens t WHERE t.TokenHash = @TokenHash";
-        await using (var command = new SqlCommand(lookup, connection))
+            FROM RefreshTokens t WHERE t.TokenHash = @TokenHash", connection, transaction))
         {
-            command.Parameters.AddWithValue("@TokenHash", tokenHash);
-            await using var reader = await command.ExecuteReaderAsync();
+            lookup.Parameters.AddWithValue("@TokenHash", oldHash);
+            await using var reader = await lookup.ExecuteReaderAsync();
             if (await reader.ReadAsync())
-                return new RefreshTokenUse(
+                result = new RefreshTokenUse(
                     reader.GetGuid(0).ToString(),
                     false,
                     reader.IsDBNull(1) ? null : TimeSpan.FromMilliseconds(reader.GetInt64(1)),
                     reader.IsDBNull(2) ? null : reader.GetGuid(2),
                     reader.GetInt32(3) == 1, tokensValidAfter);
         }
-
-        return null;
+        await transaction.CommitAsync();
+        return result;
     }
 
 
@@ -870,7 +943,7 @@ public partial class DatabaseServices
     // transaction, so a session never has two live tokens. Refused (false) when the session has no
     // live token left (logged out, signed out, password changed, or another call got here first),
     // or when the user is gone, suspended or had a password change since seenTokensValidAfter
-    // (read before the old token was looked up; see RefreshTokenUse).
+    // (read under the user's row lock when the old token was looked up; see RefreshTokenUse).
     public Task<bool> ReplaceSessionTokenWithinGraceAsync(string userId, Guid sessionId, string tokenHash, DateTime expiresAtUtc,
         DateTime? seenTokensValidAfter) =>
         RetryOnDeadlockAsync(() => ReplaceSessionTokenWithinGraceOnceAsync(userId, sessionId, tokenHash, expiresAtUtc, seenTokensValidAfter));
@@ -882,7 +955,11 @@ public partial class DatabaseServices
         await connection.OpenAsync();
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
+        // One at a time per user, like ConsumeAndReplaceRefreshTokenAsync: the later request wins and
+        // sees the earlier one's new token (no phantom between the revoke and the insert)
         await using var command = new SqlCommand(@"
+            DECLARE @Locked INT;
+            SELECT @Locked = 1 FROM Users WITH (UPDLOCK, ROWLOCK) WHERE Id = @UserId;
             UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
             WHERE SessionId = @SessionId AND UserId = @UserId AND RevokedAt IS NULL AND ExpiresAt > SYSUTCDATETIME();
             IF @@ROWCOUNT = 0

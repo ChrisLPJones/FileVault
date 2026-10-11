@@ -35,12 +35,21 @@ const postRefresh = () =>
 // A 401 the server marks raced lost a rotation race with another tab, which holds a valid cookie
 const isRaced = (error) => error?.response?.status === 401 && error.response.data?.raced === true;
 
-// Refresh under the lock; a raced 401 is retried once (the lock now yields the other tab's new cookie)
+// No response at all (timeout or network error): the server may still have rotated the cookie
+// without the browser ever seeing the new one
+const isNoResponse = (error) => !error?.response;
+
+// Refresh under the lock. A no-response failure is retried once at once, inside the same lock hold,
+// so the retry presents the old cookie within the server's grace window; a raced 401 is retried once
+// (the lock now yields the other tab's new cookie). At most 3 POSTs, so the lock can be held for up
+// to 2 x REFRESH_TIMEOUT_MS; a second no-response failure stays transient.
 const refreshUnderLock = () =>
-    withRefreshLock(postRefresh).catch((error) => {
-        if (!isRaced(error)) throw error;
-        return withRefreshLock(postRefresh);
-    });
+    withRefreshLock(() => postRefresh().catch((error) => (isNoResponse(error) ? postRefresh() : Promise.reject(error)))).catch(
+        (error) => {
+            if (!isRaced(error)) throw error;
+            return withRefreshLock(postRefresh);
+        }
+    );
 
 // Exchange the refresh cookie for a new access token. Rejects with error.sessionExpired = true when
 // the server says the session is over (401); any other failure (network, 429, 5xx) is transient and
@@ -131,10 +140,10 @@ window.addEventListener("storage", (event) => {
     }
 });
 
-// Add auth header for all requests (login/register/refresh opt out with skipAuth)
-api.interceptors.request.use(async (config) => {
-    if (config.skipAuth) return config;
-
+// The access token to send with a request, refreshed first if it is about to expire. Null when
+// signed out. When the session had a token but the refresh found it over, redirects (on protected
+// pages) and throws error.sessionExpired so nothing goes out unauthenticated.
+export const getRequestToken = async () => {
     const hadToken = Boolean(getToken());
     const token = await getFreshToken();
     if (hadToken && !token) {
@@ -146,6 +155,14 @@ api.interceptors.request.use(async (config) => {
         error.sessionExpired = true;
         throw error;
     }
+    return token;
+};
+
+// Add auth header for all requests (login/register/refresh opt out with skipAuth)
+api.interceptors.request.use(async (config) => {
+    if (config.skipAuth) return config;
+
+    const token = await getRequestToken();
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
