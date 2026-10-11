@@ -159,11 +159,13 @@ public static class MasterKeyRotation
     {
         try
         {
-            // Without VIEW SERVER STATE the view shows only our own session and raises no error
-            await using (var permission = new SqlCommand("SELECT COALESCE(HAS_PERMS_BY_NAME(NULL, NULL, 'VIEW SERVER STATE'), 0)", connection))
+            // Without VIEW SERVER STATE (or, on SQL Server 2022, the narrower VIEW SERVER PERFORMANCE STATE, which is what
+            // the Docker install grants the API's login) the view shows only our own session and raises no error
+            await using (var permission = new SqlCommand(@"SELECT CASE WHEN COALESCE(HAS_PERMS_BY_NAME(NULL, NULL, 'VIEW SERVER STATE'), 0) = 1
+                OR COALESCE(HAS_PERMS_BY_NAME(NULL, NULL, 'VIEW SERVER PERFORMANCE STATE'), 0) = 1 THEN 1 ELSE 0 END", connection))
                 if (Convert.ToInt32(await permission.ExecuteScalarAsync(ct)) == 0)
                 {
-                    log("Warning: no permission to list other connections (VIEW SERVER STATE); only the API's lock was checked. Make sure the API is stopped.");
+                    log("Warning: no permission to list other connections (VIEW SERVER PERFORMANCE STATE); only the API's lock was checked. Make sure the API is stopped.");
                     return null;
                 }
 
@@ -179,7 +181,7 @@ public static class MasterKeyRotation
         }
         catch (SqlException ex) when (ex.Number is 297 or 300 or 229)
         {
-            log("Warning: no permission to list other connections (VIEW SERVER STATE); only the API's lock was checked. Make sure the API is stopped.");
+            log("Warning: no permission to list other connections (VIEW SERVER PERFORMANCE STATE); only the API's lock was checked. Make sure the API is stopped.");
             return null;
         }
     }

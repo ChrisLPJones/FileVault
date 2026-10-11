@@ -85,6 +85,34 @@ public class EmailBackgroundService(EmailQueue queue, IEmailSender sender, ILogg
     }
 }
 
+// Start-up check of the email setup. A hosted site can't confirm sign-ups or reset passwords without
+// a real sender, and the log sender would write every reset/confirmation link to the log, so hosted
+// mode refuses to start without one. The resolved sender is checked, so tests can inject their own.
+// The SMTP server itself is not probed: an outage must not stop a restart.
+public static class EmailSetup
+{
+    public static void Validate(bool hosted, IEmailSender sender, IConfiguration config)
+    {
+        if (!hosted)
+            return;
+        if (sender is LogEmailSender)
+            throw new InvalidOperationException(
+                "Hosted mode needs a working email sender: set SMTP_HOST (Email:Smtp:Host) and SMTP_FROM (Email:Smtp:From), plus SMTP_USER and SMTP_PASSWORD " +
+                "if the server needs a login. Without one, sign-up confirmation and password reset cannot work and their links would be written to the log.");
+        if (sender is SmtpEmailSender)
+        {
+            // The same choice SmtpEmailSender makes per send: From, else User
+            var from = new[] { config["Email:Smtp:From"], config["Email:Smtp:User"] }.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+            if (from == null)
+                throw new InvalidOperationException(
+                    "Hosted mode needs a From address for its emails: set SMTP_FROM (Email:Smtp:From) or SMTP_USER (Email:Smtp:User).");
+            if (!MailAddress.TryCreate(from, out _))
+                throw new InvalidOperationException(
+                    "SMTP_FROM (Email:Smtp:From, or SMTP_USER if From is empty) is not a valid email address, so no email could be sent.");
+        }
+    }
+}
+
 public static class EmailServiceCollectionExtensions
 {
     // SMTP when Email:Smtp:Host is set, otherwise the logging sender

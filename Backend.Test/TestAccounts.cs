@@ -2,6 +2,9 @@ using Backend.Models;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Backend.Services;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
@@ -17,6 +20,19 @@ namespace Backend.Test
         public const string Password = "TestPassw0rd";
 
         public record Account(HttpClient Client, string UserId, string Email);
+
+        // Hosted mode refuses to start without a real email sender; tests that run hosted mode and don't
+        // read emails use this one, which sends nothing
+        public static WebApplicationFactory<Program> WithNoopEmail(WebApplicationFactory<Program> factory) =>
+            factory.WithWebHostBuilder(WithNoopEmailServices);
+
+        public static void WithNoopEmailServices(IWebHostBuilder builder) =>
+            builder.ConfigureTestServices(services => services.AddSingleton<IEmailSender, NoopEmailSender>());
+
+        private sealed class NoopEmailSender : IEmailSender
+        {
+            public Task SendAsync(EmailMessage message, CancellationToken ct = default) => Task.CompletedTask;
+        }
 
         // The app with a login rate limit high enough for tests that create many accounts
         public static WebApplicationFactory<Program> WithoutLoginLimit(WebApplicationFactory<Program> factory) =>

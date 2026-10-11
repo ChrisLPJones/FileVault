@@ -138,9 +138,15 @@ namespace Backend.Test
             Factory = WithSettings([("RateLimiting:auth:PermitLimit", "1000"), ("RateLimiting:signup:PermitLimit", "1000"), .. settings]);
         }
 
+        // Hosted mode refuses to start without an email sender, so hosted hosts get one that sends nothing
         protected WebApplicationFactory<Program> WithSettings(params (string key, string value)[] settings) =>
-            WithHost(builder => builder.ConfigureAppConfiguration((_, config) =>
-                config.AddInMemoryCollection(settings.ToDictionary(s => s.key, s => (string?)s.value))));
+            WithHost(builder =>
+            {
+                builder.ConfigureAppConfiguration((_, config) =>
+                    config.AddInMemoryCollection(settings.ToDictionary(s => s.key, s => (string?)s.value)));
+                if (settings.Any(s => s.key == "App:Mode" && s.value == "hosted"))
+                    TestAccounts.WithNoopEmailServices(builder);
+            });
 
         protected WebApplicationFactory<Program> WithHost(Action<IWebHostBuilder> configure, WebApplicationFactory<Program>? from = null)
         {

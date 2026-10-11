@@ -162,6 +162,7 @@ public sealed class MasterKeyGuard(
             await connection.OpenAsync(ct);
             await TakeSharedLockAsync(connection, ct);
             await CheckKeyAsync(connection, ct);
+            await WarnIfPrivilegedLoginAsync(connection, ct);
         }
         catch
         {
@@ -171,6 +172,34 @@ public sealed class MasterKeyGuard(
 
         await CloseConnectionAsync();
         _connection = connection;
+    }
+
+    // The Docker install connects as a login that can only read and write the data. A login that is sysadmin or
+    // db_owner (sa, as in development) makes a SQL injection or code-execution bug far worse, so say so once.
+    public static string? PrivilegedLoginWarning(bool sysadmin, bool dbOwner) =>
+        sysadmin || dbOwner
+            ? $"The database login is {(sysadmin ? "a sysadmin" : "db_owner")}. In production, connect as a login that can only read and write the data " +
+              "(docker compose creates one from MSSQL_APP_PASSWORD; see docs/DEPLOYMENT.md, \"Database login\")."
+            : null;
+
+    private bool _privilegeChecked;
+
+    private async Task WarnIfPrivilegedLoginAsync(SqlConnection connection, CancellationToken ct)
+    {
+        if (_privilegeChecked)
+            return;
+        try
+        {
+            await using var command = new SqlCommand("SELECT COALESCE(IS_SRVROLEMEMBER('sysadmin'), 0), COALESCE(IS_ROLEMEMBER('db_owner'), 0)", connection);
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            if (await reader.ReadAsync(ct) && PrivilegedLoginWarning(reader.GetInt32(0) == 1, reader.GetInt32(1) == 1) is { } warning)
+                logger.LogWarning("{Warning}", warning);
+            _privilegeChecked = true;
+        }
+        catch (SqlException)
+        {
+            // Only a hint: never stop the API for it
+        }
     }
 
     private async Task TakeSharedLockAsync(SqlConnection connection, CancellationToken ct)

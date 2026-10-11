@@ -34,7 +34,7 @@
 - Changing your email address needs your password and is confirmed by a link sent to the new address (open it while signed in); until then the current address stays your login, and the old address (if confirmed) gets a "wasn't me" link that cancels the change and signs out every device
 - Light, dark and system themes, and a choice of accent colour
 - An admin page for the server owner: every account's avatar, storage use and quota, each user's last login IP address and country (looked up in a local database, nothing sent to a third party), and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark non-admin accounts permanent (admins are always permanent), suspend and unsuspend accounts (a suspended user is signed out at once and can't sign in; files and shares are kept, share links show "not found" until unsuspended), and delete accounts (type the email to confirm; the last admin can't be deleted)
-- Optional hosted mode (`FILEVAULT_MODE=hosted`) for a public instance: accounts unused for 30 days are removed with their files (after a warning email when SMTP is set up), and new users see a dismissible notice. Administrator, permanent and suspended accounts are never removed. Hosted mode also rate limits sign-ups (5 per IP per hour by default, optional site-wide hourly and daily limits), can give ordinary accounts a smaller default quota, and checks for a confirmed email before a share link is created. Self-hosted is the default and removes nothing
+- Optional hosted mode (`FILEVAULT_MODE=hosted`) for a public instance: accounts unused for 30 days are removed with their files (after a warning email; hosted mode requires SMTP), and new users see a dismissible notice. Administrator, permanent and suspended accounts are never removed. Hosted mode also rate limits sign-ups (5 per IP per hour by default, optional site-wide hourly and daily limits), can give ordinary accounts a smaller default quota, and checks for a confirmed email before a share link is created. Self-hosted is the default and removes nothing
 
 **Tooling**
 - Interactive API docs (Swagger) at `/swagger` in development, or with `SWAGGER_ENABLED=true`
@@ -103,11 +103,11 @@ Only [Docker](https://www.docker.com/) is needed for this option.
 ```bash
 git clone https://github.com/ChrisLPJones/FileVault.git
 cd FileVault
-cp .env.example .env      # fill in MSSQL_SA_PASSWORD, JWT_KEY and ENCRYPTION_MASTER_KEY
+cp .env.example .env      # fill in MSSQL_SA_PASSWORD, MSSQL_APP_PASSWORD, JWT_KEY and ENCRYPTION_MASTER_KEY
 docker compose up --build
 ```
 
-Then open http://localhost:5173 (the API is on http://localhost:3000). Compose starts SQL Server, waits for it to be healthy, applies `Backend/Docker/db/init.sql`, then starts the API and the nginx-served frontend. The database isn't exposed outside the Docker network.
+Then open http://localhost:5173 (the API is on http://localhost:3000). Compose starts SQL Server, waits for it to be healthy, applies `Backend/Docker/db/init.sql`, then creates a least-privilege database login for the API (`filevault_app`, password `MSSQL_APP_PASSWORD`: it can read and write the data but not change the schema, and the API container never gets the `sa` password), then starts the API and the nginx-served frontend. The database isn't exposed outside the Docker network. Updating an existing install? Add `MSSQL_APP_PASSWORD` to `.env` first; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#2-secrets-and-settings).
 
 `init.sql` runs on every start and only adds what's missing, so pulling new code and running `docker compose up --build -d` also upgrades an existing database.
 
@@ -115,7 +115,7 @@ Data lives in two named volumes, `filevault_sql_data` and `filevault_file_storag
 
 To open the database in a GUI tool (SSMS, Azure Data Studio, VS Code SQLTools), copy `docker-compose.override.example.yml` to `docker-compose.override.yml` and restart with `docker compose up -d`. SQL Server is then reachable from this machine only at `127.0.0.1,1434`, user `sa`, with `MSSQL_SA_PASSWORD` from `.env`. Use `127.0.0.1` rather than `localhost`, which some tools resolve to IPv6 and then time out. To look at the stored files, run `docker compose exec api ls -l /data/storage`. They are encrypted, so download them through the app to read them.
 
-New accounts confirm their email address before they can log in, and "Forgot password?" sends a reset link. To send those emails, set the `SMTP_*` settings in `.env`. Without them the API writes each email, link included, to its log instead, so on a local setup you can find the link with `docker compose logs api`.
+New accounts confirm their email address before they can log in, and "Forgot password?" sends a reset link. To send those emails, set the `SMTP_*` settings in `.env`; they are required in hosted mode, where the API won't start without them. On a self-hosted setup without them the API writes each email, link included, to its log instead (with a warning at start; anyone who can read the log can use the links), so on a local setup you can find the link with `docker compose logs api`.
 
 The first account registered on a new install becomes the administrator and gets an Admin link in the account menu (`/admin`: every account's storage use and quota, server totals, and who else is an administrator). On a public install, register straight after the first start, or set `INITIAL_ADMIN_EMAIL` in `.env` to your address so only that account can become the administrator, once its email is confirmed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Admin rights are chosen only when an administrator creates an account (Administrator tick box); there is always at least one administrator.
 

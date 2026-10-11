@@ -33,8 +33,78 @@ namespace Backend.Test
             .GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not set for the tests");
 
-        // The per-run test database; set by SentinelAdmin.Ensure before any host is built
+        // The per-run test database, as the privileged (sa) login; set by SentinelAdmin.Ensure before any
+        // host is built. Helpers that need CREATE/DROP DATABASE, KILL and the like use this one.
         public static string ConnectionString { get; internal set; } = "";
+
+        // The per-run least-privilege login (FvTest_login_<guid>) the API hosts connect as, made by running
+        // Backend/Docker/db/app-login.sql like db-init does, so a feature that needs more rights than the
+        // Docker install gives the API fails in the tests. Null until SentinelAdmin.Ensure has run.
+        public static string? AppLogin { get; internal set; }
+        public static string? AppPassword { get; internal set; }
+    }
+
+    // Runs Backend/Docker/db/app-login.sql with its sqlcmd variables replaced (SqlCommand has no -v), and
+    // SecureVaultDb replaced by the test database, the same way init.sql is run
+    public static class AppLoginScript
+    {
+        public const string LoginPrefix = "FvTest_login_";
+
+        public static string NewPassword() => "Aa1-" + Guid.NewGuid().ToString("N");
+
+        public static IEnumerable<string> Batches(string login, string password, string database)
+        {
+            var script = File.ReadAllText(Path.Combine(TestEnvironment.RepositoryRoot, "Backend", "Docker", "db", "app-login.sql"));
+            script = script.Replace("$(FV_APP_LOGIN)", login).Replace("$(FV_APP_PASSWORD)", password).Replace("SecureVaultDb", database);
+            return Regex.Split(script, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase)
+                .Where(batch => !string.IsNullOrWhiteSpace(batch));
+        }
+
+        // serverConnectionString: privileged, to master (one connection throughout: USE applies to the rest of the script)
+        public static void Run(string serverConnectionString, string login, string password, string database)
+        {
+            TestDatabaseGuard.AssertTestDatabase(new SqlConnectionStringBuilder(serverConnectionString) { InitialCatalog = database }.ConnectionString);
+            if (!login.StartsWith(LoginPrefix, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Refusing to create login '{login}': test logins are named {LoginPrefix}*.");
+            using var connection = new SqlConnection(serverConnectionString);
+            connection.Open();
+            foreach (var batch in Batches(login, password, database))
+            {
+                using var command = new SqlCommand(batch, connection) { CommandTimeout = 120 };
+                command.ExecuteNonQuery();
+            }
+        }
+
+        public static string ConnectionStringFor(string privilegedConnectionString, string login, string password) =>
+            new SqlConnectionStringBuilder(privilegedConnectionString) { UserID = login, Password = password }.ConnectionString;
+
+        // Logins left behind by killed runs: only FvTest_login_* ones more than a day old
+        public const string StaleLoginsSql = @"
+            SELECT name FROM sys.server_principals
+            WHERE name COLLATE Latin1_General_CS_AS LIKE 'FvTest[_]login[_]%' AND type = 'S' AND create_date < DATEADD(DAY, -1, GETDATE())";
+
+        public static void Drop(string serverConnectionString, string login)
+        {
+            if (!login.StartsWith(LoginPrefix, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Refusing to drop login '{login}': test logins are named {LoginPrefix}*.");
+            using var connection = new SqlConnection(serverConnectionString);
+            connection.Open();
+            // KILL takes a literal; the session ids come from the server, and only this login's are listed
+            var sessions = new List<int>();
+            using (var list = new SqlCommand("SELECT session_id FROM sys.dm_exec_sessions WHERE login_name = @Login AND session_id <> @@SPID", connection))
+            {
+                list.Parameters.AddWithValue("@Login", login);
+                using var reader = list.ExecuteReader();
+                while (reader.Read())
+                    sessions.Add(reader.GetInt16(0));
+            }
+            foreach (var session in sessions)
+                using (var kill = new SqlCommand($"KILL {session}", connection))
+                    try { kill.ExecuteNonQuery(); } catch (SqlException) { /* already gone */ }
+            using var drop = new SqlCommand("DECLARE @Sql NVARCHAR(400) = N'DROP LOGIN ' + QUOTENAME(@Login) + N';' IF SUSER_ID(@Login) IS NOT NULL EXEC (@Sql);", connection);
+            drop.Parameters.AddWithValue("@Login", login);
+            drop.ExecuteNonQuery();
+        }
     }
 
     // Refuses any database whose name doesn't start with FvTest_
@@ -84,12 +154,24 @@ namespace Backend.Test
             // Synchronous on purpose: a module initializer that waits on thread-pool work can deadlock the assembly load
             FreshDatabase.DropStale(configured);
             _shared = FreshDatabase.Create(configured, name);
+
+            // The API hosts connect as a per-run least-privilege login; testConnectionString (sa) stays for helpers that need more
+            var appLogin = AppLoginScript.LoginPrefix + Guid.NewGuid().ToString("N");
+            var appPassword = AppLoginScript.NewPassword();
+            var serverConnectionString = new SqlConnectionStringBuilder(configured) { InitialCatalog = "master", Pooling = false }.ConnectionString;
+            AppLoginScript.Run(serverConnectionString, appLogin, appPassword, name);
+            TestEnvironment.AppLogin = appLogin;
+            TestEnvironment.AppPassword = appPassword;
+
             AppDomain.CurrentDomain.ProcessExit += (_, _) =>
             {
                 try { _shared.Drop(); } catch { /* stale ones are dropped at the next start */ }
+                SqlConnection.ClearAllPools();
+                try { AppLoginScript.Drop(serverConnectionString, appLogin); } catch { /* stale ones are dropped at the next start */ }
             };
 
-            Environment.SetEnvironmentVariable(ConnectionStringVariable, testConnectionString);
+            Environment.SetEnvironmentVariable(ConnectionStringVariable,
+                AppLoginScript.ConnectionStringFor(testConnectionString, appLogin, appPassword));
             TestEnvironment.ConnectionString = testConnectionString;
             TestDatabaseGuard.AssertTestDatabase(TestEnvironment.ConnectionString);
 
@@ -117,7 +199,12 @@ namespace Backend.Test
     public sealed class FreshDatabase : IAsyncDisposable
     {
         public string Name { get; }
+
+        // As the privileged login (sa): for helpers, and for the API only when a test needs those rights
         public string ConnectionString { get; }
+
+        // As the run's least-privilege login, mapped into this database; what the API hosts use
+        public string AppConnectionString => AppLoginScript.ConnectionStringFor(ConnectionString, TestEnvironment.AppLogin!, TestEnvironment.AppPassword!);
 
         private readonly string _serverConnectionString;
 
@@ -140,6 +227,7 @@ namespace Backend.Test
             var database = new FreshDatabase(baseConnectionString, name);
             await RunAsync(database._serverConnectionString, $"CREATE DATABASE [{database.Name}]");
             await database.RunInitScriptAsync();
+            await database.MapAppLoginAsync();
             return database;
         }
 
@@ -157,6 +245,12 @@ namespace Backend.Test
             }
             return database;
         }
+
+        // Give the run's least-privilege login access to this database (the login itself exists once the sentinel has run)
+        public Task MapAppLoginAsync() =>
+            TestEnvironment.AppLogin == null
+                ? Task.CompletedTask
+                : Task.Run(() => AppLoginScript.Run(_serverConnectionString, TestEnvironment.AppLogin, TestEnvironment.AppPassword!, Name));
 
         // Left behind by runs that were killed: any FvTest_ database more than a day old, and any
         // FvTest_Shared_ one with no sessions that is also more than an hour old. The session check alone
@@ -192,6 +286,18 @@ namespace Backend.Test
                 }
                 foreach (var name in stale)
                     Run(server, DropDatabaseSql, ("@Name", name));
+
+                var staleLogins = new List<string>();
+                using (var connection = new SqlConnection(server))
+                {
+                    connection.Open();
+                    using var command = new SqlCommand(AppLoginScript.StaleLoginsSql, connection);
+                    using var reader = command.ExecuteReader();
+                    while (reader.Read())
+                        staleLogins.Add(reader.GetString(0));
+                }
+                foreach (var login in staleLogins)
+                    AppLoginScript.Drop(server, login);
             }
             catch (SqlException)
             {
@@ -249,7 +355,7 @@ namespace Backend.Test
                 {
                     var settings = new Dictionary<string, string?>
                     {
-                        ["ConnectionStrings:DefaultConnection"] = ConnectionString,
+                        ["ConnectionStrings:DefaultConnection"] = TestEnvironment.AppLogin == null ? ConnectionString : AppConnectionString,
                         ["Admin:InitialEmail"] = initialAdminEmail
                     };
                     // Only when given: a null entry would blank the configured key

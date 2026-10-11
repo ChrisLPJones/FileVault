@@ -192,7 +192,10 @@ namespace Backend.Test
             {
                 var all = new List<(string key, string value)> { ("RateLimiting:auth:PermitLimit", "1000"), ("RateLimiting:signup:PermitLimit", "1000") };
                 if (hosted)
+                {
                     all.Add(("App:Mode", "hosted"));
+                    TestAccounts.WithNoopEmailServices(builder);
+                }
                 all.AddRange(settings);
                 builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
                     all.ToDictionary(s => s.key, s => (string?)s.value)));
@@ -544,6 +547,7 @@ namespace Backend.Test
                     ["App:Mode"] = "hosted", ["RateLimiting:signup:PermitLimit"] = "1", ["RateLimiting:auth:PermitLimit"] = "1000"
                 }));
                 builder.ConfigureTestServices(services => services.AddSingleton<IStartupFilter, FakeClientIp>());
+                TestAccounts.WithNoopEmailServices(builder);
             });
             var client = Anonymous(factory);
             Task<HttpResponseMessage> From(string ip)
@@ -700,6 +704,8 @@ namespace Backend.Test
             {
                 builder.ConfigureAppConfiguration((_, config) =>
                     config.AddInMemoryCollection(settings.ToDictionary(s => s.key, s => (string?)s.value)));
+                if (settings.Any(s => s.key == "App:Mode" && s.value == "hosted"))
+                    TestAccounts.WithNoopEmailServices(builder);
                 if (disk != null)
                     builder.ConfigureTestServices(services =>
                     {
