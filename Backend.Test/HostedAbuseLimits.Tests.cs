@@ -39,6 +39,26 @@ namespace Backend.Test
             Total is { } t && Available is { } a ? (t, a) : throw new IOException("Fake drive that can't be read");
     }
 
+    public class ClientIpKeyTests
+    {
+        private static string Key(string ip) => ClientIpKey.From(System.Net.IPAddress.Parse(ip));
+
+        [Fact]
+        public void IPv4_KeysOnTheAddress() => Key("203.0.113.7").Should().Be("203.0.113.7");
+
+        [Fact]
+        public void IPv4Mapped_SharesTheKeyOfTheIPv4Address() => Key("::ffff:203.0.113.7").Should().Be(Key("203.0.113.7"));
+
+        [Fact]
+        public void IPv6_SameSlash64_SharesAKey() => Key("2001:db8:1:2:aaaa::1").Should().Be(Key("2001:db8:1:2:bbbb:cccc:dddd:eeee"));
+
+        [Fact]
+        public void IPv6_DifferentSlash64_DiffersInKey() => Key("2001:db8:1:2::1").Should().NotBe(Key("2001:db8:1:3::1"));
+
+        [Fact]
+        public void NoAddress_UsesASharedFallback() => ClientIpKey.From(null).Should().Be(ClientIpKey.Unknown);
+    }
+
     // Parsing of the new settings, and start-up failures for bad ones
     public class HostedAbuseLimitsOptionsTests : IClassFixture<WebApplicationFactory<Program>>
     {
@@ -130,6 +150,20 @@ namespace Backend.Test
             var parse = () => DiskSpace.ParsePercent(raw);
 
             parse.Should().Throw<InvalidOperationException>().WithMessage("*STORAGE_MAX_DISK_USE_PERCENT*");
+        }
+
+        [Fact]
+        public void Api_WithSignupLimitOfZero_FailsToStart()
+        {
+            var bad = _factory.WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("App:Mode", "hosted");
+                builder.UseSetting("RateLimiting:signup:PermitLimit", "0");
+            });
+
+            var start = () => bad.CreateClient();
+
+            start.Should().Throw<Exception>().Which.ToString().Should().Contain("RateLimiting:signup:PermitLimit");
         }
 
         [Fact]
@@ -306,6 +340,38 @@ namespace Backend.Test
             // Space is freed: the same upload can be completed (the refusal released its claim)
             disk.SetUsed(0);
             (await user.PostAsync($"/uploads/{uploadId}/complete", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public async Task DiskLimit_PendingUploadWithNoChunks_DoesNotBlockAnotherUsersUpload()
+        {
+            var disk = new FakeDiskSpace(80, total: 10_000, used: 0); // the limit is 8000 bytes
+            var factory = WithDisk(disk);
+            var first = await NewUserAsync(factory);
+            var second = await NewUserAsync(factory);
+
+            (await first.PostAsJsonAsync("/uploads", new { name = "big.bin", size = 5000 })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+            // The first upload only reserves a declared size; nothing is on disk, so this still fits
+            (await second.PostAsJsonAsync("/uploads", new { name = "other.bin", size = 5000 })).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public async Task DiskLimit_ChunkWrite_IsRefusedWhenOverTheCap()
+        {
+            var disk = new FakeDiskSpace(80);
+            var user = await NewUserAsync(WithDisk(disk));
+            var data = new byte[1000];
+            var started = await user.PostAsJsonAsync("/uploads", new { name = "a.bin", size = data.Length });
+            var uploadId = (await ReadJsonAsync(started)).GetProperty("uploadId").GetString()!;
+
+            disk.SetUsed(disk.Total!.Value / 100 * 80);
+            var content = new ByteArrayContent(data);
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            (await user.PutAsync($"/uploads/{uploadId}/chunks/0", content)).StatusCode.Should().Be((HttpStatusCode)507);
+
+            disk.SetUsed(0);
+            await PutChunkAsync(user, uploadId, data);
         }
 
         [Fact]
@@ -613,7 +679,7 @@ namespace Backend.Test
         // --- Disk limit with uploads in progress ---
 
         [Fact]
-        public async Task DiskLimit_UploadsInProgress_OfOtherAccounts_CountTowardsTheLimit()
+        public async Task DiskLimit_UploadsInProgress_OfOtherAccounts_ReserveNothingUntilChunksArrive()
         {
             var disk = new FakeDiskSpace(80, total: 1_000_000_000, used: 0); // limit: 800 MB
             var api = Api(disk);
@@ -621,18 +687,10 @@ namespace Backend.Test
             var a = await TestAccounts.CreateAsync(api, "a");
             var b = await TestAccounts.CreateAsync(api, "b");
 
-            var big = await a.Client.PostAsJsonAsync("/uploads", new { name = "big.bin", size = 500_000_000 });
-            big.StatusCode.Should().Be(HttpStatusCode.OK);
-            var bigId = (await ReadAsync(big)).GetProperty("uploadId").GetString()!;
+            (await a.Client.PostAsJsonAsync("/uploads", new { name = "big.bin", size = 500_000_000 })).StatusCode.Should().Be(HttpStatusCode.OK);
 
             (await b.Client.PostAsJsonAsync("/uploads", new { name = "b.bin", size = 400_000_000 })).StatusCode
-                .Should().Be((HttpStatusCode)507, "500 MB already waiting plus 400 MB is over 800 MB");
-            (await b.Client.PostAsJsonAsync("/uploads", new { name = "b.bin", size = 300_000_000 })).StatusCode
-                .Should().Be(HttpStatusCode.OK, "500 MB plus 300 MB is exactly the limit");
-
-            (await a.Client.DeleteAsync($"/uploads/{bigId}")).StatusCode.Should().Be(HttpStatusCode.OK);
-            (await b.Client.PostAsJsonAsync("/uploads", new { name = "c.bin", size = 400_000_000 })).StatusCode
-                .Should().Be(HttpStatusCode.OK, "the cancelled upload no longer reserves space");
+                .Should().Be(HttpStatusCode.OK, "a declared size with no chunks received is not on the drive");
         }
 
         [Fact]

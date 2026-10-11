@@ -464,7 +464,7 @@ The job runs with the hourly storage cleanup. These settings go in `appsettings.
 | `Hosted:MaxRemovalsPerRun` | 50 | Most accounts warned, and most removed, per run |
 | `Hosted:MaxRemovalsPerDay` | 200 | Most accounts removed in any 24 hours (a safety brake; counted per API process) |
 | `Hosted:DefaultQuotaBytes` | unset | Default quota for accounts that are not permanent or administrators. Unset (or 0) means the same as `Storage:DefaultQuotaBytes` (1 GB). Permanent accounts and administrators always use `Storage:DefaultQuotaBytes`; a quota set on a user always wins |
-| `RateLimiting:signup:PermitLimit`, `RateLimiting:signup:WindowSeconds` | 5, 3600 | Sign-ups per IP address per window (5 per hour). Self-hosted installs keep using the login limit (`RateLimiting:auth:*`, 10 per minute) for sign-ups |
+| `RateLimiting:signup:PermitLimit`, `RateLimiting:signup:WindowSeconds` | 5, 3600 | Sign-ups per IP address per window (5 per hour). Self-hosted installs keep using the login limit (`RateLimiting:auth:*`, 10 per minute) for sign-ups. Must be above 0: `0` does not turn the limit off, the API refuses to start |
 | `Hosted:MaxSignupsPerHour`, `Hosted:MaxSignupsPerDay` | 0, 0 | Site-wide limit on new accounts in the last hour / day; 0 = off. Over the limit, sign-up returns 429 "New sign-ups are paused". Accounts an administrator creates are never limited |
 
 **Sign-up limits and your proxy.** The per-IP limit uses the client's address, which behind a

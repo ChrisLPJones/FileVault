@@ -31,8 +31,8 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     }
 
     // Returns a 507 if the server's drive is too full to take `incoming` more bytes (see DiskSpace)
-    public Task<HttpReturnResult?> CheckDiskAsync(DatabaseServices db, long incoming, Guid? excludeUploadId = null) =>
-        disk.CheckAsync(db, incoming, excludeUploadId);
+    public Task<HttpReturnResult?> CheckDiskAsync(long incoming) =>
+        disk.CheckAsync(incoming);
 
     public static readonly string[] DefaultFolderNames = ["Documents", "Pictures", "Music", "Videos"];
 
@@ -132,7 +132,7 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
         if (quotaError != null)
             return quotaError;
 
-        var diskError = await CheckDiskAsync(db, file.Length);
+        var diskError = await CheckDiskAsync(file.Length);
         if (diskError != null)
             return diskError;
 

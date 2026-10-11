@@ -88,7 +88,7 @@ namespace Backend
                         var window = TimeSpan.FromSeconds(config.GetValue($"RateLimiting:{policy}:WindowSeconds", 60));
 
                         return RateLimitPartition.GetFixedWindowLimiter(
-                            http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                            ClientIpKey.From(http.Connection.RemoteIpAddress),
                             _ => new FixedWindowRateLimiterOptions { PermitLimit = permitLimit, Window = window });
                     });
                 }
@@ -102,6 +102,7 @@ namespace Backend
                     var policy = hosted.IsHosted ? "signup" : "auth";
                     var permitLimit = config.GetValue($"RateLimiting:{policy}:PermitLimit", hosted.IsHosted ? 5 : 10);
                     var window = TimeSpan.FromSeconds(config.GetValue($"RateLimiting:{policy}:WindowSeconds", hosted.IsHosted ? 3600 : 60));
+                    // Values of 0 or less are refused at start-up (SignupRateLimit.Validate)
 
                     return RateLimitPartition.GetFixedWindowLimiter(
                         http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -219,6 +220,7 @@ namespace Backend
             // Fail fast on an unknown FILEVAULT_MODE
             var hostedOptions = app.Services.GetRequiredService<HostedOptions>();
             app.Logger.LogInformation("FileVault mode: {Mode}", hostedOptions.ModeName);
+            SignupRateLimit.Validate(app.Configuration, hostedOptions.IsHosted);
             var diskSpace = app.Services.GetRequiredService<DiskSpace>();
             if (diskSpace.MaxPercent > 0)
             {
@@ -267,6 +269,9 @@ namespace Backend
                 forwarded.KnownProxies.Clear();
                 foreach (var proxy in app.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
                     forwarded.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));
+                if (hostedOptions.IsHosted && forwarded.KnownProxies.Count == 0)
+                    app.Logger.LogWarning("Hosted mode with ForwardedHeaders enabled but no ForwardedHeaders:KnownProxies: no proxy is trusted, so X-Forwarded-For is ignored " +
+                        "and every visitor shares the proxy's IP (the per-IP sign-up limit becomes site-wide). Set KnownProxies to the proxy's address. See docs/DEPLOYMENT.md.");
                 app.UseForwardedHeaders(forwarded);
             }
 

@@ -73,12 +73,15 @@ public class DiskSpace
             return null;
         var used = total - available;
         var pending = await db.GetAllPendingUploadBytesAsync();
-        return new DiskState(total, used, pending, used + pending > LimitBytes(total, MaxPercent));
+        return new DiskState(total, used, pending, used > LimitBytes(total, MaxPercent));
     }
 
     // Returns a 507 result if storing `incoming` more bytes would take the drive past the cap.
-    // `excludeUploadId` leaves out the chunked upload being completed (its size is `incoming`).
-    public async Task<HttpReturnResult?> CheckAsync(DatabaseServices db, long incoming, Guid? excludeUploadId = null)
+    // Chunk writes pass the chunk length; completing an upload passes its size (assembly briefly needs
+    // about that much on top of the chunks already on disk).
+    public Task<HttpReturnResult?> CheckAsync(long incoming) => Task.FromResult(Check(incoming));
+
+    private HttpReturnResult? Check(long incoming)
     {
         if (MaxPercent == 0)
             return null;
@@ -91,8 +94,9 @@ public class DiskSpace
         }
 
         var used = total - available;
-        var pending = await db.GetAllPendingUploadBytesAsync(excludeUploadId);
-        if (used + pending + incoming <= LimitBytes(total, MaxPercent))
+        // Other users' pending uploads are not counted: their chunks are already in `used`, and the
+        // unreceived rest is only a declared size that costs nothing until chunks arrive (each is checked).
+        if (used + incoming <= LimitBytes(total, MaxPercent))
             return null;
 
         return new HttpReturnResult(false, FullMessage) { StatusCode = 507 };
