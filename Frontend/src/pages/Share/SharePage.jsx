@@ -3,7 +3,6 @@ import { Link, useParams } from "react-router-dom";
 import { getErrorMessage } from "../../api/api";
 import { getPublicShareAPI, shareDownloadUrl, unlockShareAPI } from "../../api/shareAPI";
 import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
-import AbuseContact from "../../components/AbuseContact";
 import { formatBytes } from "../../utils/formatBytes";
 import "../Auth/Auth.css";
 import "./SharePage.css";
@@ -164,7 +163,6 @@ function SharePage() {
         <div className="auth-page">
             <div className="auth-card share-card">
                 {renderBody()}
-                <AbuseContact />
             </div>
         </div>
     );

@@ -113,8 +113,6 @@ namespace Backend
             builder.Services.AddFixedWindowRateLimits(("share", 60), ("share-download", 20));
             // Endpoints that send email (forgot password, resend verification)
             builder.Services.AddFixedWindowRateLimits(("email", 5));
-            // Anonymous site info (GET /site)
-            builder.Services.AddFixedWindowRateLimits(("public", 60));
             // OpenAPI document (/swagger/v1/swagger.json) and interactive docs (/swagger)
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(options =>
@@ -237,8 +235,6 @@ namespace Backend
                 if (!app.Configuration.GetValue("ForwardedHeaders:Enabled", false))
                     app.Logger.LogWarning("Hosted mode without ForwardedHeaders (BEHIND_HTTPS_PROXY=true): behind a reverse proxy every visitor shares the proxy's IP, " +
                         "so the per-IP sign-up limit becomes a site-wide limit. See docs/DEPLOYMENT.md.");
-                if (hostedOptions.AbuseContactEmail == null)
-                    app.Logger.LogWarning("Hosted mode without an abuse contact (ABUSE_CONTACT_EMAIL or HOSTED_CONTACT_EMAIL): the site shows no way to report abuse");
             }
             var emailSender = app.Services.GetRequiredService<IEmailSender>();
             EmailSetup.Validate(hostedOptions.IsHosted, emailSender, app.Configuration);
@@ -328,7 +324,6 @@ namespace Backend
             app.MapUploadRoutes();
             app.MapTwoFactorRoutes();
             app.MapSessionRoutes();
-            app.MapSiteRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");

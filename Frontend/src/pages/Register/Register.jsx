@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import "../Auth/Auth.css";
 import { register } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
-import AbuseContact from "../../components/AbuseContact";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
 
 // Rule list item: neutral until the user starts typing, then green/red
@@ -179,7 +178,6 @@ function Register() {
                 <p className="auth-switch">
                     Already have an account? <Link to="/login">Log in</Link>
                 </p>
-                <AbuseContact />
             </div>
         </div>
     );

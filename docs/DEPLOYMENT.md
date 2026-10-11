@@ -188,7 +188,6 @@ without the first four.
 | `SWAGGER_ENABLED` | `true` to serve the API docs (section 5). Off by default |
 | `FILEVAULT_MODE` | Optional: `self-hosted` (default) or `hosted` (section 9). Anything else stops the API starting |
 | `HOSTED_CONTACT_EMAIL` | Optional, hosted mode only: the address users are told to email to ask for a permanent account |
-| `ABUSE_CONTACT_EMAIL` | Optional: where to report abuse, shown on the sign-in, sign-up, share and settings pages. A plain email address (anything else stops the API starting). Hosted mode uses `HOSTED_CONTACT_EMAIL` when this is empty |
 | `STORAGE_MAX_DISK_USE_PERCENT` | Optional: uploads are refused once the drive holding the file storage is this percent full (1-99, default 80, `0` = off). See "Disk limit" below |
 | `INITIAL_ADMIN_EMAIL` | Optional, recommended on a public install: the one email that can become the first administrator (section 7) |
 | `GEOIPUPDATE_ACCOUNT_ID`, `GEOIPUPDATE_LICENSE_KEY` | Optional: MaxMind credentials for the `geoip` profile, which downloads the country database (section 8) |
@@ -531,8 +530,7 @@ In hosted mode:
   removed. Administrators and permanent accounts don't see it. `HOSTED_CONTACT_EMAIL` adds the
   address to ask for a permanent account; leave it empty to leave that sentence out.
 - The Admin page gains "Last active" and "Removal due" columns.
-- Sign-ups are rate limited (below), and `ABUSE_CONTACT_EMAIL` (or `HOSTED_CONTACT_EMAIL`) shows a
-  "Report abuse" address on the public pages.
+- Sign-ups are rate limited (below).
 - **SMTP is required.** The API refuses to start in hosted mode without a working email setup:
   `SMTP_HOST` and `SMTP_FROM` (or `SMTP_USER`), plus `SMTP_PORT`, `SMTP_USER` and `SMTP_PASSWORD` as your
   server needs. Without email a hosted site could not confirm sign-ups or reset passwords, and the

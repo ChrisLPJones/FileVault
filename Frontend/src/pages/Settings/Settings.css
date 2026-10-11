@@ -396,17 +396,3 @@ a.settings-button.settings-link-button {
 .email-address-pending {
     margin-bottom: 12px;
 }
-
-/* The abuse contact sits on the page background below the cards */
-.settings-abuse-contact {
-    max-width: 560px;
-    margin: 8px auto 0;
-    padding-top: 0;
-    border-top: none;
-    color: var(--fv-heading-on-page);
-}
-
-.settings-abuse-contact a {
-    color: inherit;
-    text-decoration: underline;
-}
