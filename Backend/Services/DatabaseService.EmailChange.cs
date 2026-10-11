@@ -129,12 +129,14 @@ public partial class DatabaseServices
         await connection.OpenAsync();
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
+        // Users first, like every other writer (rotation locks the user's row before its refresh
+        // tokens), so the two can't deadlock
         await using var command = new SqlCommand(@"
+            UPDATE Users SET TokensValidAfter = @Now WHERE Id = @UserId;
             UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
             WHERE UserId = @UserId AND UsedAt IS NULL AND Purpose IN (@Change, @Cancel);
             UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE UserId = @UserId AND RevokedAt IS NULL;
-            DELETE FROM LoginChallenges WHERE UserId = @UserId;
-            UPDATE Users SET TokensValidAfter = @Now WHERE Id = @UserId;", connection, transaction);
+            DELETE FROM LoginChallenges WHERE UserId = @UserId;", connection, transaction);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@Change", AccountEmailService.ChangePurpose);
         command.Parameters.AddWithValue("@Cancel", AccountEmailService.CancelChangePurpose);
@@ -197,9 +199,17 @@ public partial class DatabaseServices
             // -3 is a deadlock victim. -999 with the transaction already ended by the server (seen in
             // CI) means it was rolled back under us; nothing was committed, so try again like a deadlock
             if (result < 0)
-                throw result == -3 || (result == -999 && transaction.Connection == null)
-                    ? new AppLockDeadlockException("Chosen as a deadlock victim waiting for the email address lock")
-                    : new InvalidOperationException($"Could not take the email address lock (sp_getapplock returned {result})");
+            {
+                if (result == -999 && transaction.Connection == null)
+                    result = -3;
+                // -1 is a timeout: the exception handler logs it and answers 503; the rolled-back link use leaves the link reusable
+                throw result switch
+                {
+                    -3 => new AppLockDeadlockException("Chosen as a deadlock victim waiting for the email address lock"),
+                    -1 => new AppLockTimeoutException("Timed out waiting for the email address lock"),
+                    _ => new InvalidOperationException($"Could not take the email address lock (sp_getapplock returned {result})")
+                };
+            }
         }
 
         string? oldEmail = null;

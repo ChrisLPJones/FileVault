@@ -224,7 +224,7 @@ namespace Backend
             app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
             {
                 var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
-                if (error is AdminLockTimeoutException)
+                if (error is AppLockTimeoutException)
                 {
                     app.Logger.LogError(error, "Timed out on {Method} {Path}", context.Request.Method, context.Request.Path);
                     context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;

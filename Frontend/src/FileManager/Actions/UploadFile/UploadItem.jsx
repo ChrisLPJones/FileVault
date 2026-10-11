@@ -7,7 +7,7 @@ import { FaRegCheckCircle } from "react-icons/fa";
 import { IoMdRefresh } from "react-icons/io";
 import { useFiles } from "../../../contexts/FilesContext";
 import { useTranslation } from "../../../contexts/TranslationProvider";
-import { getErrorMessage, getFreshToken } from "../../../api/api";
+import { getErrorMessage, getRequestToken } from "../../../api/api";
 import { CHUNKED_UPLOAD_THRESHOLD, cancelChunkedUpload, uploadInChunks } from "../../../api/chunkedUploadAPI";
 
 // One file in the upload dialog. Small files go to POST /upload in one request; bigger ones are
@@ -91,7 +91,7 @@ const UploadItem = ({
             xhr.onerror = () => reject({ xhr });
 
             // Refresh the access token first if it is about to expire
-            getFreshToken().then((token) => {
+            getRequestToken().then((token) => {
                 if (xhr.cancelled) return;
 
                 const method = fileUploadConfig?.method || "POST";
@@ -112,7 +112,7 @@ const UploadItem = ({
                 formData.append("file", fileData.file);
 
                 xhr.send(formData);
-            });
+            }).catch(reject);
         });
 
     // Big files: in chunks, continuing an earlier attempt if there was one
@@ -154,6 +154,8 @@ const UploadItem = ({
             onFileUploaded(response);
         }).catch((error) => {
             if (cancelledRef.current) return;
+            // The session ended and the redirect to the login page is under way
+            if (error?.sessionExpired) return;
             if (error?.xhr) handleUploadError(error.xhr);
             else if (!error?.response) showUploadError("Connection lost. Retry to carry on where it stopped.");
             else showUploadError(getErrorMessage(error, t("uploadFail")), error.response);

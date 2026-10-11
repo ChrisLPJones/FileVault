@@ -1,4 +1,6 @@
 using Backend.Models;
+using Backend.Services;
+using Microsoft.Extensions.DependencyInjection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -202,6 +204,56 @@ namespace Backend.Test
             (await ActiveTokensAsync(email)).Should().Be(2);
 
             (await RefreshAsync(client, otherSession)).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public async Task RefreshToken_ManyRequestsWithTheSameToken_AreAllLetIn_AndLeaveOneLiveTokenPerSession()
+        {
+            var client = NewClient(_factory);
+            var email = NewEmail();
+            await RegisterAsync(client, email);
+            var (_, first, _) = await LoginAsync(client, email);
+            var (_, otherSession, _) = await LoginAsync(client, email);
+
+            // A timed-out refresh retried while the first is still running on the server
+            var responses = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => RefreshAsync(client, first)));
+
+            foreach (var response in responses)
+            {
+                response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+                response.Headers.GetValues("Set-Cookie").Should().Contain(c => c.StartsWith("fv_refresh=") && !c.StartsWith("fv_refresh=;"));
+            }
+            _usersToDelete.Add((client, await ReadTokenAsync(responses[0])));
+
+            // One live token for the session, the other session untouched, nobody revoked
+            (await ActiveTokensAsync(email)).Should().Be(2);
+            (await RefreshAsync(client, otherSession)).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public async Task Rotate_ForARequestTheClientGaveUpOn_ChangesNothingAndIsTransient()
+        {
+            var client = NewClient(_factory);
+            var email = NewEmail();
+            await RegisterAsync(client, email);
+            var (token, first, _) = await LoginAsync(client, email);
+            _usersToDelete.Add((client, token));
+
+            using var scope = _factory.Services.CreateScope();
+            var http = new Microsoft.AspNetCore.Http.DefaultHttpContext
+            {
+                RequestAborted = new CancellationToken(canceled: true),
+                RequestServices = scope.ServiceProvider
+            };
+            http.Request.Headers.Cookie = first;
+            var (user, raced) = await scope.ServiceProvider.GetRequiredService<AuthServices>()
+                .RotateRefreshTokenAsync(scope.ServiceProvider.GetRequiredService<DatabaseServices>(), http);
+
+            user.Should().BeNull();
+            raced.Should().BeTrue();
+            // Nothing was consumed: the same cookie still refreshes normally
+            (await ActiveTokensAsync(email)).Should().Be(1);
+            (await RefreshAsync(client, first)).StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         [Fact]

@@ -134,37 +134,28 @@ namespace Backend.Services
 
         private TimeSpan RefreshLifetime => TimeSpan.FromDays(_config.GetValue("Jwt:RefreshDays", 7));
 
-        // Create a refresh token for the user and set it as an httpOnly cookie.
-        // Without a session ID this is a new login: it starts a new session (see Active sessions)
-        // and retires any refresh token this browser already had.
-        public async Task<Guid?> IssueRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http, Guid? sessionId = null,
-            DatabaseServices.RefreshTokenUse? rotatedFrom = null)
+        // Create a refresh token for the user in a new session (see Active sessions) and set it as an
+        // httpOnly cookie, retiring any refresh token this browser already had. Used for sign-in;
+        // rotation is RotateRefreshTokenAsync.
+        public async Task<Guid?> IssueRefreshTokenAsync(string userId, DatabaseServices db, HttpContext http)
         {
             var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
             var expiresAt = DateTime.UtcNow.Add(RefreshLifetime);
             var ipAddress = DeviceDescription.IpAddress(http);
 
-            if (sessionId == null)
-            {
-                if (http.Request.Cookies.TryGetValue(RefreshCookieName, out var previous) && !string.IsNullOrEmpty(previous))
-                    await db.RevokeRefreshTokenAsync(HashToken(previous));
+            if (http.Request.Cookies.TryGetValue(RefreshCookieName, out var previous) && !string.IsNullOrEmpty(previous))
+                await db.RevokeRefreshTokenAsync(HashToken(previous));
 
-                sessionId = await db.CreateSessionAsync(
-                    userId, DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), ipAddress);
-            }
-            else
-            {
-                await db.TouchSessionAsync(sessionId.Value, ipAddress);
-            }
+            var sessionId = await db.CreateSessionAsync(
+                userId, DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), ipAddress);
 
-            // When rotating, the token is stored only if no administrator password change landed
-            // since the old one was consumed (password change, reset or administrator); null means refused
-            if (!await db.StoreRefreshTokenAsync(userId, sessionId.Value, HashToken(token), expiresAt,
-                    rotatedFrom != null, rotatedFrom?.UserTokensValidAfter))
+            // Null means refused (the user is suspended or gone). Rotation doesn't come through here: it
+            // consumes the old token and stores the new one in one transaction (RotateRefreshTokenAsync)
+            if (!await db.StoreRefreshTokenAsync(userId, sessionId, HashToken(token), expiresAt))
                 return null;
 
             await FinishRefreshTokenAsync(userId, db, http, token, expiresAt);
-            return sessionId.Value;
+            return sessionId;
         }
 
         // Signing in, and renewing the access token while the app is open, count as use (hosted mode's
@@ -206,7 +197,17 @@ namespace Backend.Services
             if (!http.Request.Cookies.TryGetValue(RefreshCookieName, out var token) || string.IsNullOrEmpty(token))
                 return (null, false);
 
-            var use = await db.ConsumeRefreshTokenAsync(HashToken(token));
+            // The client gave up on this request (a timeout, then a retry): change nothing, so it can't
+            // replace the token its own retry is getting. Transient for the client.
+            if (http.RequestAborted.IsCancellationRequested)
+                return (null, true);
+
+            // The old token is consumed and the new one stored in one transaction, so a request racing
+            // this one never sees the old token revoked without its replacement
+            var newToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            var newExpiresAt = DateTime.UtcNow.Add(RefreshLifetime);
+            var use = await db.ConsumeAndReplaceRefreshTokenAsync(HashToken(token), HashToken(newToken), newExpiresAt,
+                DeviceDescription.IpAddress(http), DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent));
             if (use == null)
                 return (null, false);
 
@@ -231,33 +232,34 @@ namespace Backend.Services
                 // Refused (the session was signed out meanwhile, or another call won): the client retries once.
                 if (use.Replaced && use.SessionId != null)
                 {
+                    if (http.RequestAborted.IsCancellationRequested)
+                        return (null, true);
+
                     var rejoining = await db.GetUserByUserId(use.UserId);
                     if (rejoining == null || (await db.GetUserAuthStateAsync(use.UserId)).Suspended)
                         return (null, false);
 
-                    var newToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-                    var expiresAt = DateTime.UtcNow.Add(RefreshLifetime);
                     if (await db.ReplaceSessionTokenWithinGraceAsync(use.UserId, use.SessionId.Value, HashToken(newToken),
-                            expiresAt, use.UserTokensValidAfter))
+                            newExpiresAt, use.UserTokensValidAfter))
                     {
                         await db.TouchSessionAsync(use.SessionId.Value, DeviceDescription.IpAddress(http));
-                        await FinishRefreshTokenAsync(use.UserId, db, http, newToken, expiresAt);
+                        await FinishRefreshTokenAsync(use.UserId, db, http, newToken, newExpiresAt);
                         return (rejoining, false);
                     }
                 }
                 return (null, true);
             }
 
-            var user = await db.GetUserByUserId(use.UserId);
-            if (user == null || (await db.GetUserAuthStateAsync(use.UserId)).Suspended)
+            // Not stored: the user is suspended (their tokens were cut meanwhile): 401 and clear the cookie
+            if (!use.Stored)
                 return (null, false);
 
-            // Stay in the same session (tokens from before sessions existed start one now)
-            var issued = await IssueRefreshTokenAsync(use.UserId, db, http, use.SessionId
-                ?? await db.CreateSessionAsync(use.UserId,
-                    DeviceDescription.FromUserAgent(http.Request.Headers.UserAgent), DeviceDescription.IpAddress(http)), use);
-            // Refused (the user's tokens were invalidated meanwhile): 401 and clear the cookie
-            return issued == null ? (null, false) : (user, false);
+            var user = await db.GetUserByUserId(use.UserId);
+            if (user == null)
+                return (null, false);
+
+            await FinishRefreshTokenAsync(use.UserId, db, http, newToken, newExpiresAt);
+            return (user, false);
         }
 
         // Revoke the refresh token in the request's cookie (logout)
