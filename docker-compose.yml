@@ -54,6 +54,8 @@ services:
       ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=SecureVaultDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;Connection Timeout=5;"
       Jwt__Key: ${JWT_KEY:?Set JWT_KEY in .env (see .env.example)}
       Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:?Set ENCRYPTION_MASTER_KEY in .env (see .env.example)}
+      # Only for the rotate-master-key command (docker compose run --rm api rotate-master-key); leave unset otherwise
+      Encryption__NewMasterKey: ${ENCRYPTION_MASTER_KEY_NEW:-}
       Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:5173}
       # Optional: the one email that becomes the first administrator, once confirmed
       Admin__InitialEmail: ${INITIAL_ADMIN_EMAIL:-}

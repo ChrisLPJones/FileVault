@@ -743,3 +743,31 @@ GO
 ------------------------------------------------------------
 UPDATE Users SET IsPermanent = 1 WHERE IsAdmin = 1 AND IsPermanent = 0;
 GO
+
+------------------------------------------------------------
+-- MASTER KEY STATE
+------------------------------------------------------------
+-- One row saying which ENCRYPTION_MASTER_KEY the database is encrypted with: a one-way
+-- fingerprint of the key (reveals nothing usable), never the key. The API checks it at start
+-- and refuses a different key; the rotate-master-key command updates it in the same
+-- transaction that re-wraps every stored secret. RecoveryHashKey is the recovery-code hashing
+-- key carried over a rotation (itself protected with the current master key), NULL when the
+-- key derived from the master key is in use. The row is created by the first start of the API
+-- (or the first rotation).
+IF NOT EXISTS (SELECT *
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_NAME = 'MasterKeyState')
+BEGIN
+    CREATE TABLE MasterKeyState
+    (
+        Id TINYINT NOT NULL,
+        KeyFingerprint CHAR(64) NOT NULL,
+        RecoveryHashKey NVARCHAR(200) NULL,
+        RotatedAt DATETIME2 NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_MasterKeyState_CreatedAt DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT PK_MasterKeyState PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT CK_MasterKeyState_OneRow CHECK (Id = 1)
+    );
+    PRINT 'Table "MasterKeyState" created.';
+END
+GO

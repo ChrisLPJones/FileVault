@@ -24,13 +24,17 @@ public sealed class SecretProtector
     private const int TagSize = 16;
 
     private readonly Dictionary<Purpose, byte[]> _encryptionKeys;
-    private readonly byte[] _hashKey;
+    private byte[] _hashKey;
+    private bool _hashKeyCarried;
 
-    public SecretProtector(IConfiguration config)
+    public SecretProtector(IConfiguration config) : this(FileEncryption.ParseMasterKey(config["Encryption:MasterKey"])
+        ?? throw new InvalidOperationException("Encryption:MasterKey must be a base64-encoded 32-byte key."))
     {
-        var masterKey = FileEncryption.ParseMasterKey(config["Encryption:MasterKey"])
-            ?? throw new InvalidOperationException("Encryption:MasterKey must be a base64-encoded 32-byte key.");
+    }
 
+    // For the master key rotation command, which holds the old and the new key at once
+    public SecretProtector(byte[] masterKey)
+    {
         // The info strings are part of the stored data's format: changing one makes existing values unreadable
         byte[] Derive(string info) => HKDF.DeriveKey(HashAlgorithmName.SHA256, masterKey, 32, info: Encoding.UTF8.GetBytes(info));
         _encryptionKeys = new()
@@ -38,8 +42,23 @@ public sealed class SecretProtector
             [Purpose.AccountSecrets] = Derive("FileVault account secrets v1"),
             [Purpose.ShareLinks] = Derive("FileVault share link secrets v1"),
         };
-        _hashKey = Derive("FileVault recovery codes v1");
-        CryptographicOperations.ZeroMemory(masterKey);
+        _hashKey = DeriveRecoveryHashKey(masterKey);
+    }
+
+    // The key recovery codes are hashed with when none has been carried over a master key rotation
+    public static byte[] DeriveRecoveryHashKey(byte[] masterKey) =>
+        HKDF.DeriveKey(HashAlgorithmName.SHA256, masterKey, 32, info: Encoding.UTF8.GetBytes("FileVault recovery codes v1"));
+
+    // After a master key rotation that kept the recovery codes, the hashing key is the one they were
+    // made with (stored protected in MasterKeyState), not one derived from the new master key. Set once, at start.
+    public void UseRecoveryHashKey(byte[] hashKey)
+    {
+        if (hashKey.Length != 32)
+            throw new ArgumentException("The recovery hash key must be 32 bytes.", nameof(hashKey));
+        if (_hashKeyCarried)
+            throw new InvalidOperationException("The recovery hash key was already set.");
+        _hashKey = (byte[])hashKey.Clone();
+        _hashKeyCarried = true;
     }
 
     // AES-256-GCM, bound to `context` so a value can't be moved to another row
