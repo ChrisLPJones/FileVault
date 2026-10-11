@@ -102,14 +102,14 @@ jobs:
         run: |
           printf 'MSSQL_SA_PASSWORD=x\nMSSQL_APP_PASSWORD=x\nJWT_KEY=x\nENCRYPTION_MASTER_KEY=x\n' > .env
           docker compose config --quiet
-          docker compose -f deploy/docker-compose.yml config --quiet
+          docker compose -f deploy/docker-compose.yml --env-file .env config --quiet
 
       # The server file repeats the source file's services: their settings must not drift apart
       - name: Compare the two compose files
         run: |
           strip='.services | map_values(del(.build, .image, .ports))'
           docker compose config --format json | jq -S "$strip" > src.json
-          docker compose -f deploy/docker-compose.yml config --format json | jq -S "$strip" > dep.json
+          docker compose -f deploy/docker-compose.yml --env-file .env config --format json | jq -S "$strip" > dep.json
           diff src.json dep.json || { echo "::error::docker-compose.yml and deploy/docker-compose.yml differ (other than build, image and ports)"; exit 1; }
 
       - name: Build API image
