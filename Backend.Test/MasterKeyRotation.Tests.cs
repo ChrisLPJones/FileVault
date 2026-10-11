@@ -39,7 +39,7 @@ namespace Backend.Test
 
         // Run the command as the operator would: keys only from configuration
         private static async Task<(int exitCode, string output)> RotateAsync(
-            FreshDatabase db, string oldKey, string? newKey, string[]? args = null, Func<string, Task>? afterTable = null, bool waitForOtherConnections = true)
+            FreshDatabase db, string oldKey, string? newKey, string[]? args = null, Func<string, Task>? afterTable = null)
         {
             TestDatabaseGuard.AssertTestDatabase(db.ConnectionString);
             // The command refuses while any other connection is open to the database; the test's own
@@ -51,18 +51,23 @@ namespace Backend.Test
                 ["Encryption:MasterKey"] = oldKey,
                 ["Encryption:NewMasterKey"] = newKey,
             }).Build();
-            // Sessions of stopped apps or of a killed run can take a moment to disappear
-            for (var attempt = 1; ; attempt++)
+            var output = new StringWriter();
+            var exit = await MasterKeyCommand.RunAsync(args ?? [], config, output, afterTable);
+            return (exit, output.ToString());
+        }
+
+        // Wait (bounded) until no session other than ours is left on the database
+        private static async Task WaitForNoOtherSessionsAsync(FreshDatabase db)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (true)
             {
-                var output = new StringWriter();
-                var exit = await MasterKeyCommand.RunAsync(args ?? [], config, output, afterTable);
-                if (exit == 1 && waitForOtherConnections && attempt < 10 && output.ToString().Contains("Other connections are open"))
-                {
-                    await Task.Delay(500);
-                    SqlConnection.ClearAllPools();
-                    continue;
-                }
-                return (exit, output.ToString());
+                SqlConnection.ClearAllPools();
+                var others = await db.ScalarAsync<int>(
+                    "SELECT COUNT(*) FROM sys.dm_exec_sessions WHERE database_id = DB_ID() AND is_user_process = 1 AND session_id <> @@SPID");
+                if (others == 0 || DateTime.UtcNow > deadline)
+                    return;
+                await Task.Delay(200);
             }
         }
 
@@ -446,6 +451,8 @@ namespace Backend.Test
             output.Should().Contain("simulated failure").And.Contain("nothing was changed");
             (await SnapshotAsync(db)).Should().Equal(before);
 
+            await WaitForNoOtherSessionsAsync(db);
+
             // The session dies part-way (as if the process or the connection was killed)
             (exit, output) = await RotateAsync(db, keyA, keyB, afterTable: async table =>
             {
@@ -459,9 +466,13 @@ namespace Backend.Test
             exit.Should().Be(1, output);
             (await SnapshotAsync(db)).Should().Equal(before);
 
+            await WaitForNoOtherSessionsAsync(db);
+
             // The API on the old key still works
             await using (var appA = App(db, keyA, clock))
                 await VerifyWorksAsync(appA, clock, data);
+
+            await WaitForNoOtherSessionsAsync(db);
 
             // Running it again completes
             (await RotateAsync(db, keyA, keyB)).exitCode.Should().Be(0);
@@ -528,7 +539,7 @@ namespace Backend.Test
             {
                 await other.OpenAsync();
                 var before = await SnapshotAsync(db);
-                var (exit, output) = await RotateAsync(db, keyA, keyB, waitForOtherConnections: false);
+                var (exit, output) = await RotateAsync(db, keyA, keyB);
                 exit.Should().Be(1);
                 output.Should().Contain("Other connections are open").And.Contain("pretend-old-api x1").And.NotContain(keyA).And.NotContain(keyB);
                 (await SnapshotAsync(db)).Should().Equal(before);

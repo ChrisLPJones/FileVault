@@ -88,6 +88,8 @@ public sealed class MasterKeyGuard(
             }
             catch (SqlException ex)
             {
+                // Error 0 is also what SqlClient reports for a TLS/certificate problem, so say what it was
+                logger.LogWarning("Master key check: database not reachable (SQL error {Number}: {Message})", ex.Number, ex.Message);
                 await CloseConnectionAsync();
                 if (attempt >= MaxAttempts)
                 {
@@ -115,7 +117,9 @@ public sealed class MasterKeyGuard(
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await _stop.CancelAsync();
+        // The host may already have disposed this service (disposal and StopAsync can run in either order)
+        try { await _stop.CancelAsync(); }
+        catch (ObjectDisposedException) { }
         if (_watcher != null)
         {
             try { await _watcher.WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None); }
@@ -126,6 +130,8 @@ public sealed class MasterKeyGuard(
 
     public void Dispose()
     {
+        try { _stop.Cancel(); }
+        catch (ObjectDisposedException) { }
         _stop.Dispose();
         _connection?.Dispose();
     }

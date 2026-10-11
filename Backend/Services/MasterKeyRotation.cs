@@ -159,6 +159,14 @@ public static class MasterKeyRotation
     {
         try
         {
+            // Without VIEW SERVER STATE the view shows only our own session and raises no error
+            await using (var permission = new SqlCommand("SELECT COALESCE(HAS_PERMS_BY_NAME(NULL, NULL, 'VIEW SERVER STATE'), 0)", connection))
+                if (Convert.ToInt32(await permission.ExecuteScalarAsync(ct)) == 0)
+                {
+                    log("Warning: no permission to list other connections (VIEW SERVER STATE); only the API's lock was checked. Make sure the API is stopped.");
+                    return null;
+                }
+
             await using var command = new SqlCommand(@"
                 SELECT COALESCE(NULLIF(program_name, ''), '(unnamed)'), COUNT(*) FROM sys.dm_exec_sessions
                 WHERE database_id = DB_ID() AND session_id <> @@SPID AND is_user_process = 1
