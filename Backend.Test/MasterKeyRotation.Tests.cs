@@ -39,18 +39,31 @@ namespace Backend.Test
 
         // Run the command as the operator would: keys only from configuration
         private static async Task<(int exitCode, string output)> RotateAsync(
-            FreshDatabase db, string oldKey, string? newKey, string[]? args = null, Func<string, Task>? afterTable = null)
+            FreshDatabase db, string oldKey, string? newKey, string[]? args = null, Func<string, Task>? afterTable = null, bool waitForOtherConnections = true)
         {
             TestDatabaseGuard.AssertTestDatabase(db.ConnectionString);
+            // The command refuses while any other connection is open to the database; the test's own
+            // pooled (idle) ones from earlier queries and stopped apps would count
+            SqlConnection.ClearAllPools();
             var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] = db.ConnectionString,
                 ["Encryption:MasterKey"] = oldKey,
                 ["Encryption:NewMasterKey"] = newKey,
             }).Build();
-            var output = new StringWriter();
-            var exit = await MasterKeyCommand.RunAsync(args ?? [], config, output, afterTable);
-            return (exit, output.ToString());
+            // Sessions of stopped apps or of a killed run can take a moment to disappear
+            for (var attempt = 1; ; attempt++)
+            {
+                var output = new StringWriter();
+                var exit = await MasterKeyCommand.RunAsync(args ?? [], config, output, afterTable);
+                if (exit == 1 && waitForOtherConnections && attempt < 10 && output.ToString().Contains("Other connections are open"))
+                {
+                    await Task.Delay(500);
+                    SqlConnection.ClearAllPools();
+                    continue;
+                }
+                return (exit, output.ToString());
+            }
         }
 
         // Every protected value and the key state, in a comparable form: "Tag|rowKey|value[:more]"
@@ -498,6 +511,29 @@ namespace Backend.Test
             (await SnapshotAsync(db)).Should().Equal(before);
 
             // Once the API is stopped it can rotate
+            (await RotateAsync(db, keyA, keyB)).exitCode.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task AnyOtherConnectionToTheDatabase_BlocksTheCommand_EvenWithoutTheApplock()
+        {
+            await using var db = await FreshDatabase.CreateAsync();
+            var (keyA, keyB) = (NewKey(), NewKey());
+            await using (var appA = App(db, keyA))
+                (await TestAccounts.CreateAsync(appA, "other")).Client.Dispose();
+
+            // Stands in for an API that holds no lock (an older version, or one whose guard connection dropped)
+            var builder = new SqlConnectionStringBuilder(db.ConnectionString) { Pooling = false, ApplicationName = "pretend-old-api" };
+            await using (var other = new SqlConnection(builder.ConnectionString))
+            {
+                await other.OpenAsync();
+                var before = await SnapshotAsync(db);
+                var (exit, output) = await RotateAsync(db, keyA, keyB, waitForOtherConnections: false);
+                exit.Should().Be(1);
+                output.Should().Contain("Other connections are open").And.Contain("pretend-old-api x1").And.NotContain(keyA).And.NotContain(keyB);
+                (await SnapshotAsync(db)).Should().Equal(before);
+            }
+
             (await RotateAsync(db, keyA, keyB)).exitCode.Should().Be(0);
         }
 

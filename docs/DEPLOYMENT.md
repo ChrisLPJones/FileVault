@@ -209,7 +209,8 @@ encrypted with, so a wrong edit stops the API instead of corrupting data.)
 database transaction: the per-file data keys, thumbnail and avatar keys, in-progress upload keys,
 two-factor secrets and share-link tokens and passwords. File contents are not re-encrypted (only their
 keys change), so it takes seconds, not hours. Either everything is rewritten and verified, or nothing
-changes; a crash or an error part-way rolls back, and running the command again is safe.
+changes; a crash or an error part-way rolls back, and running the command again is safe. If it says the
+outcome of the commit is unknown, keep both keys and run it again: it reports whether the rotation went through.
 
 Upgrading from a version without this command needs nothing special: `docker compose up -d` adds the
 `MasterKeyState` table and the first start records which key the database uses.
@@ -218,7 +219,9 @@ Upgrading from a version without this command needs nothing special: `docker com
 2. Generate the new key straight into `.env`, so it doesn't pass through your shell history:
    `printf 'ENCRYPTION_MASTER_KEY_NEW=%s\n' "$(openssl rand -base64 32)" >> .env`
 3. If you updated FileVault, `docker compose build api` so the command exists, then
-   `docker compose stop api` (the command refuses to run while the API is up).
+   `docker compose stop api`. The command refuses to run while another connection is open to the
+   database (it lists them by program name); it can only see that, so stop the API yourself first,
+   especially on the first rotation after upgrading from a version without this command.
 4. Check first: `docker compose run --rm api rotate-master-key --dry-run`. It reads and re-wraps
    everything, verifies it and rolls back, printing counts per column and the row IDs of anything that
    does not decrypt. It prints a short ID of each key (never the key).
@@ -241,7 +244,7 @@ Options (flags, not keys):
   rows as they are (they were already unusable).
 - `--reset-recovery-codes`: see below.
 
-Messages: *the API is still running* means stop it (`docker compose stop api`). *Not the key this
+Messages: *the API is still running* or *other connections are open* means stop the API (`docker compose stop api`) and anything else using the database. *Not the key this
 database is encrypted with* means `ENCRYPTION_MASTER_KEY` is wrong (nothing was changed).
 *Already encrypted with the new key* means an earlier run finished; only `.env` needs updating.
 
@@ -252,7 +255,9 @@ both have leaked, add `--reset-recovery-codes`: all recovery codes are deleted a
 new key. Users with two-factor sign-in then generate new codes in Settings (while they still have
 their authenticator), so tell them first.
 
-**What rotation does not protect.** It stops the *old key* opening the live database from now on. If
+**What rotation does not protect.** It stops the *old key* opening the live database from now on, with one
+exception: under the default carry-over the old key still derives the recovery-code hashing key, which
+keeps hashing existing codes and codes generated later, until you rotate with `--reset-recovery-codes`. If
 the database and the old key leaked together, the secrets that did not change value are exposed:
 files' data keys (files are not re-encrypted), authenticator secrets (users should re-enrol two-factor)
 and share-link tokens (owners should revoke and recreate links). Backups made before the rotation

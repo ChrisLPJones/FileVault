@@ -99,6 +99,7 @@ public static class MasterKeyRotation
         var builder = new SqlConnectionStringBuilder(connectionString) { Pooling = false, ApplicationName = ApplicationName };
         await using var connection = new SqlConnection(builder.ConnectionString);
         SqlTransaction? transaction = null;
+        var committing = false;
         try
         {
             await connection.OpenAsync(ct);
@@ -107,15 +108,30 @@ public static class MasterKeyRotation
                 return new(RotationStatus.Refused,
                     "The API is still running against this database (or another rotation is). Stop it first, e.g. docker compose stop api.");
 
+            // The lock only shows an API of this version with a live guard connection. Any other open
+            // connection to the database (an older API, one that started while the database was down) also blocks.
+            var others = await OtherSessionsAsync(connection, log, ct);
+            if (others != null)
+                return new(RotationStatus.Refused,
+                    $"Other connections are open to this database: {others}. Stop the API (docker compose stop api) and anything else using the database, then run again.");
+
             transaction = (SqlTransaction)await connection.BeginTransactionAsync(ct);
             var result = await RotateAsync(connection, transaction, oldKey, newKey, oldFingerprint, newFingerprint, options, log, ct);
 
             if (result.Status == RotationStatus.Rotated)
             {
+                committing = true;
                 await transaction.CommitAsync(ct);
                 transaction = null;
             }
             return result;
+        }
+        catch (Exception) when (committing)
+        {
+            // The server may have committed before the connection failed
+            return new(RotationStatus.Failed,
+                "The outcome is unknown: the connection failed while committing. Keep BOTH keys (ENCRYPTION_MASTER_KEY and ENCRYPTION_MASTER_KEY_NEW) " +
+                "and run the command again: it says \"already encrypted with the new key\" if the commit went through.");
         }
         catch (SqlException ex)
         {
@@ -135,6 +151,28 @@ public static class MasterKeyRotation
                 catch (Exception) { /* the connection is gone; SQL Server rolls back when the session ends */ }
                 await transaction.DisposeAsync();
             }
+        }
+    }
+
+    // null when no other user session is connected to this database; otherwise a description (program names, counts)
+    private static async Task<string?> OtherSessionsAsync(SqlConnection connection, Action<string> log, CancellationToken ct)
+    {
+        try
+        {
+            await using var command = new SqlCommand(@"
+                SELECT COALESCE(NULLIF(program_name, ''), '(unnamed)'), COUNT(*) FROM sys.dm_exec_sessions
+                WHERE database_id = DB_ID() AND session_id <> @@SPID AND is_user_process = 1
+                GROUP BY program_name", connection);
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            var found = new List<string>();
+            while (await reader.ReadAsync(ct))
+                found.Add($"{reader.GetString(0)} x{reader.GetInt32(1)}");
+            return found.Count == 0 ? null : string.Join(", ", found);
+        }
+        catch (SqlException ex) when (ex.Number is 297 or 300 or 229)
+        {
+            log("Warning: no permission to list other connections (VIEW SERVER STATE); only the API's lock was checked. Make sure the API is stopped.");
+            return null;
         }
     }
 

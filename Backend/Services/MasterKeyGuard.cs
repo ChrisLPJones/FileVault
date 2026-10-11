@@ -17,6 +17,10 @@ namespace Backend.Services;
 //      if the configured key opens some of its data (or it has no encrypted data yet);
 //   3. if a rotation carried the recovery-code hashing key over, hands it to SecretProtector.
 // Every minute it checks again, and stops the app if the database has been moved to another key.
+// The configured key is not the one the database is encrypted with (or a rotation never finished):
+// the only failure that stops a running API
+public sealed class MasterKeyMismatchException(string message) : InvalidOperationException(message);
+
 public sealed class MasterKeyGuard(
     IConfiguration config,
     FileEncryption encryption,
@@ -76,6 +80,12 @@ public sealed class MasterKeyGuard(
                 throw new InvalidOperationException(
                     "The MasterKeyState table is missing. Apply Backend/Docker/db/init.sql to the database (docker compose up -d runs it) and start again.", ex);
             }
+            catch (SqlException ex) when (!IsUnreachable(ex))
+            {
+                // Login refused, permission denied, schema errors...: not "the database is down", so don't run unguarded
+                throw new InvalidOperationException(
+                    $"The master key check failed with a database error ({ex.Number}); the API did not start. Check the database login's permissions.", ex);
+            }
             catch (SqlException ex)
             {
                 await CloseConnectionAsync();
@@ -96,6 +106,12 @@ public sealed class MasterKeyGuard(
 
         _watcher = Task.Run(() => WatchAsync(_stop.Token));
     }
+
+    // Errors that mean the server can't be reached (or the database isn't there yet), as opposed to
+    // errors from a database that answered (0 is what SqlClient reports when the connection could not be established)
+    private static readonly HashSet<int> UnreachableErrors = [0, -2, -1, 2, 20, 40, 53, 64, 233, 258, 1231, 4060, 10053, 10054, 10060, 10061, 11001];
+
+    private static bool IsUnreachable(SqlException ex) => ex.Errors.Cast<SqlError>().Any(e => UnreachableErrors.Contains(e.Number));
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
@@ -166,7 +182,7 @@ public sealed class MasterKeyGuard(
                 return;
 
             if (DateTime.UtcNow - started > MaxLockWait)
-                throw new InvalidOperationException("A master key rotation has been running for more than 10 minutes; the API did not start.");
+                throw new MasterKeyMismatchException("A master key rotation has been running for more than 10 minutes; the API did not start.");
             if (!logged)
             {
                 logger.LogWarning("Waiting for a master key rotation to finish before starting");
@@ -206,7 +222,7 @@ public sealed class MasterKeyGuard(
         _carriedKeyApplied = true;
     }
 
-    private static InvalidOperationException Mismatch() => new(
+    private static MasterKeyMismatchException Mismatch() => new(
         "ENCRYPTION_MASTER_KEY does not match the key this database is encrypted with. " +
         "If you just rotated the master key, set the new key (see docs/DEPLOYMENT.md, \"Rotating the master key\").");
 
@@ -284,7 +300,7 @@ public sealed class MasterKeyGuard(
             {
                 return;
             }
-            catch (InvalidOperationException ex)
+            catch (MasterKeyMismatchException ex)
             {
                 logger.LogCritical("{Message} Stopping the API.", ex.Message);
                 lifetime.StopApplication();
