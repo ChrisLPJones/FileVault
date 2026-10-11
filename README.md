@@ -103,9 +103,20 @@ Only [Docker](https://www.docker.com/) is needed for this option.
 ```bash
 git clone https://github.com/ChrisLPJones/FileVault.git
 cd FileVault
-cp .env.example .env      # fill in MSSQL_SA_PASSWORD, MSSQL_APP_PASSWORD, JWT_KEY and ENCRYPTION_MASTER_KEY
-docker compose up --build
+cp .env.example .env
+
+# Fill in the four secrets with random values
+sed -i.bak \
+  -e "s|^MSSQL_SA_PASSWORD=.*|MSSQL_SA_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')Aa1|" \
+  -e "s|^MSSQL_APP_PASSWORD=.*|MSSQL_APP_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')Aa1|" \
+  -e "s|^JWT_KEY=.*|JWT_KEY=$(openssl rand -base64 48)|" \
+  -e "s|^ENCRYPTION_MASTER_KEY=.*|ENCRYPTION_MASTER_KEY=$(openssl rand -base64 32)|" \
+  .env && rm .env.bak
+
+docker compose up --build -d
 ```
+
+Back up `.env` somewhere safe, above all `ENCRYPTION_MASTER_KEY`: without it the stored files can't be decrypted.
 
 Then open http://localhost:5173 (the API is on http://localhost:3000). Compose starts SQL Server, waits for it to be healthy, applies `Backend/Docker/db/init.sql`, then creates a least-privilege database login for the API (`filevault_app`, password `MSSQL_APP_PASSWORD`: it can read and write the data but not change the schema, and the API container never gets the `sa` password), then starts the API and the nginx-served frontend. The database isn't exposed outside the Docker network. Updating an existing install? Add `MSSQL_APP_PASSWORD` to `.env` first; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#2-secrets-and-settings).
 
@@ -120,8 +131,6 @@ New accounts confirm their email address before they can log in, and "Forgot pas
 The first account registered on a new install becomes the administrator and gets an Admin link in the account menu (`/admin`: every account's storage use and quota, server totals, and who else is an administrator). On a public install, register straight after the first start, or set `INITIAL_ADMIN_EMAIL` in `.env` to your address so only that account can become the administrator, once its email is confirmed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). Admin rights are chosen only when an administrator creates an account (Administrator tick box); there is always at least one administrator.
 
 If the browser reaches the API somewhere other than `http://localhost:3000`, set `API_URL` (and `FRONTEND_URL` for CORS) in `.env`; the frontend container reads `API_URL` when it starts, so `docker compose up -d` is enough. After pulling schema changes use `docker compose up --build -d`.
-
-To run a server without the source code, use the released images: see [Deploy to a VPS](docs/DEPLOYMENT.md#deploy-to-a-vps-released-images).
 
 The Admin page can show the country of each user's last login. That needs a free MaxMind GeoLite2 Country database, which Compose can download for you with `docker compose --profile geoip up -d` once `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY` are set in `.env`. Without it the country shows "Unknown". See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#8-last-login-location-geoip).
 
