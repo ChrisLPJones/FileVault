@@ -97,7 +97,7 @@ jobs:
 
       - name: Validate compose file
         run: |
-          printf 'MSSQL_SA_PASSWORD=x\nJWT_KEY=x\nENCRYPTION_MASTER_KEY=x\n' > .env
+          printf 'MSSQL_SA_PASSWORD=x\nMSSQL_APP_PASSWORD=x\nJWT_KEY=x\nENCRYPTION_MASTER_KEY=x\n' > .env
           docker compose config --quiet
 
       - name: Build API image

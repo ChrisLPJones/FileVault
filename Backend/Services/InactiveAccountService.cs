@@ -42,7 +42,6 @@ public class InactiveAccountService(
     RemovalTracker tracker,
     AccountDeletionService deletion,
     AccountEmailService emails,
-    IEmailSender emailSender,
     HostedOptions hosted,
     ILogger<InactiveAccountService> logger)
 {
@@ -55,11 +54,8 @@ public class InactiveAccountService(
         if (!hosted.IsHosted)
             return new RunResult(0, 0);
 
-        // Without an SMTP server the "sender" only writes the email to the log: don't do that for a warning
-        var emailIsSetUp = emailSender is not LogEmailSender;
-
         var warnings = await db.ClaimInactivityWarningsAsync(hosted, hosted.MaxRemovalsPerRun, onlyUsers);
-        foreach (var warning in warnings.Where(w => emailIsSetUp && w.EmailVerified))
+        foreach (var warning in warnings.Where(w => w.EmailVerified))
         {
             var due = DatabaseServices.RemovalDueAt(hosted, false, false, false, warning.LastActiveAt, warning.WarnedAt);
             emails.SendInactivityWarning(warning.Email, warning.FirstName, due ?? warning.WarnedAt.AddDays(hosted.WarningDays),

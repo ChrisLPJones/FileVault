@@ -240,8 +240,11 @@ namespace Backend
                 if (hostedOptions.AbuseContactEmail == null)
                     app.Logger.LogWarning("Hosted mode without an abuse contact (ABUSE_CONTACT_EMAIL or HOSTED_CONTACT_EMAIL): the site shows no way to report abuse");
             }
-            if (hostedOptions.IsHosted && app.Services.GetRequiredService<IEmailSender>() is LogEmailSender)
-                app.Logger.LogWarning("Hosted mode without an SMTP host (Email:Smtp:Host): inactive accounts will be removed without a warning email");
+            var emailSender = app.Services.GetRequiredService<IEmailSender>();
+            EmailSetup.Validate(hostedOptions.IsHosted, emailSender, app.Configuration);
+            if (emailSender is LogEmailSender && app.Environment.IsProduction())
+                app.Logger.LogWarning("No SMTP server is configured (SMTP_HOST): email links (password reset, valid 1 hour; email confirmation, valid 24 hours) " +
+                    "are written to the log, and anyone who can read the logs can use them. Set SMTP_* to send real emails.");
 
             if (!string.IsNullOrWhiteSpace(builder.Configuration["Encryption:NewMasterKey"]))
                 app.Logger.LogWarning("Encryption:NewMasterKey (ENCRYPTION_MASTER_KEY_NEW) is set. Only the rotate-master-key command uses it; " +

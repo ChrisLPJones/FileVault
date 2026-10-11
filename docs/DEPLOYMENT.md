@@ -117,11 +117,12 @@ server {
 ## 2. Secrets and settings
 
 Set these in `.env` next to `docker-compose.yml` (it's gitignored). Compose refuses to start
-without the first three.
+without the first four.
 
 | Variable | What it is |
 |---|---|
-| `MSSQL_SA_PASSWORD` | SQL Server `sa` password. Only applied when the database volume is first created |
+| `MSSQL_SA_PASSWORD` | SQL Server `sa` password. Only applied when the database volume is first created. Only SQL Server and the `db-init` setup container get it; the API does not |
+| `MSSQL_APP_PASSWORD` | Password of the API's own database login, `filevault_app` (see "Database login" below). Different from the `sa` password; `openssl rand -base64 24`. No quotes, semicolons, `$` or spaces, and it must meet SQL Server's password policy. Changing it and running `docker compose up -d` changes the login's password |
 | `JWT_KEY` | Signs access tokens. At least 32 bytes: `openssl rand -base64 48` |
 | `ENCRYPTION_MASTER_KEY` | Encrypts every file's key, the two-factor secrets and share-link secrets. Exactly 32 bytes, base64: `openssl rand -base64 32`. The API refuses to start with a key other than the one the database was encrypted with |
 | `ENCRYPTION_MASTER_KEY_NEW` | Only while rotating the master key (section 4): the new key. Remove it afterwards |
@@ -140,6 +141,32 @@ Other API settings can be passed as environment variables on the `api` service u
 `Section__Key` names, for example `Storage__DefaultQuotaBytes`, `Storage__MaxUploadBytes`,
 `RateLimiting__auth__PermitLimit` or `TwoFactor__Issuer` (the name shown in authenticator apps).
 See `Backend/appsettings.json` for the full list and defaults.
+
+**Database login.** The API does not connect as `sa`. On every `docker compose up` the `db-init`
+container, which does have the `sa` password, runs `init.sql` and then `Backend/Docker/db/app-login.sql`,
+which creates (or updates) the login `filevault_app` with the password from `MSSQL_APP_PASSWORD`. That login
+can read and write the data in the `dbo` schema and nothing else: it cannot create, alter or drop tables
+or databases, is not `db_owner` or `sysadmin`, and cannot read other databases. So a SQL injection or
+code-execution bug in the API cannot be used to take over SQL Server (`xp_cmdshell`, other databases,
+dropping the database). The API can still read and write all FileVault data, which it needs to. The
+login also holds `VIEW SERVER PERFORMANCE STATE` (SQL Server 2022), which lets `rotate-master-key` see
+other connections to the database and refuse to rotate while any are open; it grants no data access.
+The login's password never expires. Database maintenance by hand (section 3, 4) still uses `sa` through
+the `sqlserver` container. The API warns at start if it finds its login is `sysadmin` or `db_owner`
+(as in local development, which uses `sa`).
+
+*Upgrading to the least-privilege login:* `docker compose up` stops with "Set MSSQL_APP_PASSWORD in
+`.env`" until you add one. Generate it straight into `.env` so it doesn't pass through your shell
+history, then rebuild:
+
+```bash
+printf 'MSSQL_APP_PASSWORD=%s\n' "$(openssl rand -base64 24 | tr -d '/+=')" >> .env
+docker compose up --build -d
+```
+
+No data is touched; `db-init` creates the login before the API starts, and the schema and files stay
+as they are. To go back, use the previous version's `docker-compose.yml` (it connects as `sa`); the extra
+login is harmless.
 
 **Disk limit.** The API refuses uploads (HTTP 507, "The server's storage is almost full") that would
 take the drive holding `StorageRoot` past `STORAGE_MAX_DISK_USE_PERCENT` (`Storage:MaxDiskUsePercent`)
@@ -347,7 +374,7 @@ whose email was changed to this address can never become the first administrator
 start or by a password reset. (Asking to change an email to this address does not occupy it: the new
 address is only pending until confirmed, so the owner can still register it.) Emails are compared exactly (look-alike characters don't match).
 
-Email delivery needs the `SMTP_*` settings (or find the links in `docker compose logs api`).
+Email delivery needs the `SMTP_*` settings (or, self-hosted only, find the links in `docker compose logs api`).
 
 **If someone registered your address first** (a new sign-up), use "Forgot password?" for it. The
 reset gives you the account and the squatter's password stops working. If someone instead changed
@@ -439,9 +466,8 @@ In hosted mode:
 - An account with no sign-in and no use of the app for 30 days is removed along with its files.
   Staying signed in and using the app counts as use. Administrator, permanent and suspended
   accounts are never removed (mark an account permanent on the Admin page).
-- 7 days before the removal a warning email is sent, only to an address that was confirmed and only
-  if SMTP is set up (the `SMTP_*` settings). Without SMTP no warning is sent, but the removal still
-  happens (the API logs a warning at startup in that case). A user who signs in again before then
+- 7 days before the removal a warning email is sent, only to an address that was confirmed.
+  A user who signs in again before then
   keeps the account. Unsuspending an account, or removing its permanent mark,
   restarts its clock.
 - New users see a dismissible notice on the dashboard on first login saying unused accounts are
@@ -450,6 +476,12 @@ In hosted mode:
 - The Admin page gains "Last active" and "Removal due" columns.
 - Sign-ups are rate limited (below), and `ABUSE_CONTACT_EMAIL` (or `HOSTED_CONTACT_EMAIL`) shows a
   "Report abuse" address on the public pages.
+- **SMTP is required.** The API refuses to start in hosted mode without a working email setup:
+  `SMTP_HOST` and `SMTP_FROM` (or `SMTP_USER`), plus `SMTP_PORT`, `SMTP_USER` and `SMTP_PASSWORD` as your
+  server needs. Without email a hosted site could not confirm sign-ups or reset passwords, and the
+  links would be written to the log, where anyone who can read it could use them. The server is not
+  contacted at start, so an outage of the mail server does not stop a restart (emails that fail to
+  send are logged by subject only).
 - A new account must confirm its email before it can sign in (this is the case in both modes), and
   creating a share link also checks that the address is confirmed. Unconfirmed accounts are removed
   by the inactivity job like any other unused account.
@@ -491,7 +523,17 @@ turning it on, mark any account you want to keep as permanent or as an administr
 `Hosted:DefaultQuotaBytes`, accounts without a quota of their own that are neither permanent nor
 administrators drop to it at once (see "Quota tiers").
 
+**Self-hosted without SMTP.** Without `SMTP_HOST` a self-hosted API writes every email to its log,
+link included (that is how you confirm accounts locally): a password-reset link is valid for 1 hour
+and a confirmation link for 24 hours, and anyone who can read the log can use them. The API logs a
+warning at start about that, and Docker keeps only 3 log files of 10 MB for the `api` container. If an
+install that ran publicly without SMTP is switched to hosted, the old links expire within 24 hours;
+`docker compose up -d --force-recreate api` also discards the container's log straight away.
+
 **Upgrading**
+
+An existing hosted install without SMTP stops at the next start with a message naming `SMTP_HOST` and
+`SMTP_FROM` until they are set.
 
 The upgrade adds the `Users.LastActiveAt`, `Users.InactivityWarnedAt` and
 `Users.HostedNoticeDismissedAt` columns, even if you stay self-hosted; re-running `init.sql`

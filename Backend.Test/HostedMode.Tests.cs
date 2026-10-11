@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 
@@ -19,13 +21,14 @@ namespace Backend.Test
         private const string Contact = "contact@example.test";
 
         private readonly CapturingEmailSender _emails = new();
+        private readonly WebApplicationFactory<Program> _open;
         private readonly WebApplicationFactory<Program> _selfHosted;
         private readonly WebApplicationFactory<Program> _hosted;
         private readonly List<string> _created = [];
 
         public HostedModeTests(WebApplicationFactory<Program> factory)
         {
-            var open = TestAccounts.WithoutLoginLimit(factory);
+            var open = _open = TestAccounts.WithoutLoginLimit(factory);
             _selfHosted = open.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
                 services.AddSingleton<IEmailSender>(_emails)));
             _hosted = open.WithWebHostBuilder(builder =>
@@ -196,21 +199,98 @@ namespace Backend.Test
             email!.Body.Should().NotContain("permanent account");
         }
 
+        // --- Email is required in hosted mode ---
+
+        private WebApplicationFactory<Program> HostedWithoutSender(params (string key, string value)[] settings) =>
+            _open.WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("App:Mode", "hosted");
+                builder.UseSetting("Email:Smtp:Host", "");
+                foreach (var (key, value) in settings)
+                    builder.UseSetting(key, value);
+            });
+
         [Fact]
-        public async Task Warn_WithoutEmailSetUp_StillRecordsTheStage()
+        public void Hosted_WithoutSmtpHost_RefusesToStart()
         {
-            // No IEmailSender override: the log sender, so nothing is mailed (or logged)
-            var logOnly = TestAccounts.WithoutLoginLimit(_hosted).WithWebHostBuilder(builder =>
-                builder.ConfigureTestServices(services => services.AddSingleton<IEmailSender, LogEmailSender>()));
-            var user = await NewUserAsync();
-            await BackdateAsync(user.UserId, 25);
+            var start = () => HostedWithoutSender().CreateClient();
 
-            var result = await RunJobAsync(logOnly, user);
+            start.Should().Throw<Exception>().Which.ToString().Should().Contain("SMTP_HOST").And.Contain("SMTP_FROM");
+        }
 
-            result.Warned.Should().Be(1);
-            (await ColumnAsync(_hosted, user, "InactivityWarnedAt")).Should().NotBeNull();
-            await Task.Delay(300);
-            _emails.Sent.Should().NotContain(m => m.To == user.Email && IsWarning(m));
+        [Fact]
+        public void Hosted_WithHostButNoFromOrUser_RefusesToStart()
+        {
+            var start = () => HostedWithoutSender(("Email:Smtp:Host", "smtp.example.test"), ("Email:Smtp:From", ""), ("Email:Smtp:User", "")).CreateClient();
+
+            start.Should().Throw<Exception>().Which.ToString().Should().Contain("SMTP_FROM");
+        }
+
+        [Fact]
+        public void Hosted_WithHostAndFrom_Starts_WithTheRealSmtpSender()
+        {
+            var factory = HostedWithoutSender(("Email:Smtp:Host", "smtp.example.test"), ("Email:Smtp:From", "noreply@example.test"));
+
+            factory.CreateClient();
+
+            factory.Services.GetRequiredService<IEmailSender>().Should().BeOfType<SmtpEmailSender>();
+        }
+
+        [Fact]
+        public void Hosted_WithHostAndOnlyAUser_Starts()
+        {
+            HostedWithoutSender(("Email:Smtp:Host", "smtp.example.test"), ("Email:Smtp:From", ""), ("Email:Smtp:User", "mailer@example.test")).CreateClient();
+        }
+
+        [Fact]
+        public void Hosted_WithAnInjectedSender_Starts()
+        {
+            _hosted.CreateClient();
+        }
+
+        [Fact]
+        public void SelfHosted_WithoutSmtp_Starts_AndKeepsTheLogSender()
+        {
+            var factory = _open.WithWebHostBuilder(builder => builder.UseSetting("Email:Smtp:Host", ""));
+
+            factory.CreateClient();
+
+            factory.Services.GetRequiredService<IEmailSender>().Should().BeOfType<LogEmailSender>();
+        }
+
+        [Fact]
+        public void SelfHosted_WithoutSmtp_InProduction_WarnsThatLinksAreLogged()
+        {
+            var logs = new ListLoggerProvider();
+            var factory = _open.WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("Email:Smtp:Host", "");
+                builder.UseEnvironment("Production");
+                // Production doesn't load appsettings.Development.json, so give it the secrets it requires
+                var current = _open.Services.GetRequiredService<IConfiguration>();
+                builder.UseSetting("Jwt:Key", current["Jwt:Key"]);
+                builder.UseSetting("Encryption:MasterKey", current["Encryption:MasterKey"]);
+                builder.ConfigureLogging(logging => logging.AddProvider(logs));
+            });
+
+            factory.CreateClient();
+
+            logs.Messages.Should().Contain(m => m.Contains("written to the log") && m.Contains("SMTP_HOST"));
+        }
+
+        private sealed class ListLoggerProvider : ILoggerProvider
+        {
+            public ConcurrentQueue<string> Messages { get; } = new();
+            public ILogger CreateLogger(string categoryName) => new ListLogger(Messages);
+            public void Dispose() { }
+
+            private sealed class ListLogger(ConcurrentQueue<string> messages) : ILogger
+            {
+                public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+                public bool IsEnabled(LogLevel logLevel) => true;
+                public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+                    messages.Enqueue(formatter(state, exception));
+            }
         }
 
         [Fact]
