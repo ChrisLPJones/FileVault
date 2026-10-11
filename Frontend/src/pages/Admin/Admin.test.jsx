@@ -173,7 +173,7 @@ describe("Admin page", () => {
         getAdminStatsAPI.mockResolvedValue({ ...stats, maxDiskUsePercent: 80, diskUploadsPaused: false });
         const { unmount } = render(<Admin />);
 
-        expect(await screen.findByText(/Uploads stop at 80% of the disk/)).toBeInTheDocument();
+        expect(await screen.findByText(/Uploads stop when the disk is 80% full/)).toBeInTheDocument();
         expect(screen.queryByText(/Uploads are paused/)).not.toBeInTheDocument();
         unmount();
 
@@ -187,7 +187,7 @@ describe("Admin page", () => {
         getAdminStatsAPI.mockResolvedValue({ ...stats, maxDiskUsePercent: 80, diskUploadsPaused: true });
         render(<Admin />);
 
-        expect(await screen.findByText(/Uploads stop at 80% of the disk\. Uploads are paused\./)).toBeInTheDocument();
+        expect(await screen.findByText(/Uploads stop when the disk is 80% full\. Uploads are paused\./)).toBeInTheDocument();
     });
 
     it("mentions the permanent-account quota only when it differs", async () => {

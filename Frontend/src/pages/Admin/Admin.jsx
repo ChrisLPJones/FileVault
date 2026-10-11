@@ -288,7 +288,7 @@ export default function Admin() {
             diskUsed != null ? `${formatBytes(diskUsed)} of ${formatBytes(stats.diskTotalBytes)} used` : "Couldn't read the disk",
             // Uploads are refused past the limit; the tile turns to a warning when that is happening
             stats.maxDiskUsePercent != null
-                ? `Uploads stop at ${stats.maxDiskUsePercent}% of the disk${stats.diskUploadsPaused ? ". Uploads are paused." : "."}`
+                ? `Uploads stop when the disk is ${stats.maxDiskUsePercent}% full${stats.diskUploadsPaused ? ". Uploads are paused." : "."}`
                 : null,
             stats.diskUploadsPaused === true],
     ];
