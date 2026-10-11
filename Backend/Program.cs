@@ -14,7 +14,12 @@ namespace Backend
     {
         private static void Main(string[] args)
         {
-
+            // Operator command, run instead of the web app: dotnet Backend.dll rotate-master-key [options]
+            if (args is ["rotate-master-key", ..])
+            {
+                Environment.ExitCode = MasterKeyCommand.Run(args[1..]);
+                return;
+            }
 
             var builder = WebApplication.CreateBuilder(args);
             var jwtConfig = builder.Configuration.GetSection("Jwt");
@@ -130,6 +135,8 @@ namespace Backend
             builder.Services.AddScoped<InactiveAccountService>();
             builder.Services.AddMemoryCache();
             builder.Services.AddSingleton<AccessTokenGate>();
+            // First: it must finish (or stop the start) before requests are served and before the cleanup loop runs
+            builder.Services.AddHostedService<MasterKeyGuard>();
             builder.Services.AddHostedService<StorageCleanupService>();
             builder.Services.AddHostedService<AdminBootstrapOnStartup>();
             builder.Services.AddEmail(builder.Configuration);
@@ -190,6 +197,10 @@ namespace Backend
             app.Logger.LogInformation("FileVault mode: {Mode}", hostedOptions.ModeName);
             if (hostedOptions.IsHosted && app.Services.GetRequiredService<IEmailSender>() is LogEmailSender)
                 app.Logger.LogWarning("Hosted mode without an SMTP host (Email:Smtp:Host): inactive accounts will be removed without a warning email");
+
+            if (!string.IsNullOrWhiteSpace(builder.Configuration["Encryption:NewMasterKey"]))
+                app.Logger.LogWarning("Encryption:NewMasterKey (ENCRYPTION_MASTER_KEY_NEW) is set. Only the rotate-master-key command uses it; " +
+                    "after a rotation, move it to ENCRYPTION_MASTER_KEY and remove it.");
 
             // Administrators are managed on the admin page now; the old setting does nothing
             var legacyAdminEmails = builder.Configuration.GetSection("Admin:Emails");

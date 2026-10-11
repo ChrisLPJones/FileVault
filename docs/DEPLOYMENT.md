@@ -123,7 +123,8 @@ without the first three.
 |---|---|
 | `MSSQL_SA_PASSWORD` | SQL Server `sa` password. Only applied when the database volume is first created |
 | `JWT_KEY` | Signs access tokens. At least 32 bytes: `openssl rand -base64 48` |
-| `ENCRYPTION_MASTER_KEY` | Encrypts every file's key, and the two-factor secrets. Exactly 32 bytes, base64: `openssl rand -base64 32` |
+| `ENCRYPTION_MASTER_KEY` | Encrypts every file's key, the two-factor secrets and share-link secrets. Exactly 32 bytes, base64: `openssl rand -base64 32`. The API refuses to start with a key other than the one the database was encrypted with |
+| `ENCRYPTION_MASTER_KEY_NEW` | Only while rotating the master key (section 4): the new key. Remove it afterwards |
 | `FRONTEND_URL` | Where the browser loads the app; the only origin the API accepts calls from |
 | `API_URL` | Where the browser reaches the API. Build-time: rebuild after changing it |
 | `BEHIND_HTTPS_PROXY` | `true` behind an HTTPS reverse proxy (section 1) |
@@ -162,7 +163,9 @@ Everything lives in two Docker volumes:
 as a set: the files can't be decrypted without their keys from the database, and those keys can't
 be unwrapped without the master key. A database backup from a different moment than the files
 backup leaves files without keys (lost) or keys without files. Lose the master key and every file,
-and every two-factor secret, is unreadable.
+every two-factor secret and every share-link secret is unreadable. A backup is only readable with the
+master key that was in use when it was made, so after a rotation (section 4) keep the old key with
+the old backups.
 
 A simple consistent backup stops the API and the database briefly (SQL Server's data files can't
 be copied safely while it's running):
@@ -179,7 +182,9 @@ docker compose start sqlserver api
 Restore by extracting both archives into empty volumes of the same names before starting the stack,
 with the same `ENCRYPTION_MASTER_KEY` in `.env`.
 
-## 4. Rotating the JWT key
+## 4. Rotating keys
+
+### The JWT key
 
 Change `JWT_KEY` in `.env` and run `docker compose up -d`. Every access token signed with the old key
 stops working at once. Refresh tokens are random values checked against the database, not signed,
@@ -194,8 +199,64 @@ docker compose exec sqlserver sh -c '/opt/mssql-tools18/bin/sqlcmd -C -U sa -P "
 
 Users then log in again (with their two-factor code if they use one). Their files are unaffected.
 
-Don't rotate `ENCRYPTION_MASTER_KEY` this way: changing it makes every stored file unreadable.
-There is no master-key rotation tool yet.
+Don't change `ENCRYPTION_MASTER_KEY` by hand: use the rotation command below, or every stored file
+becomes unreadable. (The API refuses to start with a key other than the one the database is
+encrypted with, so a wrong edit stops the API instead of corrupting data.)
+
+### Rotating the master key
+
+`rotate-master-key` re-wraps everything stored under `ENCRYPTION_MASTER_KEY` with a new key in one
+database transaction: the per-file data keys, thumbnail and avatar keys, in-progress upload keys,
+two-factor secrets and share-link tokens and passwords. File contents are not re-encrypted (only their
+keys change), so it takes seconds, not hours. Either everything is rewritten and verified, or nothing
+changes; a crash or an error part-way rolls back, and running the command again is safe.
+
+Upgrading from a version without this command needs nothing special: `docker compose up -d` adds the
+`MasterKeyState` table and the first start records which key the database uses.
+
+1. **Back up first** (section 3), including the current `ENCRYPTION_MASTER_KEY`.
+2. Generate the new key straight into `.env`, so it doesn't pass through your shell history:
+   `printf 'ENCRYPTION_MASTER_KEY_NEW=%s\n' "$(openssl rand -base64 32)" >> .env`
+3. If you updated FileVault, `docker compose build api` so the command exists, then
+   `docker compose stop api` (the command refuses to run while the API is up).
+4. Check first: `docker compose run --rm api rotate-master-key --dry-run`. It reads and re-wraps
+   everything, verifies it and rolls back, printing counts per column and the row IDs of anything that
+   does not decrypt. It prints a short ID of each key (never the key).
+5. Rotate: `docker compose run --rm api rotate-master-key`
+6. In `.env` set `ENCRYPTION_MASTER_KEY` to the new value and delete the `ENCRYPTION_MASTER_KEY_NEW`
+   line, then `docker compose up -d`. Back up the new key; keep the old one only for backups made
+   before the rotation.
+
+If the API will not start afterwards with a message that the key does not match, `.env` still has the
+old key. A key is only ever read from `.env` / the environment, never from a command argument (an
+unknown argument is rejected without printing it). While the command runs, `docker inspect` on its
+container shows both keys, as it does for the API container with the current key.
+
+Options (flags, not keys):
+
+- `--dry-run`: change nothing. Without `ENCRYPTION_MASTER_KEY_NEW` it uses a throwaway key, which is
+  enough to check the current key and every stored value.
+- `--skip-unreadable`: by default a value that does not decrypt with the current key (damaged data)
+  stops the rotation and is listed by table and row ID. This flag rotates the rest and leaves those
+  rows as they are (they were already unusable).
+- `--reset-recovery-codes`: see below.
+
+Messages: *the API is still running* means stop it (`docker compose stop api`). *Not the key this
+database is encrypted with* means `ENCRYPTION_MASTER_KEY` is wrong (nothing was changed).
+*Already encrypted with the new key* means an earlier run finished; only `.env` needs updating.
+
+**Two-factor recovery codes.** Only a keyed hash of each code is stored, so they cannot be re-hashed.
+By default the hashing key is carried over (stored protected under the new master key), so every
+existing recovery code keeps working. If you rotate because the key and a copy of the database may
+both have leaked, add `--reset-recovery-codes`: all recovery codes are deleted and new ones use the
+new key. Users with two-factor sign-in then generate new codes in Settings (while they still have
+their authenticator), so tell them first.
+
+**What rotation does not protect.** It stops the *old key* opening the live database from now on. If
+the database and the old key leaked together, the secrets that did not change value are exposed:
+files' data keys (files are not re-encrypted), authenticator secrets (users should re-enrol two-factor)
+and share-link tokens (owners should revoke and recreate links). Backups made before the rotation
+still need the old key.
 
 ## 5. API docs (Swagger)
 

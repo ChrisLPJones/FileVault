@@ -239,17 +239,23 @@ namespace Backend.Test
             ScalarAsync<bool>("SELECT IsAdmin FROM Users WHERE Email = @Email", ("@Email", email));
 
         // The app, pointed at this database, with the login rate limit out of the way
-        // (initialAdminEmail is the INITIAL_ADMIN_EMAIL setting)
-        public WebApplicationFactory<Program> CreateFactory(WebApplicationFactory<Program> from, string? initialAdminEmail = null) =>
+        // (initialAdminEmail is the INITIAL_ADMIN_EMAIL setting; masterKey, base64, replaces Encryption:MasterKey)
+        public WebApplicationFactory<Program> CreateFactory(WebApplicationFactory<Program> from, string? initialAdminEmail = null, string? masterKey = null) =>
             from.WithWebHostBuilder(builder =>
             {
                 builder.UseSetting("RateLimiting:auth:PermitLimit", "1000");
-                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
-                    new Dictionary<string, string?>
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    var settings = new Dictionary<string, string?>
                     {
                         ["ConnectionStrings:DefaultConnection"] = ConnectionString,
                         ["Admin:InitialEmail"] = initialAdminEmail
-                    }));
+                    };
+                    // Only when given: a null entry would blank the configured key
+                    if (masterKey != null)
+                        settings["Encryption:MasterKey"] = masterKey;
+                    config.AddInMemoryCollection(settings);
+                });
             });
 
         // Start the API against this database and stop it again: what happens at every real start

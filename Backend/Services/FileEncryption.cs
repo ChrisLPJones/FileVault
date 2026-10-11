@@ -28,10 +28,17 @@ public class FileEncryption
 
     private readonly byte[] _masterKey;
 
-    public FileEncryption(IConfiguration config)
+    public FileEncryption(IConfiguration config) : this(ParseMasterKey(config["Encryption:MasterKey"])
+        ?? throw new InvalidOperationException("Encryption:MasterKey must be a base64-encoded 32-byte key."))
     {
-        _masterKey = ParseMasterKey(config["Encryption:MasterKey"])
-            ?? throw new InvalidOperationException("Encryption:MasterKey must be a base64-encoded 32-byte key.");
+    }
+
+    // For the master key rotation command, which holds the old and the new key at once
+    public FileEncryption(byte[] masterKey)
+    {
+        if (masterKey.Length != KeySize)
+            throw new ArgumentException("The master key must be 32 bytes.", nameof(masterKey));
+        _masterKey = (byte[])masterKey.Clone();
     }
 
     // Returns the key bytes, or null if the value isn't a base64-encoded 32-byte key

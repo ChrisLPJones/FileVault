@@ -155,7 +155,7 @@ Then edit them:
 - Set `MSSQL_SA_PASSWORD` in `Backend/Docker/.env` to a strong password.
 - In `Backend/appsettings.Development.json`, use that same password in the connection string.
 - Set `Jwt:Key` to a random value of at least 32 bytes (e.g. `openssl rand -base64 48`).
-- Set `Encryption:MasterKey` to a base64-encoded 32-byte key (e.g. `openssl rand -base64 32`). **Back this key up.** Every stored file is encrypted with a key that is itself encrypted with this one, so losing it means losing every file.
+- Set `Encryption:MasterKey` to a base64-encoded 32-byte key (e.g. `openssl rand -base64 32`). **Back this key up.** Every stored file is encrypted with a key that is itself encrypted with this one, so losing it means losing every file. To replace it later without losing anything, see "Rotating the master key" in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#rotating-the-master-key).
 - Point `VITE_API_BASE_URL` in `Frontend/.env` at the API (the port `dotnet run` prints).
 
 Outside Development, supply the same settings as environment variables (`ConnectionStrings__DefaultConnection`, `Jwt__Key`, `Encryption__MasterKey`). The API refuses to start if any of them is missing.
