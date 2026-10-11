@@ -105,7 +105,7 @@ namespace Backend
                     // Values of 0 or less are refused at start-up (SignupRateLimit.Validate)
 
                     return RateLimitPartition.GetFixedWindowLimiter(
-                        http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        ClientIpKey.From(http.Connection.RemoteIpAddress),
                         _ => new FixedWindowRateLimiterOptions { PermitLimit = permitLimit, Window = window });
                 });
             });

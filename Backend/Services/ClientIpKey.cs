@@ -28,8 +28,9 @@ public static class SignupRateLimit
 {
     public static void Validate(IConfiguration config, bool hosted)
     {
-        var policy = hosted ? "signup" : "auth";
-        foreach (var name in new[] { "PermitLimit", "WindowSeconds" })
+        // Every policy that reads RateLimiting:*, not just sign-ups
+        var policies = hosted ? new[] { "auth", "refresh", "two-factor", "signup" } : ["auth", "refresh", "two-factor"];
+        foreach (var (policy, name) in policies.SelectMany(p => new[] { "PermitLimit", "WindowSeconds" }.Select(n => (p, n))))
         {
             var key = $"RateLimiting:{policy}:{name}";
             // An unset value uses the default; a value that isn't a number fails in GetValue

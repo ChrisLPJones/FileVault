@@ -1,6 +1,7 @@
 using Backend.Models;
 using Backend.Services;
 using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -516,6 +517,48 @@ namespace Backend.Test
             await TestDatabase.MarkEmailVerifiedAsync(Factory, first);
             (await client.PostAsJsonAsync("/user/login", new LoginModel { Email = first, Password = Password })).StatusCode
                 .Should().Be(HttpStatusCode.OK);
+        }
+
+        // Sets the connection's address from a header, as a real socket would, so the policy sees IPv6 clients
+        private sealed class FakeClientIp : IStartupFilter
+        {
+            public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+            {
+                app.Use((context, nxt) =>
+                {
+                    if (context.Request.Headers["X-Test-Client-Ip"].FirstOrDefault() is { } ip)
+                        context.Connection.RemoteIpAddress = IPAddress.Parse(ip);
+                    return nxt();
+                });
+                next(app);
+            };
+        }
+
+        [Fact]
+        public async Task Hosted_SignupLimit_IsSharedAcrossAnIPv6Slash64_ButNotAcrossSlash64s()
+        {
+            var factory = WithHost(builder =>
+            {
+                builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["App:Mode"] = "hosted", ["RateLimiting:signup:PermitLimit"] = "1", ["RateLimiting:auth:PermitLimit"] = "1000"
+                }));
+                builder.ConfigureTestServices(services => services.AddSingleton<IStartupFilter, FakeClientIp>());
+            });
+            var client = Anonymous(factory);
+            Task<HttpResponseMessage> From(string ip)
+            {
+                var request = new HttpRequestMessage(HttpMethod.Post, "/user/register")
+                {
+                    Content = JsonContent.Create(new UserModel { FirstName = "Sign", LastName = "Up", Email = NewEmail(), Password = Password })
+                };
+                request.Headers.Add("X-Test-Client-Ip", ip);
+                return client.SendAsync(request);
+            }
+
+            (await From("2001:db8:1:2::1")).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await From("2001:db8:1:2:aaaa:bbbb:cccc:dddd")).StatusCode.Should().Be(HttpStatusCode.TooManyRequests, "same /64");
+            (await From("2001:db8:1:3::1")).StatusCode.Should().NotBe(HttpStatusCode.TooManyRequests, "a different /64 has its own allowance");
         }
 
         [Fact]
