@@ -1015,31 +1015,32 @@ public partial class DatabaseServices
 
 
 
-    // Revoke one refresh token (logout)
-    public async Task RevokeRefreshTokenAsync(string tokenHash)
-    {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+    // Revoke one refresh token (logout). Locks the token's user first, like the other token writers.
+    public Task RevokeRefreshTokenAsync(string tokenHash) =>
+        RetryOnDeadlockAsync(async () =>
+        {
+            await using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync();
+            await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
-        const string query = "UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE TokenHash = @TokenHash AND RevokedAt IS NULL";
-        await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
-        await command.ExecuteNonQueryAsync();
-    }
+            await using var command = new SqlCommand(@"
+                DECLARE @U UNIQUEIDENTIFIER, @L INT;
+                SELECT @U = UserId FROM RefreshTokens WHERE TokenHash = @TokenHash;
+                SELECT @L = 1 FROM Users WITH (UPDLOCK, ROWLOCK) WHERE Id = @U;
+                UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE TokenHash = @TokenHash AND RevokedAt IS NULL;",
+                connection, transaction);
+            command.Parameters.AddWithValue("@TokenHash", tokenHash);
+            await command.ExecuteNonQueryAsync();
+            await transaction.CommitAsync();
+        });
 
 
 
     // Revoke every refresh token for a user (password change, suspected token theft)
-    public async Task RevokeAllRefreshTokensAsync(string userId)
-    {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        const string query = "UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE UserId = @UserId AND RevokedAt IS NULL";
-        await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        await command.ExecuteNonQueryAsync();
-    }
+    public Task RevokeAllRefreshTokensAsync(string userId) =>
+        RetryOnDeadlockAsync(() => RevokeLockedAsync(
+            "UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE UserId = @UserId AND RevokedAt IS NULL",
+            userId, _ => { }));
 
 
 

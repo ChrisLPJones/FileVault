@@ -91,39 +91,46 @@ public partial class DatabaseServices
 
     // Sign one of the user's sessions out by revoking its refresh tokens.
     // False if it isn't theirs or is already signed out.
-    public async Task<bool> RevokeSessionAsync(string userId, Guid sessionId)
-    {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        const string query = @"
+    // Like every other token writer this locks the user's Users row first (see
+    // ConsumeAndReplaceRefreshTokenAsync); a bare UPDATE on RefreshTokens takes its locks in the
+    // opposite order to a concurrent refresh or login and could be chosen as a deadlock victim.
+    public Task<bool> RevokeSessionAsync(string userId, Guid sessionId) =>
+        RetryOnDeadlockAsync(async () => await RevokeLockedAsync(@"
             UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
-            WHERE UserId = @UserId AND SessionId = @SessionId AND RevokedAt IS NULL";
-
-        await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@SessionId", sessionId);
-        return await command.ExecuteNonQueryAsync() > 0;
-    }
+            WHERE UserId = @UserId AND SessionId = @SessionId AND RevokedAt IS NULL",
+            userId, cmd => cmd.Parameters.AddWithValue("@SessionId", sessionId)) > 0);
 
 
 
     // Sign out every session except `keepSessionId` (every session if it's null),
     // including tokens from before sessions existed. Returns how many tokens were revoked.
-    public async Task<int> RevokeOtherSessionsAsync(string userId, Guid? keepSessionId)
+    public Task<int> RevokeOtherSessionsAsync(string userId, Guid? keepSessionId) =>
+        RetryOnDeadlockAsync(() => RevokeLockedAsync(@"
+            UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
+            WHERE UserId = @UserId AND RevokedAt IS NULL
+              AND (@KeepSessionId IS NULL OR SessionId IS NULL OR SessionId <> @KeepSessionId)",
+            userId, cmd => cmd.Parameters.Add("@KeepSessionId", System.Data.SqlDbType.UniqueIdentifier).Value =
+                (object?)keepSessionId ?? DBNull.Value));
+
+
+
+    // Runs a token-revoking UPDATE in a transaction that first takes the user's Users row lock
+    // (the same order as the refresh, login, password-change and suspension paths); returns the rows revoked
+    private async Task<int> RevokeLockedAsync(string update, string userId, Action<SqlCommand> addParameters)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
-        const string query = @"
-            UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
-            WHERE UserId = @UserId AND RevokedAt IS NULL
-              AND (@KeepSessionId IS NULL OR SessionId IS NULL OR SessionId <> @KeepSessionId)";
-
-        await using var command = new SqlCommand(query, connection);
+        await using var command = new SqlCommand(@"
+            DECLARE @L INT;
+            SELECT @L = 1 FROM Users WITH (UPDLOCK, ROWLOCK) WHERE Id = @UserId;
+            " + update + @";
+            SELECT @@ROWCOUNT;", connection, transaction);
         command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.Add("@KeepSessionId", System.Data.SqlDbType.UniqueIdentifier).Value =
-            (object?)keepSessionId ?? DBNull.Value;
-        return await command.ExecuteNonQueryAsync();
+        addParameters(command);
+        var revoked = Convert.ToInt32(await command.ExecuteScalarAsync());
+        await transaction.CommitAsync();
+        return revoked;
     }
 }
