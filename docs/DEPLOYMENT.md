@@ -160,7 +160,7 @@ the `sqlserver` container. The API warns at start if it finds its login is `sysa
 history, then rebuild:
 
 ```bash
-printf 'MSSQL_APP_PASSWORD=%s\n' "$(openssl rand -base64 24 | tr -d '/+=')" >> .env
+printf 'MSSQL_APP_PASSWORD=%s\n' "$(openssl rand -base64 24 | tr -d '/+=')Aa1" >> .env
 docker compose up --build -d
 ```
 

@@ -99,10 +99,17 @@ public static class EmailSetup
             throw new InvalidOperationException(
                 "Hosted mode needs a working email sender: set SMTP_HOST (Email:Smtp:Host) and SMTP_FROM (Email:Smtp:From), plus SMTP_USER and SMTP_PASSWORD " +
                 "if the server needs a login. Without one, sign-up confirmation and password reset cannot work and their links would be written to the log.");
-        if (sender is SmtpEmailSender
-            && string.IsNullOrWhiteSpace(config["Email:Smtp:From"]) && string.IsNullOrWhiteSpace(config["Email:Smtp:User"]))
-            throw new InvalidOperationException(
-                "Hosted mode needs a From address for its emails: set SMTP_FROM (Email:Smtp:From) or SMTP_USER (Email:Smtp:User).");
+        if (sender is SmtpEmailSender)
+        {
+            // The same choice SmtpEmailSender makes per send: From, else User
+            var from = new[] { config["Email:Smtp:From"], config["Email:Smtp:User"] }.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+            if (from == null)
+                throw new InvalidOperationException(
+                    "Hosted mode needs a From address for its emails: set SMTP_FROM (Email:Smtp:From) or SMTP_USER (Email:Smtp:User).");
+            if (!MailAddress.TryCreate(from, out _))
+                throw new InvalidOperationException(
+                    "SMTP_FROM (Email:Smtp:From, or SMTP_USER if From is empty) is not a valid email address, so no email could be sent.");
+        }
     }
 }
 

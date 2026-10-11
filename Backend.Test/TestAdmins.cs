@@ -63,6 +63,9 @@ namespace Backend.Test
         // serverConnectionString: privileged, to master (one connection throughout: USE applies to the rest of the script)
         public static void Run(string serverConnectionString, string login, string password, string database)
         {
+            TestDatabaseGuard.AssertTestDatabase(new SqlConnectionStringBuilder(serverConnectionString) { InitialCatalog = database }.ConnectionString);
+            if (!login.StartsWith(LoginPrefix, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Refusing to create login '{login}': test logins are named {LoginPrefix}*.");
             using var connection = new SqlConnection(serverConnectionString);
             connection.Open();
             foreach (var batch in Batches(login, password, database))
@@ -78,7 +81,7 @@ namespace Backend.Test
         // Logins left behind by killed runs: only FvTest_login_* ones more than a day old
         public const string StaleLoginsSql = @"
             SELECT name FROM sys.server_principals
-            WHERE name LIKE 'FvTest[_]login[_]%' AND type = 'S' AND create_date < DATEADD(DAY, -1, GETDATE())";
+            WHERE name COLLATE Latin1_General_CS_AS LIKE 'FvTest[_]login[_]%' AND type = 'S' AND create_date < DATEADD(DAY, -1, GETDATE())";
 
         public static void Drop(string serverConnectionString, string login)
         {

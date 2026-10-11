@@ -237,6 +237,20 @@ namespace Backend.Test
         }
 
         [Fact]
+        public void Hosted_WithAnInvalidFromAddress_RefusesToStart()
+        {
+            var start = () => HostedWithoutSender(("Email:Smtp:Host", "smtp.example.test"), ("Email:Smtp:From", "not an address")).CreateClient();
+
+            start.Should().Throw<Exception>().Which.ToString().Should().Contain("not a valid email address");
+        }
+
+        [Fact]
+        public void Hosted_WithADisplayNameFromAddress_Starts()
+        {
+            HostedWithoutSender(("Email:Smtp:Host", "smtp.example.test"), ("Email:Smtp:From", "FileVault <no-reply@example.test>")).CreateClient();
+        }
+
+        [Fact]
         public void Hosted_WithHostAndOnlyAUser_Starts()
         {
             HostedWithoutSender(("Email:Smtp:Host", "smtp.example.test"), ("Email:Smtp:From", ""), ("Email:Smtp:User", "mailer@example.test")).CreateClient();
