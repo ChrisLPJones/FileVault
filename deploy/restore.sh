@@ -41,7 +41,7 @@ if [ "$PROJECT" = filevault ] || [ "$PROJECT" = "${FV_PRODUCTION_PROJECT:-fileva
   echo "refusing to restore into the production project '$PROJECT'. Restore into a separate project, e.g. fvrestore." >&2
   exit 2
 fi
-[ -n "$STACK_ENV" ] && [ -f "$STACK_ENV" ] || { echo "--env-file is required and must exist" >&2; exit 2; }
+if [ -z "$STACK_ENV" ] || [ ! -f "$STACK_ENV" ]; then echo "--env-file is required and must exist" >&2; exit 2; fi
 case "$(stat -c %a "$STACK_ENV")" in ?00) ;; *) echo "$STACK_ENV must not be readable by others: chmod 600" >&2; exit 2 ;; esac
 [ ${#COMPOSE_FILES[@]} -gt 0 ] || COMPOSE_FILES=(-f docker-compose.yml)
 
