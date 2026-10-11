@@ -20,7 +20,11 @@ namespace Backend.Test
 
         // The app with a login rate limit high enough for tests that create many accounts
         public static WebApplicationFactory<Program> WithoutLoginLimit(WebApplicationFactory<Program> factory) =>
-            factory.WithWebHostBuilder(builder => builder.UseSetting("RateLimiting:auth:PermitLimit", "1000"));
+            factory.WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("RateLimiting:auth:PermitLimit", "1000");
+                builder.UseSetting("RateLimiting:signup:PermitLimit", "1000"); // hosted mode
+            });
 
         // Register a new user, confirm their email address and log them in; the client sends their access token
         public static async Task<Account> CreateAsync(WebApplicationFactory<Program> factory, string prefix, string? email = null)

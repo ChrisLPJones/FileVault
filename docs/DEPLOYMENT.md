@@ -131,6 +131,8 @@ without the first three.
 | `SWAGGER_ENABLED` | `true` to serve the API docs (section 5). Off by default |
 | `FILEVAULT_MODE` | Optional: `self-hosted` (default) or `hosted` (section 9). Anything else stops the API starting |
 | `HOSTED_CONTACT_EMAIL` | Optional, hosted mode only: the address users are told to email to ask for a permanent account |
+| `ABUSE_CONTACT_EMAIL` | Optional: where to report abuse, shown on the sign-in, sign-up, share and settings pages. A plain email address (anything else stops the API starting). Hosted mode uses `HOSTED_CONTACT_EMAIL` when this is empty |
+| `STORAGE_MAX_DISK_USE_PERCENT` | Optional: uploads are refused once the drive holding the file storage is this percent full (1-99, default 80, `0` = off). See "Disk limit" below |
 | `INITIAL_ADMIN_EMAIL` | Optional, recommended on a public install: the one email that can become the first administrator (section 7) |
 | `GEOIPUPDATE_ACCOUNT_ID`, `GEOIPUPDATE_LICENSE_KEY` | Optional: MaxMind credentials for the `geoip` profile, which downloads the country database (section 8) |
 
@@ -138,6 +140,22 @@ Other API settings can be passed as environment variables on the `api` service u
 `Section__Key` names, for example `Storage__DefaultQuotaBytes`, `Storage__MaxUploadBytes`,
 `RateLimiting__auth__PermitLimit` or `TwoFactor__Issuer` (the name shown in authenticator apps).
 See `Backend/appsettings.json` for the full list and defaults.
+
+**Disk limit.** The API refuses uploads (HTTP 507, "The server's storage is almost full") that would
+take the drive holding `StorageRoot` past `STORAGE_MAX_DISK_USE_PERCENT` (`Storage:MaxDiskUsePercent`)
+of its size, so a full disk can't stop writes or take down SQL Server if it shares the disk. It
+applies in both modes and to every account, administrators included. The check counts the drive's
+used space, the bytes of chunked uploads still in progress (all accounts) and the new file; copying
+files writes nothing and is not checked. It is soft: several single-request uploads (at most 100 MB
+each) arriving at once can overshoot slightly. If the drive can't be read the upload is allowed and
+a warning is logged. The Admin page's Disk tile shows the limit, and "Uploads are paused" while the
+drive is over it. In Docker the percentage is of the drive behind the `filevault_file_storage`
+volume (normally the one holding `/var/lib/docker`, shared with the database volume); if Docker's
+data root is on another disk, the limit follows that disk.
+
+*Upgrading:* the default is 80 for self-hosted installs too. If your drive is already more than 80 %
+full, uploads stop after the upgrade (the API logs a warning at start) until you free space or set
+`STORAGE_MAX_DISK_USE_PERCENT` higher, or to `0` to keep the old behaviour.
 
 Changing the email address from Settings is limited per account to `EmailChange__MaxPerDay`
 confirmation links per 24 hours (default 5) and `EmailChange__ResendCooldownSeconds` between them
@@ -430,6 +448,11 @@ In hosted mode:
   removed. Administrators and permanent accounts don't see it. `HOSTED_CONTACT_EMAIL` adds the
   address to ask for a permanent account; leave it empty to leave that sentence out.
 - The Admin page gains "Last active" and "Removal due" columns.
+- Sign-ups are rate limited (below), and `ABUSE_CONTACT_EMAIL` (or `HOSTED_CONTACT_EMAIL`) shows a
+  "Report abuse" address on the public pages.
+- A new account must confirm its email before it can sign in (this is the case in both modes), and
+  creating a share link also checks that the address is confirmed. Unconfirmed accounts are removed
+  by the inactivity job like any other unused account.
 
 The job runs with the hourly storage cleanup. These settings go in `appsettings.json`, or on the
 `api` service as environment variables:
@@ -440,12 +463,33 @@ The job runs with the hourly storage cleanup. These settings go in `appsettings.
 | `Hosted:WarningDays` | 7 | Days of warning before removal (kept below `InactiveDays`) |
 | `Hosted:MaxRemovalsPerRun` | 50 | Most accounts warned, and most removed, per run |
 | `Hosted:MaxRemovalsPerDay` | 200 | Most accounts removed in any 24 hours (a safety brake; counted per API process) |
+| `Hosted:DefaultQuotaBytes` | unset | Default quota for accounts that are not permanent or administrators. Unset (or 0) means the same as `Storage:DefaultQuotaBytes` (1 GB). Permanent accounts and administrators always use `Storage:DefaultQuotaBytes`; a quota set on a user always wins |
+| `RateLimiting:signup:PermitLimit`, `RateLimiting:signup:WindowSeconds` | 5, 3600 | Sign-ups per IP address per window (5 per hour). Self-hosted installs keep using the login limit (`RateLimiting:auth:*`, 10 per minute) for sign-ups. Must be above 0: `0` does not turn the limit off, the API refuses to start |
+| `Hosted:MaxSignupsPerHour`, `Hosted:MaxSignupsPerDay` | 0, 0 | Site-wide limit on new accounts in the last hour / day; 0 = off. Over the limit, sign-up returns 429 "New sign-ups are paused". Accounts an administrator creates are never limited |
+
+**Sign-up limits and your proxy.** The per-IP limit uses the client's address, which behind a
+reverse proxy is correct only with `BEHIND_HTTPS_PROXY=true` (section 1). Without it every visitor
+shares the proxy's address and the limit becomes a limit for the whole site; the API logs a warning
+at start in hosted mode. With it on, keep the API port reachable only through the proxy and set
+`ForwardedHeaders__KnownProxies__0` to the proxy's address, otherwise a caller can spoof
+`X-Forwarded-For` and dodge the per-IP limit. The site-wide `Hosted:MaxSignupsPerHour/Day` limits
+are the backstop; switch them on if sign-up spam appears. Note that they let an attacker pause
+sign-ups for up to an hour or a day; you can still create accounts on the Admin page. Nothing about
+the visitor's address is stored by the limiter.
+
+**Quota tiers.** Which default an account gets is computed, not stored: changing
+`Hosted:DefaultQuotaBytes`, or marking an account permanent (or removing the mark), changes its quota
+at once. Lowering it on a live install shrinks existing non-permanent accounts' quotas; users over
+the new quota keep their files but can't upload until they are under it. The Admin page shows the
+second sentence ("Permanent accounts and admins get ...") only when the two differ.
 
 **Switching an existing install to hosted**
 
 Accounts that are already stale are not removed straight away. Each gets at least the warning
 period (7 days by default) from the first run, whether or not an email could be sent. Before
-turning it on, mark any account you want to keep as permanent or as an administrator.
+turning it on, mark any account you want to keep as permanent or as an administrator. If you set
+`Hosted:DefaultQuotaBytes`, accounts without a quota of their own that are neither permanent nor
+administrators drop to it at once (see "Quota tiers").
 
 **Upgrading**
 

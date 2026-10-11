@@ -78,6 +78,22 @@
     font-weight: 700;
 }
 
+/* Disk tile: the upload limit, and a warning once uploads are being refused */
+.admin-stat-limit {
+    margin-top: 4px;
+    color: var(--fv-text-muted);
+    font-size: 0.85rem;
+}
+
+.admin-stat-limit.warning {
+    color: var(--fv-danger);
+    font-weight: 700;
+}
+
+.admin-stat-warning {
+    box-shadow: var(--fv-shadow), inset 0 0 0 1px var(--fv-danger);
+}
+
 @media (max-width: 760px) {
     .admin-stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));

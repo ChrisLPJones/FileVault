@@ -84,5 +84,8 @@ namespace Backend.Models
         long? DiskFreeBytes,
         Guid CurrentUserId, // the administrator asking, so the page can leave their own row's account actions out
         int SuspendedCount = 0,
-        string Mode = "self-hosted"); // "self-hosted" or "hosted"
+        string Mode = "self-hosted", // "self-hosted" or "hosted"
+        long? PermanentQuotaBytes = null, // hosted mode only, and only when it differs from DefaultQuotaBytes (the tier for new sign-ups)
+        int? MaxDiskUsePercent = null, // null = the disk limit is off
+        bool DiskUploadsPaused = false); // the drive is past the limit, so uploads are refused
 }

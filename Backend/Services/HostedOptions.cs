@@ -4,7 +4,8 @@ namespace Backend.Services;
 // and the hosted-only settings. Self-hosted is the default; any value other than "self-hosted" or
 // "hosted" stops the API starting. Inactive-account removal and the first-login notice only exist
 // in hosted mode.
-public sealed record HostedOptions(bool IsHosted, int InactiveDays, int WarningDays, int MaxRemovalsPerRun, string? ContactEmail, int MaxRemovalsPerDay = 200)
+public sealed record HostedOptions(bool IsHosted, int InactiveDays, int WarningDays, int MaxRemovalsPerRun, string? ContactEmail, int MaxRemovalsPerDay = 200,
+    long? DefaultQuotaBytes = null, int MaxSignupsPerHour = 0, int MaxSignupsPerDay = 0, string? AbuseContactEmail = null)
 {
     public const string SelfHostedName = "self-hosted";
     public const string HostedName = "hosted";
@@ -29,9 +30,35 @@ public sealed record HostedOptions(bool IsHosted, int InactiveDays, int WarningD
         var warningDays = Math.Min(Math.Max(1, config.GetValue("Hosted:WarningDays", 7)), Math.Max(1, inactiveDays - 1));
         var contact = config["Hosted:ContactEmail"]?.Trim();
 
+        // Where to report abuse (shown on the public pages). App:AbuseContactEmail, or in hosted mode the
+        // hosted contact address when that is empty. A bad explicit address stops the API starting.
+        var abuse = config["App:AbuseContactEmail"]?.Trim();
+        if (!string.IsNullOrEmpty(abuse) && !IsPlainEmailAddress(abuse))
+            throw new InvalidOperationException(
+                "ABUSE_CONTACT_EMAIL (App:AbuseContactEmail) must be a plain email address such as abuse@example.com.");
+        if (string.IsNullOrEmpty(abuse) && hosted && contact != null && IsPlainEmailAddress(contact))
+            abuse = contact;
+
+        // Unset or <= 0 means "same as Storage:DefaultQuotaBytes"
+        var hostedQuota = config.GetValue<long?>("Hosted:DefaultQuotaBytes");
+
         return new HostedOptions(hosted, inactiveDays, warningDays,
             Math.Max(1, config.GetValue("Hosted:MaxRemovalsPerRun", 50)),
             string.IsNullOrEmpty(contact) ? null : contact,
-            Math.Max(1, config.GetValue("Hosted:MaxRemovalsPerDay", 200)));
+            Math.Max(1, config.GetValue("Hosted:MaxRemovalsPerDay", 200)),
+            hostedQuota is > 0 ? hostedQuota : null,
+            Math.Max(0, config.GetValue("Hosted:MaxSignupsPerHour", 0)),
+            Math.Max(0, config.GetValue("Hosted:MaxSignupsPerDay", 0)),
+            string.IsNullOrEmpty(abuse) ? null : abuse);
     }
+
+    // A single address with nothing after it that could add a mailto: query or break out of a link
+    public static bool IsPlainEmailAddress(string value) =>
+        value.Length <= 254 && !value.Any(c => char.IsWhiteSpace(c) || c is '?' or '&' or '<' or '>' or '"' or ',' or ';') &&
+        System.Net.Mail.MailAddress.TryCreate(value, out var parsed) && parsed.Address == value;
+
+    // The default quota for an account with no override of its own: the permanent/admin tier is
+    // Storage:DefaultQuotaBytes; in hosted mode everyone else gets Hosted:DefaultQuotaBytes when set
+    public long DefaultQuotaFor(long storageDefault, bool permanentOrAdmin) =>
+        IsHosted && !permanentOrAdmin && DefaultQuotaBytes is { } tier ? tier : storageDefault;
 }

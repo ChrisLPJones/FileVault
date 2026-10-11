@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 
 namespace Backend.Services;
 
-public class FileServices(IConfiguration config, FileEncryption encryption, ILogger<FileServices> logger)
+public class FileServices(IConfiguration config, FileEncryption encryption, ILogger<FileServices> logger, HostedOptions hosted, DiskSpace disk)
 {
     private readonly string _storageRoot = config.GetValue<string>("StorageRoot")
         ?? throw new InvalidOperationException("StorageRoot is not set.");
@@ -16,13 +16,23 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
     public static long MaxUploadBytes(IConfiguration config) =>
         config.GetValue("Storage:MaxUploadBytes", DefaultMaxUploadBytes);
 
-    // How much the user has stored, their quota (per-user override or the default) and the upload size limit
+    // The default quota (Storage:DefaultQuotaBytes, 1 GB)
+    public static long StorageDefaultQuota(IConfiguration config) =>
+        config.GetValue("Storage:DefaultQuotaBytes", DefaultQuotaBytes);
+
+    // How much the user has stored, their quota and the upload size limit. The quota is the per-user
+    // override, else the default for their tier: in hosted mode accounts that are neither permanent
+    // nor admin get Hosted:DefaultQuotaBytes (when set), everyone else Storage:DefaultQuotaBytes.
     public async Task<StorageUsage> GetUsageAsync(DatabaseServices db, string userId)
     {
-        var (used, quota) = await db.GetStorageUsageAsync(userId);
-        return new StorageUsage(used, quota ?? config.GetValue("Storage:DefaultQuotaBytes", DefaultQuotaBytes), MaxUploadBytes(config),
+        var (used, quota, permanentOrAdmin) = await db.GetStorageUsageAsync(userId);
+        return new StorageUsage(used, quota ?? hosted.DefaultQuotaFor(StorageDefaultQuota(config), permanentOrAdmin), MaxUploadBytes(config),
             ChunkedUploadService.MaxFileBytes(config));
     }
+
+    // Returns a 507 if the server's drive is too full to take `incoming` more bytes (see DiskSpace)
+    public Task<HttpReturnResult?> CheckDiskAsync(long incoming) =>
+        disk.CheckAsync(incoming);
 
     public static readonly string[] DefaultFolderNames = ["Documents", "Pictures", "Music", "Videos"];
 
@@ -121,6 +131,10 @@ public class FileServices(IConfiguration config, FileEncryption encryption, ILog
         var quotaError = await CheckQuotaAsync(db, userId, file.Length);
         if (quotaError != null)
             return quotaError;
+
+        var diskError = await CheckDiskAsync(file.Length);
+        if (diskError != null)
+            return diskError;
 
         var guid = Guid.NewGuid().ToString(); // Generate unique ID for storage
         int isDirectory = 0;

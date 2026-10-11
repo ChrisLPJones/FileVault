@@ -53,11 +53,14 @@ namespace Backend.Services
         }
 
         // Hashes the user's password and registers them in the database
-        public async Task HashAndRegisterUser(UserModel user, DatabaseServices db)
+        public async Task<RegisterResult> HashAndRegisterUser(UserModel user, DatabaseServices db, HostedOptions? hosted = null)
         {
             string password =  BCrypt.Net.BCrypt.HashPassword(user.Password);
             user.Password = password;
-            await db.RegisterUser(user);
+            // The site-wide sign-up limits exist only in hosted mode
+            return hosted is { IsHosted: true }
+                ? await db.RegisterUser(user, hosted.MaxSignupsPerHour, hosted.MaxSignupsPerDay)
+                : await db.RegisterUser(user);
         }
 
         // Hashes a plain-text password using BCrypt

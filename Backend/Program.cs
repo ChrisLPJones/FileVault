@@ -67,11 +67,16 @@ namespace Backend
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
                 options.OnRejected = async (context, ct) =>
                 {
+                    // A long window (the hourly sign-up limit) mustn't promise a minute
+                    var longWait = false;
                     if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                    {
                         context.HttpContext.Response.Headers.RetryAfter = ((int)retryAfter.TotalSeconds).ToString();
+                        longWait = retryAfter.TotalSeconds > 120;
+                    }
 
                     await context.HttpContext.Response.WriteAsJsonAsync(
-                        new { error = "Too many attempts. Please wait a minute and try again." }, ct);
+                        new { error = longWait ? "Too many attempts. Please try again later." : "Too many attempts. Please wait a minute and try again." }, ct);
                 };
 
                 foreach (var (policy, defaultLimit) in new[] { ("auth", 10), ("refresh", 60), ("two-factor", 10) })
@@ -83,15 +88,33 @@ namespace Backend
                         var window = TimeSpan.FromSeconds(config.GetValue($"RateLimiting:{policy}:WindowSeconds", 60));
 
                         return RateLimitPartition.GetFixedWindowLimiter(
-                            http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                            ClientIpKey.From(http.Connection.RemoteIpAddress),
                             _ => new FixedWindowRateLimiterOptions { PermitLimit = permitLimit, Window = window });
                     });
                 }
+
+                // Sign-ups. Hosted: 5 per hour per IP by default (RateLimiting:signup:*). Self-hosted keeps
+                // the login limits (RateLimiting:auth:*), but in a bucket of its own.
+                options.AddPolicy("signup", http =>
+                {
+                    var config = http.RequestServices.GetRequiredService<IConfiguration>();
+                    var hosted = http.RequestServices.GetRequiredService<HostedOptions>();
+                    var policy = hosted.IsHosted ? "signup" : "auth";
+                    var permitLimit = config.GetValue($"RateLimiting:{policy}:PermitLimit", hosted.IsHosted ? 5 : 10);
+                    var window = TimeSpan.FromSeconds(config.GetValue($"RateLimiting:{policy}:WindowSeconds", hosted.IsHosted ? 3600 : 60));
+                    // Values of 0 or less are refused at start-up (SignupRateLimit.Validate)
+
+                    return RateLimitPartition.GetFixedWindowLimiter(
+                        ClientIpKey.From(http.Connection.RemoteIpAddress),
+                        _ => new FixedWindowRateLimiterOptions { PermitLimit = permitLimit, Window = window });
+                });
             });
             // Public share links: viewing, and password attempts/downloads
             builder.Services.AddFixedWindowRateLimits(("share", 60), ("share-download", 20));
             // Endpoints that send email (forgot password, resend verification)
             builder.Services.AddFixedWindowRateLimits(("email", 5));
+            // Anonymous site info (GET /site)
+            builder.Services.AddFixedWindowRateLimits(("public", 60));
             // OpenAPI document (/swagger/v1/swagger.json) and interactive docs (/swagger)
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(options =>
@@ -121,6 +144,8 @@ namespace Backend
 
             builder.Services.AddSingleton<FileEncryption>();
             builder.Services.AddScoped<FileServices>();
+            // Read from config when first needed (and forced below at start-up), so a bad setting stops the API
+            builder.Services.AddSingleton<DiskSpace>();
             builder.Services.AddScoped<AvatarService>();
             builder.Services.AddSingleton<ThumbnailService>();
             builder.Services.AddScoped<DatabaseServices>();
@@ -195,6 +220,26 @@ namespace Backend
             // Fail fast on an unknown FILEVAULT_MODE
             var hostedOptions = app.Services.GetRequiredService<HostedOptions>();
             app.Logger.LogInformation("FileVault mode: {Mode}", hostedOptions.ModeName);
+            SignupRateLimit.Validate(app.Configuration, hostedOptions.IsHosted);
+            var diskSpace = app.Services.GetRequiredService<DiskSpace>();
+            if (diskSpace.MaxPercent > 0)
+            {
+                app.Logger.LogInformation("Uploads are refused once the storage drive is more than {Percent}% full (Storage:MaxDiskUsePercent; 0 turns this off)", diskSpace.MaxPercent);
+                if (diskSpace.Read() is var (diskTotal, diskFree) && diskTotal - diskFree > DiskSpace.LimitBytes(diskTotal, diskSpace.MaxPercent))
+                    app.Logger.LogWarning("The storage drive is already over {Percent}% full, so uploads are refused until space is freed. " +
+                        "Free some space, or raise or turn off Storage:MaxDiskUsePercent (STORAGE_MAX_DISK_USE_PERCENT).", diskSpace.MaxPercent);
+            }
+            if (hostedOptions.IsHosted)
+            {
+                var signupLimit = $"{app.Configuration.GetValue("RateLimiting:signup:PermitLimit", 5)} per {app.Configuration.GetValue("RateLimiting:signup:WindowSeconds", 3600)} s per IP";
+                app.Logger.LogInformation("Sign-up limits: {PerIp}; site-wide per hour {Hour}, per day {Day} (0 = off)",
+                    signupLimit, hostedOptions.MaxSignupsPerHour, hostedOptions.MaxSignupsPerDay);
+                if (!app.Configuration.GetValue("ForwardedHeaders:Enabled", false))
+                    app.Logger.LogWarning("Hosted mode without ForwardedHeaders (BEHIND_HTTPS_PROXY=true): behind a reverse proxy every visitor shares the proxy's IP, " +
+                        "so the per-IP sign-up limit becomes a site-wide limit. See docs/DEPLOYMENT.md.");
+                if (hostedOptions.AbuseContactEmail == null)
+                    app.Logger.LogWarning("Hosted mode without an abuse contact (ABUSE_CONTACT_EMAIL or HOSTED_CONTACT_EMAIL): the site shows no way to report abuse");
+            }
             if (hostedOptions.IsHosted && app.Services.GetRequiredService<IEmailSender>() is LogEmailSender)
                 app.Logger.LogWarning("Hosted mode without an SMTP host (Email:Smtp:Host): inactive accounts will be removed without a warning email");
 
@@ -224,6 +269,9 @@ namespace Backend
                 forwarded.KnownProxies.Clear();
                 foreach (var proxy in app.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
                     forwarded.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));
+                if (hostedOptions.IsHosted && forwarded.KnownProxies.Count == 0)
+                    app.Logger.LogWarning("Hosted mode with ForwardedHeaders enabled but no ForwardedHeaders:KnownProxies: no proxy is trusted, so X-Forwarded-For is ignored " +
+                        "and every visitor shares the proxy's IP (the per-IP sign-up limit becomes site-wide). Set KnownProxies to the proxy's address. See docs/DEPLOYMENT.md.");
                 app.UseForwardedHeaders(forwarded);
             }
 
@@ -277,6 +325,7 @@ namespace Backend
             app.MapUploadRoutes();
             app.MapTwoFactorRoutes();
             app.MapSessionRoutes();
+            app.MapSiteRoutes();
 
             // Create storage folder if !exists
             var _storageRoot = builder.Configuration.GetValue<string>("StorageRoot");

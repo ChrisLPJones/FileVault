@@ -6,10 +6,12 @@ import Login from "./Login";
 import { login } from "../../services/Auth";
 import { getToken, hasSessionHint } from "../../utils/auth";
 import { makeToken } from "../../test/tokens";
+import { useSiteInfo } from "../../hooks/useSiteInfo";
 
 vi.mock("../../services/Auth", () => ({ login: vi.fn() }));
 // The server status banner polls the API; not part of these tests
 vi.mock("../../components/ServerStatus", () => ({ default: () => null }));
+vi.mock("../../hooks/useSiteInfo", () => ({ useSiteInfo: vi.fn(() => ({ abuseContactEmail: null })) }));
 vi.mock("./TwoFactorStep", () => ({
     default: ({ onSuccess }) => <button onClick={() => onSuccess(twoFactorToken)}>Finish 2FA</button>,
 }));
@@ -177,5 +179,21 @@ describe("Login form", () => {
 
         await submit();
         expect(screen.queryByRole("status")).toBeNull();
+    });
+});
+
+describe("Login page footer", () => {
+    it("shows the abuse contact when the server has one", () => {
+        useSiteInfo.mockReturnValue({ abuseContactEmail: "abuse@example.com" });
+        renderLogin();
+
+        expect(screen.getByRole("link", { name: "abuse@example.com" })).toHaveAttribute("href", "mailto:abuse@example.com");
+    });
+
+    it("shows no abuse line without one", () => {
+        useSiteInfo.mockReturnValue({ abuseContactEmail: null });
+        renderLogin();
+
+        expect(screen.queryByText(/Report abuse/)).not.toBeInTheDocument();
     });
 });

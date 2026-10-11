@@ -33,7 +33,8 @@ namespace Backend.Routes
                 DatabaseServices db,
                 AuthServices auth,
                 FileServices fs,
-                AccountEmailService emails) =>
+                AccountEmailService emails,
+                HostedOptions hosted) =>
             {
                 var user = await ReadJsonAsync<UserModel>(request);
 
@@ -52,14 +53,18 @@ namespace Backend.Routes
                     return Results.BadRequest(new { error = "Email already exists" });
 
                 user.LastName = user.LastName?.Trim() ?? "";
-                await auth.HashAndRegisterUser(user, db);
+                if (await auth.HashAndRegisterUser(user, db, hosted) == RegisterResult.SignupsPaused)
+                {
+                    request.HttpContext.Response.Headers.RetryAfter = "3600";
+                    return Results.Json(new { error = "New sign-ups are paused for a while. Please try again later." }, statusCode: 429);
+                }
 
                 // Starter folders (Documents, Pictures, Music, Videos) for the new account
                 var created = await db.GetUserByEmail(user.Email.Trim());
                 if (created != null)
                 {
                     await fs.CreateDefaultFoldersAsync(db, created.Id.ToString());
-                    // Ask them to confirm the address (they can use the app meanwhile)
+                    // Ask them to confirm the address (they can't sign in until they have)
                     await emails.SendVerificationAsync(created, db);
                 }
 
@@ -69,7 +74,7 @@ namespace Backend.Routes
                 .WithSummary("Create an account")
                 .Produces<SuccessResponse>()
                 .Produces<ErrorResponse>(400)
-                .Produces<ErrorResponse>(429).RequireRateLimiting("auth");
+                .Produces<ErrorResponse>(429).RequireRateLimiting("signup");
 
             // Logs in a user: returns an access token and sets the refresh token cookie
             app.MapPost("/user/login", async (

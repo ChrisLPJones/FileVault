@@ -285,7 +285,12 @@ export default function Admin() {
         ["Files", stats.fileCount.toLocaleString(), `${stats.folderCount.toLocaleString()} folders`],
         ["Stored", formatBytes(stats.totalStoredBytes), stats.storageBytesOnDisk != null ? `${formatBytes(stats.storageBytesOnDisk)} on disk, encrypted` : "Size of all files"],
         ["Disk", diskUsed != null ? `${formatBytes(stats.diskFreeBytes)} free` : "Unknown",
-            diskUsed != null ? `${formatBytes(diskUsed)} of ${formatBytes(stats.diskTotalBytes)} used` : "Couldn't read the disk"],
+            diskUsed != null ? `${formatBytes(diskUsed)} of ${formatBytes(stats.diskTotalBytes)} used` : "Couldn't read the disk",
+            // Uploads are refused past the limit; the tile turns to a warning when that is happening
+            stats.maxDiskUsePercent != null
+                ? `Uploads stop when the disk is ${stats.maxDiskUsePercent}% full${stats.diskUploadsPaused ? ". Uploads are paused." : "."}`
+                : null,
+            stats.diskUploadsPaused === true],
     ];
 
     return (
@@ -293,11 +298,12 @@ export default function Admin() {
             <h1 className="admin-title">Admin</h1>
 
             <section className="admin-stats" aria-label="Server totals">
-                {tiles.map(([label, value, detail]) => (
-                    <div key={label} className="admin-card admin-stat">
+                {tiles.map(([label, value, detail, limitNote, warning]) => (
+                    <div key={label} className={`admin-card admin-stat${warning ? " admin-stat-warning" : ""}`}>
                         <div className="admin-stat-label">{label}</div>
                         <div className="admin-stat-value">{value}</div>
                         <div className="admin-muted">{detail}</div>
+                        {limitNote && <div className={warning ? "admin-stat-limit warning" : "admin-stat-limit"}>{limitNote}</div>}
                     </div>
                 ))}
             </section>
@@ -313,6 +319,8 @@ export default function Admin() {
                 </div>
                 <p className="admin-muted">
                     New accounts get {formatBytes(stats.defaultQuotaBytes)} unless you change their quota.
+                    {stats.permanentQuotaBytes != null &&
+                        ` Permanent accounts and admins get ${formatBytes(stats.permanentQuotaBytes)}.`}
                 </p>
                 {creating && <CreateAccountForm onCreate={createAccount} onCancel={() => setCreating(false)} />}
                 {notice && <div className="admin-notice" role="status">{notice}</div>}

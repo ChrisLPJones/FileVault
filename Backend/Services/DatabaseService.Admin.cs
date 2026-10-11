@@ -224,7 +224,8 @@ public partial class DatabaseServices
 
     // Every account with its storage use and file count, oldest first. Reads every user's files,
     // so it can be picked as a deadlock victim by someone's delete; it only reads, so it's retried.
-    // In hosted mode each row also says when the account will be removed for inactivity.
+    // In hosted mode each row also says when the account will be removed for inactivity, and the
+    // default quota is the hosted tier for accounts that are neither permanent nor admin.
     public Task<List<AdminUser>> GetUsersForAdminAsync(long defaultQuota, HostedOptions? hosted = null) =>
         RetryOnDeadlockAsync(() => ReadUsersForAdminAsync(defaultQuota, hosted));
 
@@ -266,7 +267,7 @@ public partial class DatabaseServices
                 reader.IsDBNull(5) ? null : DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc),
                 reader.GetInt64(8),
                 reader.GetInt32(9),
-                quotaOverride ?? defaultQuota,
+                quotaOverride ?? (hosted?.DefaultQuotaFor(defaultQuota, isAdmin || isPermanent) ?? defaultQuota),
                 quotaOverride,
                 isAdmin,
                 isPermanent,
