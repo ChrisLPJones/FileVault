@@ -26,7 +26,7 @@
 - See every device you're logged in on, and sign any of them out
 - Email confirmation before the first login, and password reset by email
 - Short-lived access tokens with a rotating, httpOnly refresh-token cookie
-- Password rules, rate limiting and per-user storage quotas
+- Password rules, rate limiting and per-user storage quotas, and a disk limit: uploads are refused once the storage drive is more than 80 % full (`STORAGE_MAX_DISK_USE_PERCENT`, `0` turns it off)
 - Strict Content-Security-Policy and security headers; ready to run behind an HTTPS reverse proxy
 
 **Account and appearance**
@@ -34,7 +34,7 @@
 - Changing your email address needs your password and is confirmed by a link sent to the new address (open it while signed in); until then the current address stays your login, and the old address (if confirmed) gets a "wasn't me" link that cancels the change and signs out every device
 - Light, dark and system themes, and a choice of accent colour
 - An admin page for the server owner: every account's avatar, storage use and quota, each user's last login IP address and country (looked up in a local database, nothing sent to a third party), and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark non-admin accounts permanent (admins are always permanent), suspend and unsuspend accounts (a suspended user is signed out at once and can't sign in; files and shares are kept, share links show "not found" until unsuspended), and delete accounts (type the email to confirm; the last admin can't be deleted)
-- Optional hosted mode (`FILEVAULT_MODE=hosted`) for a public instance: accounts unused for 30 days are removed with their files (after a warning email when SMTP is set up), and new users see a dismissible notice. Administrator, permanent and suspended accounts are never removed. Self-hosted is the default and removes nothing
+- Optional hosted mode (`FILEVAULT_MODE=hosted`) for a public instance: accounts unused for 30 days are removed with their files (after a warning email when SMTP is set up), and new users see a dismissible notice. Administrator, permanent and suspended accounts are never removed. Hosted mode also rate limits sign-ups (5 per IP per hour by default, optional site-wide hourly and daily limits), can give ordinary accounts a smaller default quota, and checks for a confirmed email before a share link is created. Self-hosted is the default and removes nothing
 
 **Tooling**
 - Interactive API docs (Swagger) at `/swagger` in development, or with `SWAGGER_ENABLED=true`
@@ -123,7 +123,7 @@ The frontend bundle has the API URL compiled in. If the browser reaches the API 
 
 The Admin page can show the country of each user's last login. That needs a free MaxMind GeoLite2 Country database, which Compose can download for you with `docker compose --profile geoip up -d` once `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY` are set in `.env`. Without it the country shows "Unknown". See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#8-last-login-location-geoip).
 
-To run a public instance that cleans up unused accounts, set `FILEVAULT_MODE=hosted` in `.env`, and optionally `HOSTED_CONTACT_EMAIL` (the address the notice tells users to email to ask for a permanent account). Anything other than `self-hosted` or `hosted` stops the API starting. See "Hosted mode" in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+To run a public instance that cleans up unused accounts, set `FILEVAULT_MODE=hosted` in `.env`, and optionally `HOSTED_CONTACT_EMAIL` (the address the notice tells users to email to ask for a permanent account). Set `ABUSE_CONTACT_EMAIL` to show a "Report abuse" address on the sign-in, sign-up, share and settings pages (hosted mode falls back to `HOSTED_CONTACT_EMAIL`). Anything other than `self-hosted` or `hosted` stops the API starting. See "Hosted mode" in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Hosting it for real (HTTPS reverse proxy, secrets, backups, key rotation, security headers): see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
@@ -220,6 +220,7 @@ To try protected endpoints, call `POST /user/login`, then click **Authorize** an
 - **Recycle bin**: list, restore, delete for good, empty
 - **Shares**: create, list and revoke share links, and the public endpoints a link uses
 - **Admin**: every account's usage and quota, change quotas, create accounts (optionally as an administrator, with an optional quota), delete accounts, set a user's password, mark non-admin accounts permanent (admins are always permanent), suspend or unsuspend accounts (`PUT /admin/users/{id}/suspended`), server totals
+- **Site**: `GET /site`, the public abuse contact address (if one is set)
 - **Health**: `/ping` and `/pingsql`
 
 ## Project layout

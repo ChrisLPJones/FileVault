@@ -3,6 +3,8 @@ using Microsoft.Data.SqlClient;
 
 namespace Backend.Services;
 
+public enum RegisterResult { Created, SignupsPaused }
+
 public partial class DatabaseServices
 {
     // Store database connection string from configuration
@@ -452,15 +454,36 @@ public partial class DatabaseServices
     // then nobody is admin at registration (that email is promoted when it is confirmed). The
     // check and the insert share one transaction under the admin-membership lock, so two
     // simultaneous first registrations can't both be admin.
-    public Task RegisterUser(UserModel user) => RetryOnDeadlockAsync(() => RegisterUserOnceAsync(user));
+    // With maxPerHour / maxPerDay above 0 (hosted mode, Hosted:MaxSignupsPerHour/Day), a registration
+    // is refused (nothing inserted) once that many accounts were created in the last hour / day. The
+    // count is taken under the same lock as the insert, so simultaneous registrations can't pass it together.
+    public Task<RegisterResult> RegisterUser(UserModel user, int maxPerHour = 0, int maxPerDay = 0) =>
+        RetryOnDeadlockAsync(() => RegisterUserOnceAsync(user, maxPerHour, maxPerDay));
 
-    private async Task RegisterUserOnceAsync(UserModel user)
+    private async Task<RegisterResult> RegisterUserOnceAsync(UserModel user, int maxPerHour, int maxPerDay)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
         await TakeAdminMembershipLockAsync(connection, transaction);
+
+        if (maxPerHour > 0 || maxPerDay > 0)
+        {
+            await using var count = new SqlCommand(@"
+                SELECT COUNT(CASE WHEN CreatedAt >= DATEADD(hour, -1, GETUTCDATE()) THEN 1 END), COUNT(*)
+                FROM Users WHERE CreatedAt >= DATEADD(day, -1, GETUTCDATE())", connection, transaction);
+            await using (var counts = await count.ExecuteReaderAsync())
+            {
+                await counts.ReadAsync();
+                if ((maxPerHour > 0 && counts.GetInt32(0) >= maxPerHour) || (maxPerDay > 0 && counts.GetInt32(1) >= maxPerDay))
+                {
+                    await counts.CloseAsync();
+                    await transaction.RollbackAsync();
+                    return RegisterResult.SignupsPaused;
+                }
+            }
+        }
 
         const string query = @"
             INSERT INTO Users (FirstName, LastName, Email, PasswordHash, IsAdmin, IsPermanent)
@@ -477,6 +500,7 @@ public partial class DatabaseServices
 
         await command.ExecuteNonQueryAsync();
         await transaction.CommitAsync();
+        return RegisterResult.Created;
     }
 
 
@@ -546,11 +570,12 @@ public partial class DatabaseServices
 
 
 
-    // Bytes stored by the user, and their quota override (null = use the default)
-    public Task<(long used, long? quota)> GetStorageUsageAsync(string userId) =>
+    // Bytes stored by the user, their quota override (null = use the default), and whether they are
+    // permanent or an administrator (which picks the default quota tier in hosted mode)
+    public Task<(long used, long? quota, bool permanentOrAdmin)> GetStorageUsageAsync(string userId) =>
         RetryOnDeadlockAsync(() => GetStorageUsageOnceAsync(userId));
 
-    private async Task<(long used, long? quota)> GetStorageUsageOnceAsync(string userId)
+    private async Task<(long used, long? quota, bool permanentOrAdmin)> GetStorageUsageOnceAsync(string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -558,14 +583,15 @@ public partial class DatabaseServices
         const string query = @"
             SELECT
                 (SELECT COALESCE(SUM(Size), 0) FROM Files WHERE UserId = @UserId AND isDirectory = 0),
-                (SELECT StorageQuota FROM Users WHERE Id = @UserId)";
+                (SELECT StorageQuota FROM Users WHERE Id = @UserId),
+                (SELECT CASE WHEN IsPermanent = 1 OR IsAdmin = 1 THEN 1 ELSE 0 END FROM Users WHERE Id = @UserId)";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
 
         await using var reader = await command.ExecuteReaderAsync();
         await reader.ReadAsync();
-        return (reader.GetInt64(0), reader.IsDBNull(1) ? null : reader.GetInt64(1));
+        return (reader.GetInt64(0), reader.IsDBNull(1) ? null : reader.GetInt64(1), !reader.IsDBNull(2) && reader.GetInt32(2) == 1);
     }
 
 

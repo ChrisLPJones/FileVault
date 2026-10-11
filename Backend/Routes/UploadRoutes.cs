@@ -28,7 +28,8 @@ namespace Backend.Routes
                 .Produces<StartedUpload>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(413)
-                .Produces<ErrorResponse>(429).RequireAuthorization();
+                .Produces<ErrorResponse>(429)
+                .Produces<ErrorResponse>(507).RequireAuthorization();
 
             // Receives one chunk (raw bytes, exactly the chunk's length)
             app.MapPut("/uploads/{id}/chunks/{index}", async (
@@ -100,7 +101,8 @@ namespace Backend.Routes
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(404)
                 .Produces<ErrorResponse>(409)
-                .Produces<ErrorResponse>(413).RequireAuthorization();
+                .Produces<ErrorResponse>(413)
+                .Produces<ErrorResponse>(507).RequireAuthorization();
 
             // Cancels an upload and deletes its chunks
             app.MapDelete("/uploads/{id}", async (

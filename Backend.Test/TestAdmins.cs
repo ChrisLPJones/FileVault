@@ -244,6 +244,7 @@ namespace Backend.Test
             from.WithWebHostBuilder(builder =>
             {
                 builder.UseSetting("RateLimiting:auth:PermitLimit", "1000");
+                builder.UseSetting("RateLimiting:signup:PermitLimit", "1000");
                 builder.ConfigureAppConfiguration((_, config) =>
                 {
                     var settings = new Dictionary<string, string?>

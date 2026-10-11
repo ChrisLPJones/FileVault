@@ -58,6 +58,7 @@ namespace Backend.Routes
                 .Produces<SuccessResponse>()
                 .Produces<ErrorResponse>(400)
                 .Produces<ErrorResponse>(413)
+                .Produces<ErrorResponse>(507)
                 .WithMetadata(new MultipartUploadMetadata()).RequireAuthorization();
 
             // Create folder metadata in the database

@@ -78,6 +78,10 @@ public class ChunkedUploadService(
                 $"Not enough storage space: {FileServices.FormatBytes(usage.Quota - usage.Used - pendingBytes)} free of {FileServices.FormatBytes(usage.Quota)}")
             { StatusCode = 413 };
 
+        var diskError = await fs.CheckDiskAsync(db, request.Size);
+        if (diskError != null)
+            return diskError;
+
         var uploadId = Guid.NewGuid();
         var key = RandomNumberGenerator.GetBytes(32);
         try
@@ -201,6 +205,15 @@ public class ChunkedUploadService(
                 return new HttpReturnResult(false,
                     $"Not enough storage space: {FileServices.FormatBytes(usage.Quota - usage.Used)} free of {FileServices.FormatBytes(usage.Quota)}")
                 { StatusCode = 413 };
+            }
+
+            // The drive may have filled up since the upload started; the chunks are already on disk,
+            // and assembling the file briefly needs about the same again
+            var diskError = await fs.CheckDiskAsync(db, upload.Size, upload.Id);
+            if (diskError != null)
+            {
+                await db.ReleaseUploadAsync(upload.Id);
+                return diskError;
             }
 
             var folderPath = "";

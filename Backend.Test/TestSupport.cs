@@ -135,7 +135,7 @@ namespace Backend.Test
         {
             _baseFactory = factory;
             // These tests register and log in many accounts; keep the login rate limit out of the way
-            Factory = WithSettings([("RateLimiting:auth:PermitLimit", "1000"), .. settings]);
+            Factory = WithSettings([("RateLimiting:auth:PermitLimit", "1000"), ("RateLimiting:signup:PermitLimit", "1000"), .. settings]);
         }
 
         protected WebApplicationFactory<Program> WithSettings(params (string key, string value)[] settings) =>
@@ -161,6 +161,9 @@ namespace Backend.Test
             register.StatusCode.Should().Be(HttpStatusCode.OK, await register.Content.ReadAsStringAsync());
             _registeredEmails.Add(email);
         }
+
+        // An account registered straight through the API in a test: remove it afterwards like RegisterOnlyAsync's
+        protected void TrackRegistered(string email) => _registeredEmails.Add(email);
 
         // Log in an account whose address is confirmed; the returned client sends its access token
         protected async Task<HttpClient> LogInAsync(WebApplicationFactory<Program>? factory, string email, string password = Password)

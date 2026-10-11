@@ -273,14 +273,21 @@ namespace Backend.Routes
                 .Produces<ErrorResponse>(404);
 
             // Totals and disk space
-            admin.MapGet("/stats", async (ClaimsPrincipal user, DatabaseServices db, IConfiguration config, HostedOptions hosted) =>
+            admin.MapGet("/stats", async (ClaimsPrincipal user, DatabaseServices db, IConfiguration config, HostedOptions hosted, DiskSpace disk) =>
             {
                 var (users, admins, files, folders, bytes, suspended) = await db.GetAdminTotalsAsync();
-                var (onDisk, total, free) = DiskUsage(config.GetValue<string>("StorageRoot") ?? "");
-                return Results.Ok(new AdminStats(users, admins, files, folders, bytes, DefaultQuota(config), onDisk, total, free,
-                    Guid.Parse(user.GetUserId()), suspended, hosted.ModeName));
+                var onDisk = StorageBytesOnDisk(config.GetValue<string>("StorageRoot") ?? "");
+                var read = disk.Read();
+                long? total = read?.total, free = read?.available;
+                var state = await disk.GetStateAsync(db);
+                var permanentQuota = DefaultQuota(config);
+                var newSignupQuota = hosted.DefaultQuotaFor(permanentQuota, false);
+                return Results.Ok(new AdminStats(users, admins, files, folders, bytes, newSignupQuota, onDisk, total, free,
+                    Guid.Parse(user.GetUserId()), suspended, hosted.ModeName,
+                    newSignupQuota != permanentQuota ? permanentQuota : null,
+                    disk.MaxPercent == 0 ? null : disk.MaxPercent, state?.UploadsPaused ?? false));
             })
-                .WithSummary("User and file counts, bytes stored, disk use of the storage folder, and the mode (self-hosted or hosted) (admins only)")
+                .WithSummary("User and file counts, bytes stored, disk use of the storage folder, the disk limit and whether uploads are paused by it, and the mode (self-hosted or hosted) (admins only)")
                 .Produces<AdminStats>()
                 .Produces<ErrorResponse>(403);
         }
@@ -304,27 +311,21 @@ namespace Backend.Routes
             http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Backend.AdminAudit")
                 .LogInformation("Admin {AdminId} did {Action} on user {TargetUserId}", http.User.GetUserId(), action, targetUserId);
 
-        private static long DefaultQuota(IConfiguration config) =>
-            config.GetValue("Storage:DefaultQuotaBytes", FileServices.DefaultQuotaBytes);
+        private static long DefaultQuota(IConfiguration config) => FileServices.StorageDefaultQuota(config);
 
         // Bytes used by the storage folder (encrypted files, avatars and thumbnails, so a little
-        // more than the files' sizes), and the size and free space of the disk it is on
-        private static (long? onDisk, long? total, long? free) DiskUsage(string storageRoot)
+        // more than the files' sizes); null if it can't be read
+        private static long? StorageBytesOnDisk(string storageRoot)
         {
-            long? onDisk = null, total = null, free = null;
             try
             {
                 var root = new DirectoryInfo(Path.GetFullPath(storageRoot));
-                onDisk = root.Exists ? root.EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length) : 0;
-                var drive = new DriveInfo(root.FullName);
-                total = drive.TotalSize;
-                free = drive.AvailableFreeSpace;
+                return root.Exists ? root.EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length) : 0;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
             {
-                // Leave whatever couldn't be read as null
+                return null;
             }
-            return (onDisk, total, free);
         }
     }
 }

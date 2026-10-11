@@ -8,7 +8,9 @@ export const getAdminStatusAPI = async () => (await api.get("/admin/me")).data;
 export const getAdminUsersAPI = async () => (await api.get("/admin/users")).data;
 
 // { userCount, adminCount, fileCount, folderCount, totalStoredBytes, defaultQuotaBytes,
-//   storageBytesOnDisk, diskTotalBytes, diskFreeBytes, currentUserId, suspendedCount, mode: "self-hosted" | "hosted" }
+//   storageBytesOnDisk, diskTotalBytes, diskFreeBytes, currentUserId, suspendedCount, mode: "self-hosted" | "hosted",
+//   permanentQuotaBytes (hosted only, null when equal to defaultQuotaBytes, which is then the tier for new sign-ups),
+//   maxDiskUsePercent (null = no disk limit), diskUploadsPaused (uploads are being refused: the disk is over the limit) }
 export const getAdminStatsAPI = async () => (await api.get("/admin/stats")).data;
 
 // quotaBytes: a number of bytes, or null for the server's default

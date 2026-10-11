@@ -52,6 +52,11 @@ public partial class ShareService(FileServices fs, SecretProtector secrets)
         if (item == null)
             return HttpReturnResult.NotFound("File not found.");
 
+        // Public links need a confirmed address. Sign-in already requires one, so this only guards
+        // against a future way in that skips it.
+        if (!await db.IsEmailVerifiedAsync(userId))
+            return new HttpReturnResult(false, "Please confirm your email address before sharing links") { StatusCode = 403 };
+
         DateTime? expiresAt = request!.ExpiresAt?.UtcDateTime;
         if (expiresAt <= DateTime.UtcNow)
             return new HttpReturnResult(false, "The expiry date must be in the future");

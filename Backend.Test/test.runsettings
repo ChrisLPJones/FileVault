@@ -8,6 +8,8 @@
       <Auth__UserStateCacheSeconds>0</Auth__UserStateCacheSeconds>
       <!-- Test hosts don't run the cleanup loop on their own; tests call RunOnceAsync when they need it -->
       <Storage__BackgroundCleanup>false</Storage__BackgroundCleanup>
+      <!-- The real disk's fill level (default cap 80%) must not fail unrelated upload tests; the disk-limit tests use fake figures -->
+      <Storage__MaxDiskUsePercent>0</Storage__MaxDiskUsePercent>
     </EnvironmentVariables>
   </RunConfiguration>
 </RunSettings>

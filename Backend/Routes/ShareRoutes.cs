@@ -54,6 +54,7 @@ namespace Backend.Routes
                 .WithSummary("Create a share link to a file or folder (optional expiresAt and password). The token is only returned here.")
                 .Produces<CreatedShare>()
                 .Produces<ErrorResponse>(400)
+                .Produces<ErrorResponse>(403)
                 .Produces<ErrorResponse>(404).RequireAuthorization();
 
             // Lists the user's links (not revoked; expired ones included), with each link's token

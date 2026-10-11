@@ -73,6 +73,18 @@ public partial class DatabaseServices
         return (reader.GetInt64(0), reader.GetInt32(1));
     }
 
+    // Total size of everyone's uploads in progress (they will land on disk), optionally leaving one out
+    public async Task<long> GetAllPendingUploadBytesAsync(Guid? excludeId = null)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        const string query = "SELECT COALESCE(SUM(Size), 0) FROM Uploads WHERE (@ExcludeId IS NULL OR Id <> @ExcludeId)";
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.AddWithValue("@ExcludeId", (object?)excludeId ?? DBNull.Value);
+        return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
     // Mark an upload as being completed; false if it already is (a second /complete at the same time)
     public async Task<bool> ClaimUploadAsync(Guid uploadId, string userId)
     {

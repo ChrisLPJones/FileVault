@@ -5,6 +5,7 @@ import { login } from "../../services/Auth";
 import { startSession } from "../../utils/auth";
 import { returnPathAfterLogin } from "../../utils/returnPath";
 import ServerStatus from "../../components/ServerStatus";
+import AbuseContact from "../../components/AbuseContact";
 import { getErrorMessage } from "../../api/api";
 import { resendVerificationByEmailAPI } from "../../api/accountEmailAPI";
 import TwoFactorStep from "./TwoFactorStep";
@@ -183,6 +184,7 @@ function Login() {
                 <p className="auth-switch">
                     Don't have an account? <Link to="/register">Create one</Link>
                 </p>
+                <AbuseContact />
             </div>
         </div>
     );

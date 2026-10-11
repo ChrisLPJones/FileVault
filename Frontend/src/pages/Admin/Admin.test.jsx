@@ -169,6 +169,41 @@ describe("Admin page", () => {
         expect(within(row("sam@example.com")).getByText(/Mar 12, 2026|12 Mar 2026/)).toBeInTheDocument();
     });
 
+    it("shows the disk limit on the Disk tile only when one is set", async () => {
+        getAdminStatsAPI.mockResolvedValue({ ...stats, maxDiskUsePercent: 80, diskUploadsPaused: false });
+        const { unmount } = render(<Admin />);
+
+        expect(await screen.findByText(/Uploads stop at 80% of the disk/)).toBeInTheDocument();
+        expect(screen.queryByText(/Uploads are paused/)).not.toBeInTheDocument();
+        unmount();
+
+        getAdminStatsAPI.mockResolvedValue({ ...stats, maxDiskUsePercent: null, diskUploadsPaused: false });
+        render(<Admin />);
+        await screen.findByText("alex@example.com");
+        expect(screen.queryByText(/Uploads stop at/)).not.toBeInTheDocument();
+    });
+
+    it("says uploads are paused when the disk is over the limit", async () => {
+        getAdminStatsAPI.mockResolvedValue({ ...stats, maxDiskUsePercent: 80, diskUploadsPaused: true });
+        render(<Admin />);
+
+        expect(await screen.findByText(/Uploads stop at 80% of the disk\. Uploads are paused\./)).toBeInTheDocument();
+    });
+
+    it("mentions the permanent-account quota only when it differs", async () => {
+        getAdminStatsAPI.mockResolvedValue({ ...stats, mode: "hosted", defaultQuotaBytes: GB / 2, permanentQuotaBytes: 2 * GB });
+        const { unmount } = render(<Admin />);
+
+        expect(await screen.findByText(/Permanent accounts and admins get 2 GB\./)).toBeInTheDocument();
+        expect(screen.getByText(/New accounts get 512 MB/)).toBeInTheDocument();
+        unmount();
+
+        getAdminStatsAPI.mockResolvedValue({ ...stats, mode: "hosted", permanentQuotaBytes: null });
+        render(<Admin />);
+        await screen.findByText("alex@example.com");
+        expect(screen.queryByText(/Permanent accounts and admins get/)).not.toBeInTheDocument();
+    });
+
     it("has no removal columns when self-hosted", async () => {
         getAdminStatsAPI.mockResolvedValue({ ...stats, mode: "self-hosted" });
         render(<Admin />);
