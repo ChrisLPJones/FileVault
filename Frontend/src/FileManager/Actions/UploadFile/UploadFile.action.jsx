@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Button from "../../../components/Button/Button";
 import { AiOutlineCloudUpload } from "react-icons/ai";
 import UploadItem from "./UploadItem";
@@ -21,6 +21,7 @@ const UploadFileAction = ({
   onFileUploading,
   onFileUploaded,
   onClose,
+  takeDropped,
 }) => {
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -104,6 +105,14 @@ const UploadFileAction = ({
       .then(setSelectedFiles)
       .catch((err) => onError({ type: "upload", message: "Could not read the dropped folder" }, err));
   };
+
+  // Files dropped on the file manager (outside this dialog) arrive already chosen
+  useEffect(() => {
+    const dropped = takeDropped?.();
+    if (dropped?.length) setSelectedFiles(dropped);
+    // Only once, when the dialog opens
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleChooseFile = (e) => {
     setSelectedFiles(Array.from(e.target.files).map((file) => ({ file, dir: "" })));

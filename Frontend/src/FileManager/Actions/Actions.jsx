@@ -16,6 +16,7 @@ const Actions = ({
   acceptedFileTypes,
   triggerAction,
   permissions,
+  droppedRef,
 }) => {
   const [activeAction, setActiveAction] = useState(null);
   const t = useTranslation();
@@ -34,6 +35,11 @@ const Actions = ({
           onFileUploading={onFileUploading}
           onFileUploaded={onFileUploaded}
           onClose={triggerAction.close}
+          takeDropped={() => {
+            const items = droppedRef?.current ?? null;
+            if (droppedRef) droppedRef.current = null;
+            return items;
+          }}
         />
       ),
       width: "35%",

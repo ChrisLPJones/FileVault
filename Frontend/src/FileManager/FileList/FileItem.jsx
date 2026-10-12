@@ -12,6 +12,8 @@ import { useSelection } from "../../contexts/SelectionContext";
 import { useClipBoard } from "../../contexts/ClipboardContext";
 import { useLayout } from "../../contexts/LayoutContext";
 import Checkbox from "../../components/Checkbox/Checkbox";
+import { useFileViewer } from "../../contexts/FileViewerContext";
+import { isOsFileDrag } from "../DropZone/isOsFileDrag";
 
 const dragIconSize = 44;
 
@@ -39,6 +41,7 @@ const FileItem = ({
   const iconSize = activeLayout === "grid" ? 50 : 19;
   const { setCurrentPath, currentPathFiles, onFolderChange } = useFileNavigation();
   const { setSelectedFiles } = useSelection();
+  const { openViewer } = useFileViewer();
   const { clipBoard, handleCutCopy, setClipBoard, handlePasting } = useClipBoard();
   const dragIconRef = useRef(null);
 
@@ -52,6 +55,8 @@ const FileItem = ({
       setCurrentPath(file.path);
       onFolderChange?.(file.path);
       setSelectedFiles([]);
+    } else {
+      openViewer(file);
     }
   };
 
@@ -154,6 +159,8 @@ const FileItem = ({
   const handleDragEnd = () => setClipBoard(null);
 
   const handleDragEnterOver = (e) => {
+    // Files dragged in from the computer are for the upload drop zone, not for moving
+    if (isOsFileDrag(e)) return;
     e.preventDefault();
     if (fileSelected || !file.isDirectory) {
       e.dataTransfer.dropEffect = "none";
@@ -173,6 +180,7 @@ const FileItem = ({
   };
 
   const handleDrop = (e) => {
+    if (isOsFileDrag(e)) return;
     e.preventDefault();
     if (fileSelected || !file.isDirectory) return;
 

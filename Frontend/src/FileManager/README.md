@@ -27,6 +27,15 @@ Copied from the package and then modified for FileVault:
 - The details pane is switched on and off only by a toolbar toggle (in the "⋯" menu on phones), which
   the `enableFilePreview` prop gates; selecting or opening a file doesn't open it. While on it shows
   the selected file, or "Select a file to preview"; the choice is kept in `localStorage`
+- Opening a file (double-click, Enter, context menu Open) shows it in a full-screen viewer
+  (`FileViewer/`, state in `contexts/FileViewerContext.jsx`) with previous/next through the open
+  folder's files in the list's order. Folders still navigate. Type detection and loading are shared
+  with the details pane (`preview/previewKind.js`, `preview/useFileContent.js`); SVG is only ever an
+  `<img>`, text is plain text in a `<pre>`, and requests are aborted when moving on
+- Files dragged from the computer onto the file manager upload into the open folder
+  (`DropZone/UploadDropZone.jsx`): a full-area overlay shows, and the dropped items are queued in the
+  upload dialog (same checks, quota pre-check and progress). Not available in the recycle bin,
+  search results, without the upload permission, or while a dialog is open
 - Desktop-style file and folder icons (`components/FileTypeIcon`)
 - Collapsible folder tree with the account menu at the bottom (`NavigationPane/NavUser.jsx`)
 - "Folders" is a collapsible section like Favourites and Recent (`NavigationPane/NavSection.jsx`,

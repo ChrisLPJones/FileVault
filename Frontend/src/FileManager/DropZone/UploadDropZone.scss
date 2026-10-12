@@ -1,0 +1,38 @@
+// The anchor takes no space; the overlay covers the whole file manager (.file-explorer is positioned)
+.fm-drop-anchor {
+  display: contents;
+}
+
+.fm-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-sizing: border-box;
+  border: 3px dashed var(--fv-primary, #007bff);
+  border-radius: 8px;
+  background: rgba(var(--fm-shade), 0.06);
+  backdrop-filter: blur(1px);
+  color: var(--fm-text);
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  padding: 16px;
+  // Events go to what is underneath, which keeps the drag counting simple
+  pointer-events: none;
+
+  span {
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--fm-bg);
+    border: 1px solid var(--fm-border);
+  }
+
+  svg {
+    color: var(--fv-primary, #007bff);
+  }
+}

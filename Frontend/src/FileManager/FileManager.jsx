@@ -15,6 +15,9 @@ import { ClipBoardProvider } from "../contexts/ClipboardContext";
 import { LayoutProvider } from "../contexts/LayoutContext";
 import { DetailsPaneProvider, useDetailsPane } from "../contexts/DetailsPaneContext";
 import { SearchProvider, SearchReveal } from "../contexts/SearchContext";
+import { FileViewerProvider } from "../contexts/FileViewerContext";
+import FileViewer from "./FileViewer/FileViewer";
+import UploadDropZone from "./DropZone/UploadDropZone";
 import LocationSync from "../contexts/LocationSync";
 import { SearchSwitch } from "./Search/SearchResults";
 import { RecycleBinProvider, useRecycleBin } from "../contexts/RecycleBinContext";
@@ -24,7 +27,7 @@ import { useColumnResize } from "../hooks/useColumnResize";
 import PropTypes from "prop-types";
 import { dateStringValidator, urlValidator } from "../validators/propValidators";
 import { TranslationProvider } from "../contexts/TranslationProvider";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { defaultPermissions } from "../constants";
 import { formatDate as defaultFormatDate } from "../utils/formatDate";
@@ -93,6 +96,8 @@ const FileManager = ({
   const drawerOpen = isNarrow && isDrawerOpen;
   const compactNav = isNavCompact && !isNarrow;
   const triggerAction = useTriggerAction();
+  // Files dropped on the file manager, waiting for the upload dialog to take them
+  const droppedRef = useRef(null);
   const { containerRef, colSizes, isDragging, handleMouseMove, handleMouseUp, handleMouseDown } =
     useColumnResize(20, 80);
   const customStyles = {
@@ -127,6 +132,7 @@ const FileManager = ({
                 <DetailsPaneProvider>
                 <RecycleBinProvider>
                 <SearchProvider>
+                <FileViewerProvider>
                   <SearchReveal />
                   <LocationSync isLoading={isLoading} source={files} />
                   {/* The toolbar can live elsewhere (the app header) but stays inside these providers */}
@@ -218,7 +224,11 @@ const FileManager = ({
                     acceptedFileTypes={acceptedFileTypes}
                     triggerAction={triggerAction}
                     permissions={permissions}
+                    droppedRef={droppedRef}
                   />
+                  <FileViewer onDownload={onDownload} canDownload={permissions.download} />
+                  <UploadDropZone permissions={permissions} triggerAction={triggerAction} droppedRef={droppedRef} />
+                </FileViewerProvider>
                 </SearchProvider>
                 </RecycleBinProvider>
                 </DetailsPaneProvider>
