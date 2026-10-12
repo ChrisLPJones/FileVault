@@ -65,9 +65,6 @@ services:
       App__Mode: ${FILEVAULT_MODE:-self-hosted}
       # Hosted mode only: the address users are told to email to ask for a permanent account
       Hosted__ContactEmail: ${HOSTED_CONTACT_EMAIL:-}
-      # Where to report abuse, shown on the sign-in, sign-up, share and settings pages. Empty: none
-      # (hosted mode falls back to HOSTED_CONTACT_EMAIL)
-      App__AbuseContactEmail: ${ABUSE_CONTACT_EMAIL:-}
       # Uploads are refused once the storage drive is this percent full (1-99; 0 = no limit; empty = 80)
       Storage__MaxDiskUsePercent: ${STORAGE_MAX_DISK_USE_PERCENT:-}
       # Links in emails point here

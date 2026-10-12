@@ -4,11 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Register from "./Register";
 import { register } from "../../services/Auth";
-import { useSiteInfo } from "../../hooks/useSiteInfo";
 
 vi.mock("../../services/Auth", () => ({ register: vi.fn() }));
 vi.mock("../../components/ServerStatus", () => ({ default: () => null }));
-vi.mock("../../hooks/useSiteInfo", () => ({ useSiteInfo: vi.fn(() => ({ abuseContactEmail: null })) }));
 
 const renderRegister = () =>
     render(
@@ -36,19 +34,5 @@ describe("Register page", () => {
 
         expect(await screen.findByRole("alert")).toHaveTextContent("New sign-ups are paused for a while. Please try again later.");
         expect(screen.getByRole("button", { name: "Create account" })).toBeEnabled();
-    });
-
-    it("shows the abuse contact when the server has one", () => {
-        useSiteInfo.mockReturnValue({ abuseContactEmail: "abuse@example.com" });
-        renderRegister();
-
-        expect(screen.getByRole("link", { name: "abuse@example.com" })).toHaveAttribute("href", "mailto:abuse@example.com");
-    });
-
-    it("shows no abuse line without one", () => {
-        useSiteInfo.mockReturnValue({ abuseContactEmail: null });
-        renderRegister();
-
-        expect(screen.queryByText(/Report abuse/)).not.toBeInTheDocument();
     });
 });

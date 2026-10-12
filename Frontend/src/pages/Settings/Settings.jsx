@@ -11,7 +11,6 @@ import {
     uploadAvatarAPI,
 } from "../../api/accountAPI";
 import Avatar from "../../components/Avatar";
-import AbuseContact from "../../components/AbuseContact";
 import { resizeImageToSquare } from "../../utils/avatarImage";
 import { formatBytes } from "../../utils/formatBytes";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
@@ -411,7 +410,6 @@ function Settings() {
                     <Status status={deleteStatus} />
                 </form>
             </section>
-            <AbuseContact className="settings-abuse-contact" />
         </div>
     );
 }

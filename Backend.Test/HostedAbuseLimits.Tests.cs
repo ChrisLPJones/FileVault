@@ -80,7 +80,6 @@ namespace Backend.Test
                 options.DefaultQuotaBytes.Should().BeNull();
                 options.MaxSignupsPerHour.Should().Be(0);
                 options.MaxSignupsPerDay.Should().Be(0);
-                options.AbuseContactEmail.Should().BeNull();
                 options.DefaultQuotaFor(1000, permanentOrAdmin: false).Should().Be(1000, "the hosted tier follows the main default until it is set");
             }
         }
@@ -95,40 +94,6 @@ namespace Backend.Test
             Parse(("Hosted:DefaultQuotaBytes", "200")).DefaultQuotaFor(1000, false).Should().Be(1000, "self-hosted ignores it");
             Parse(("App:Mode", "hosted"), ("Hosted:DefaultQuotaBytes", "0")).DefaultQuotaFor(1000, false).Should().Be(1000, "values <= 0 are ignored");
             Parse(("App:Mode", "hosted"), ("Hosted:DefaultQuotaBytes", "")).DefaultQuotaFor(1000, false).Should().Be(1000);
-        }
-
-        [Fact]
-        public void AbuseContact_ExplicitValue_AndHostedFallback()
-        {
-            Parse(("App:AbuseContactEmail", " abuse@example.test ")).AbuseContactEmail.Should().Be("abuse@example.test");
-
-            Parse(("App:Mode", "hosted"), ("Hosted:ContactEmail", "owner@example.test")).AbuseContactEmail.Should().Be("owner@example.test");
-            Parse(("Hosted:ContactEmail", "owner@example.test")).AbuseContactEmail.Should().BeNull("self-hosted has no fallback");
-            Parse(("App:Mode", "hosted"), ("Hosted:ContactEmail", "owner@example.test"), ("App:AbuseContactEmail", "abuse@example.test"))
-                .AbuseContactEmail.Should().Be("abuse@example.test");
-        }
-
-        [Theory]
-        [InlineData("not an address")]
-        [InlineData("a@example.test?subject=x")]
-        [InlineData("a@example.test&cc=b@example.test")]
-        [InlineData("Name <a@example.test>")]
-        [InlineData("a@example.test,b@example.test")]
-        public void InvalidAbuseContact_IsRefused(string value)
-        {
-            var parse = () => Parse(("App:AbuseContactEmail", value));
-
-            parse.Should().Throw<InvalidOperationException>().WithMessage("*ABUSE_CONTACT_EMAIL*");
-        }
-
-        [Fact]
-        public void Api_WithInvalidAbuseContact_FailsToStart()
-        {
-            var bad = _factory.WithWebHostBuilder(builder => builder.UseSetting("App:AbuseContactEmail", "nope"));
-
-            var start = () => bad.CreateClient();
-
-            start.Should().Throw<Exception>().Which.ToString().Should().Contain("ABUSE_CONTACT_EMAIL");
         }
 
         [Theory]
@@ -178,7 +143,7 @@ namespace Backend.Test
         }
     }
 
-    // Quota tiers, the disk limit, share links, per-IP sign-up limits and /site. All on the shared test
+    // Quota tiers, the disk limit, share links, and per-IP sign-up limits. All on the shared test
     // database, so nothing here depends on how many accounts or uploads other tests have made.
     public class HostedAbuseLimitsTests : IntegrationTestBase
     {
@@ -624,58 +589,6 @@ namespace Backend.Test
 
             login.StatusCode.Should().Be(HttpStatusCode.Forbidden);
             (await ReadJsonAsync(login)).GetProperty("emailNotVerified").GetBoolean().Should().BeTrue();
-        }
-
-        // --- GET /site ---
-
-        private static async Task<(HttpResponseMessage response, JsonElement body)> SiteAsync(HttpClient client)
-        {
-            var response = await client.GetAsync("/site");
-            return (response, await ReadJsonAsync(response));
-        }
-
-        [Fact]
-        public async Task Site_ReturnsNull_WhenNoContactIsSet()
-        {
-            var (response, body) = await SiteAsync(Anonymous(WithSettings(("App:AbuseContactEmail", ""))));
-
-            response.StatusCode.Should().Be(HttpStatusCode.OK);
-            body.GetProperty("abuseContactEmail").ValueKind.Should().Be(JsonValueKind.Null);
-            body.EnumerateObject().Select(p => p.Name).Should().Equal("abuseContactEmail");
-        }
-
-        [Fact]
-        public async Task Site_ReturnsTheContact_WithoutSignIn_AndAllowsCaching()
-        {
-            var (response, body) = await SiteAsync(Anonymous(WithSettings(("App:AbuseContactEmail", "abuse@example.test"))));
-
-            response.StatusCode.Should().Be(HttpStatusCode.OK);
-            body.GetProperty("abuseContactEmail").GetString().Should().Be("abuse@example.test");
-            response.Headers.CacheControl!.Public.Should().BeTrue();
-            response.Headers.CacheControl.MaxAge.Should().Be(TimeSpan.FromMinutes(5));
-        }
-
-        [Fact]
-        public async Task Site_Hosted_FallsBackToTheHostedContact_ButExplicitWins()
-        {
-            var fallback = await SiteAsync(Anonymous(WithSettings(("App:Mode", "hosted"), ("App:AbuseContactEmail", ""), ("Hosted:ContactEmail", "owner@example.test"))));
-            fallback.body.GetProperty("abuseContactEmail").GetString().Should().Be("owner@example.test");
-
-            var explicitValue = await SiteAsync(Anonymous(WithSettings(("App:Mode", "hosted"), ("App:AbuseContactEmail", "abuse@example.test"), ("Hosted:ContactEmail", "owner@example.test"))));
-            explicitValue.body.GetProperty("abuseContactEmail").GetString().Should().Be("abuse@example.test");
-
-            var selfHosted = await SiteAsync(Anonymous(WithSettings(("App:AbuseContactEmail", ""), ("Hosted:ContactEmail", "owner@example.test"))));
-            selfHosted.body.GetProperty("abuseContactEmail").ValueKind.Should().Be(JsonValueKind.Null);
-        }
-
-        [Fact]
-        public async Task Site_IsRateLimited()
-        {
-            var client = Anonymous(WithSettings(("RateLimiting:public:PermitLimit", "2")));
-
-            (await client.GetAsync("/site")).StatusCode.Should().Be(HttpStatusCode.OK);
-            (await client.GetAsync("/site")).StatusCode.Should().Be(HttpStatusCode.OK);
-            (await client.GetAsync("/site")).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         }
     }
 

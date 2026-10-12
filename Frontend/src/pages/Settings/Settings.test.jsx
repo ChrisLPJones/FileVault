@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import Settings from "./Settings";
 import { changePasswordAPI, getUsageAPI, getUserInfoAPI } from "../../api/accountAPI";
-import { useSiteInfo } from "../../hooks/useSiteInfo";
 
 vi.mock("../../api/accountAPI", () => ({
     changePasswordAPI: vi.fn(),
@@ -23,7 +22,6 @@ vi.mock("../../api/accountEmailAPI", () => ({
 vi.mock("../../components/Avatar", () => ({ default: () => null }));
 vi.mock("./TwoFactorCard", () => ({ default: () => null }));
 vi.mock("./SessionsCard", () => ({ default: () => null }));
-vi.mock("../../hooks/useSiteInfo", () => ({ useSiteInfo: vi.fn(() => ({ abuseContactEmail: null })) }));
 
 describe("Settings", () => {
     it("drops the pending email note after the password is changed (the server cancels the change)", async () => {
@@ -44,16 +42,5 @@ describe("Settings", () => {
 
         expect(changePasswordAPI).toHaveBeenCalledOnce();
         await vi.waitFor(() => expect(screen.queryByText(/Waiting for you to confirm/)).toBeNull());
-    });
-});
-
-describe("Settings page footer", () => {
-    it("shows the abuse contact at the bottom when the server has one", async () => {
-        getUserInfoAPI.mockResolvedValue({ firstName: "A", lastName: "B", email: "me@example.com", emailVerified: true });
-        getUsageAPI.mockResolvedValue({ used: 0, quota: 1000, maxUploadBytes: 1000, maxFileBytes: 1000 });
-        useSiteInfo.mockReturnValue({ abuseContactEmail: "abuse@example.com" });
-        render(<MemoryRouter><Settings /></MemoryRouter>);
-
-        expect(await screen.findByRole("link", { name: "abuse@example.com" })).toHaveAttribute("href", "mailto:abuse@example.com");
     });
 });

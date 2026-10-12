@@ -6,12 +6,10 @@ import Login from "./Login";
 import { login } from "../../services/Auth";
 import { getToken, hasSessionHint } from "../../utils/auth";
 import { makeToken } from "../../test/tokens";
-import { useSiteInfo } from "../../hooks/useSiteInfo";
 
 vi.mock("../../services/Auth", () => ({ login: vi.fn() }));
 // The server status banner polls the API; not part of these tests
 vi.mock("../../components/ServerStatus", () => ({ default: () => null }));
-vi.mock("../../hooks/useSiteInfo", () => ({ useSiteInfo: vi.fn(() => ({ abuseContactEmail: null })) }));
 vi.mock("./TwoFactorStep", () => ({
     default: ({ onSuccess }) => <button onClick={() => onSuccess(twoFactorToken)}>Finish 2FA</button>,
 }));
@@ -155,10 +153,26 @@ describe("Login form", () => {
         await userEvent.type(password(), "wrong");
         await submit();
 
-        expect(await screen.findByRole("alert")).toHaveTextContent("Invalid email or password");
+        const alert = await screen.findByRole("alert");
+        expect(alert).toHaveTextContent("Invalid email or password");
+        expect(alert).toHaveClass("danger");
         expect(screen.getByRole("button", { name: "Log in" })).toBeEnabled();
         expect(getToken()).toBeNull();
         expect(hasSessionHint()).toBe(false);
+    });
+
+    it("shows an unconfirmed email in the neutral style, not as an error", async () => {
+        login.mockResolvedValue({ status: 403, data: { error: "Email not confirmed", emailNotVerified: true } });
+        renderLogin();
+        await userEvent.type(email(), "alex@example.com");
+        await userEvent.type(password(), "Passw0rd");
+        await submit();
+
+        const note = await screen.findByRole("status");
+        expect(note).toHaveTextContent("Email not confirmed");
+        expect(note).toHaveClass("neutral");
+        expect(note).not.toHaveClass("danger");
+        expect(screen.queryByRole("alert")).toBeNull();
     });
 
     it("says when the server can't be reached", async () => {
@@ -183,15 +197,7 @@ describe("Login form", () => {
 });
 
 describe("Login page footer", () => {
-    it("shows the abuse contact when the server has one", () => {
-        useSiteInfo.mockReturnValue({ abuseContactEmail: "abuse@example.com" });
-        renderLogin();
-
-        expect(screen.getByRole("link", { name: "abuse@example.com" })).toHaveAttribute("href", "mailto:abuse@example.com");
-    });
-
-    it("shows no abuse line without one", () => {
-        useSiteInfo.mockReturnValue({ abuseContactEmail: null });
+    it("shows no abuse line, even when the server has an abuse contact", () => {
         renderLogin();
 
         expect(screen.queryByText(/Report abuse/)).not.toBeInTheDocument();
