@@ -20,6 +20,8 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       ACCEPT_EULA: "Y"
+      # Developer edition (the image default) is not licensed for production
+      MSSQL_PID: Express
       MSSQL_SA_PASSWORD: *sa-password
     volumes:
       - sql_data:/var/opt/mssql

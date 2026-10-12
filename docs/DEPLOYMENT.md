@@ -267,14 +267,128 @@ every two-factor secret and every share-link secret is unreadable. A backup is o
 master key that was in use when it was made, so after a rotation (section 4) keep the old key with
 the old backups.
 
-A simple consistent backup stops the API and the database briefly (SQL Server's data files can't
-be copied safely while it's running):
+### Scheduled off-site backups (recommended)
+
+`deploy/backup.sh` takes a consistent backup while the stack keeps running and sends it, encrypted on
+your server before it leaves, to a [restic](https://restic.net) repository. restic runs as a Docker
+image (`restic/restic`, pinned in the script), so nothing is installed on the host. Each run:
+
+1. makes a verified full database backup (`BACKUP DATABASE ... WITH CHECKSUM`, then `RESTORE VERIFYONLY`)
+   into the database volume, checking free space first;
+2. backs up that file and the encrypted files in one restic snapshot (database first, then files: every
+   database row then has its file; a file newer than the database backup is only an unused leftover);
+3. keeps 7 daily, 4 weekly and 6 monthly snapshots and deletes the rest;
+4. on Sundays reads back 5% of the repository to check it;
+5. pings [healthchecks.io](https://healthchecks.io) (optional) so you hear about a failed run, and also about
+   a run that never happened (cron stopped, server down).
+
+The database uses SIMPLE recovery (set by `init.sql`), so the restore points are the daily backups; there
+is no point-in-time restore and no log to back up. Only `SecureVaultDb` is saved: the logins are recreated
+on restore. The script never reads `.env`: the master key, the database passwords and the JWT key are not
+in the backup.
+
+**Set up** (on the server, as the user that runs Docker):
+
+1. Create a storage bucket, e.g. Backblaze B2: a private bucket, and an application key limited to that
+   bucket. Keep it to read/write on that bucket. Be aware that a lifecycle rule such as "keep prior versions
+   for 30 days" does NOT protect the history from someone who holds the server's key (or root on the server):
+   they can delete old versions too. Real protection needs B2 Object Lock (immutable retention), or a key
+   without delete rights with `restic forget --prune` run only from a trusted machine. Neither is set up by
+   default; add one if you need to survive a compromised server.
+2. `mkdir -p ~/filevault && cd ~/filevault`, then create the restic password file and the settings:
+   ```bash
+   (umask 077; openssl rand -base64 32 > restic-password)
+   curl -fsSLO https://raw.githubusercontent.com/ChrisLPJones/FileVault/<tag>/deploy/backup.sh
+   curl -fsSL  https://raw.githubusercontent.com/ChrisLPJones/FileVault/<tag>/deploy/backup.env.example -o backup.env
+   chmod 700 backup.sh && chmod 600 backup.env     # then fill in backup.env
+   ```
+   (or use the copies in your checkout's `deploy/`). `backup.env` holds the repository, the bucket key and
+   the optional healthchecks URL; see the comments in `backup.env.example`. If you did not name the
+   Compose project, it is `filevault` (the `name:` in the compose file).
+3. First run, which also creates the repository: `./backup.sh --init`. Read the output: it prints the
+   row counts and the key tag, and ends with `backup OK`.
+4. In healthchecks.io create a check with period 1 day and grace time 2 hours, put its ping URL in
+   `backup.env` as `HC_PING_URL`, and add an email or other alert.
+5. Schedule it with cron (`crontab -e`), daily at 03:30 server time:
+   `30 3 * * * /home/deploy/filevault/backup.sh > /dev/null 2>&1`. The script writes its own log
+   (`backup.log` next to `backup.env`, rotated at 1 MB) and refuses to run twice at once.
+6. Put these in your password manager now: **`ENCRYPTION_MASTER_KEY`**, the **restic password** and the
+   bucket account login. Without the restic password the repository cannot be opened; without the master key
+   the restored data cannot be read. Nothing else in `.env` is needed to restore (the database passwords and
+   JWT key can be new).
+
+Every snapshot is tagged `mk-<12 hex characters>`: the start of the fingerprint of the master key that
+opens it (not the key). `restic snapshots` shows it, so after a rotation you can tell which key a snapshot
+needs. After rotating (section 4) the new snapshots carry the new tag; keep the old key until the last
+snapshot with the old tag has been pruned (about six months with the retention above). Take a backup right
+before rotating. Deleted accounts also stay in older snapshots until those expire.
+
+Copy `deploy/restore.sh` too if you want it on the server; you can equally run it from a checkout on any
+machine that has Docker and the compose files.
+
+### Restoring, and the test restore
+
+`deploy/restore.sh` restores a snapshot into a **new, separate** Compose project; it refuses the production
+project (`filevault`) and a project whose volumes already exist, and needs the project name explicitly:
+
+```bash
+# restore.env: a .env for the copy. ENCRYPTION_MASTER_KEY = the key the snapshot's mk- tag belongs to,
+# typed from your password manager; the other secrets can be new. chmod 600.
+# ports.yml: publish the copy on this machine only (restore.sh refuses any other binding)
+#   services:
+#     api:      { ports: !override ["127.0.0.1:3101:8080"] }
+#     frontend: { ports: !override ["127.0.0.1:5273:80"] }
+deploy/restore.sh --project fvrestore --env-file restore.env --backup-env ~/filevault/backup.env \
+    --compose-file docker-compose.yml --compose-file ports.yml [--snapshot <id>]
+```
+
+Before restoring anything the script checks that every published port of the new stack is bound to
+`127.0.0.1`; otherwise it removes the empty stack and stops. It also fails if the API restarted or logged
+that the master key does not match.
+
+It creates the stack's empty volumes, restores the files and the database backup into them, restores
+the database, starts the stack (the schema setup re-links the API's database login), waits to see that
+the API accepts the key, and prints the row counts and the files missing from disk or not in the database.
+`--verify-only` repeats just that last check. The API refuses to start with the wrong master key.
+Use the same or a newer FileVault version than the one that made the snapshot, never an older one.
+
+Do the **test restore** once after the first backup and then every few months, on another machine and
+not on the production server, with the key from your password manager (that proves the stored copy, not
+the server's `.env`). Give the copy no mail settings (so it cannot email anyone), keep
+`FILEVAULT_MODE=self-hosted`, and publish its ports on `127.0.0.1` only (the `ports.yml` above; enforced). Then: compare the printed
+counts with the snapshot's tags, sign in as one of your accounts, download a file and compare its checksum
+with the original. Remove the copy with `docker compose -p fvrestore down -v`, and delete `restore.env`.
+
+To restore for real after a loss: set up the server and `.env` (with the right master key), restore with
+a new project name as above, check it, then stop that copy, and start the production stack on the restored
+volumes (or run the same steps against the production name by hand). The scripts deliberately never
+overwrite the production volumes.
+
+The compose files run SQL Server as the free Express edition (`MSSQL_PID=Express`, 10 GB database limit); the Developer edition the image defaults to is not licensed for production.
+
+Upgrading an existing install to Express (the compose files now set `MSSQL_PID=Express`):
+
+1. Run `deploy/backup.sh` first.
+2. Check the database is well under 10 GB and uses no Enterprise-only feature (the second query must return no rows):
+   `docker compose exec sqlserver sh -c '/opt/mssql-tools18/bin/sqlcmd -C -U sa -P "$MSSQL_SA_PASSWORD" -d SecureVaultDb -Q "SELECT SUM(size)*8/1024 AS MB FROM sys.database_files; SELECT * FROM sys.dm_db_persisted_sku_features"'`
+3. `docker compose up -d` (recreates the SQL Server container).
+4. Check `SELECT SERVERPROPERTY('Edition')` says Express and `SELECT state_desc FROM sys.databases WHERE name = 'SecureVaultDb'` says ONLINE.
+5. To roll back, remove the `MSSQL_PID` line from the compose file and run `docker compose up -d` again (the data volume is not touched).
+
+Maintainers: `shellcheck` runs on both scripts in CI. The full round trip (seed, back up to a local
+directory repository, restore into a second project, compare a downloaded file) is manual: set
+`RESTIC_REPOSITORY=/some/dir` in a throwaway `backup.env` and use throwaway Compose projects.
+
+### Simple alternative: cold copy
+
+If you do not want scheduled backups, this stops the API and the database briefly (SQL Server's data
+files can't be copied safely while it's running):
 
 ```bash
 docker compose stop api sqlserver
-docker run --rm -v filevault_sql_data:/data -v "$PWD/backup:/backup" alpine \
+docker run --rm -v filevault_sql_data:/data -v "$PWD/backup:/backup" alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc \
     tar czf /backup/sql_data-$(date +%F).tar.gz -C /data .
-docker run --rm -v filevault_file_storage:/data -v "$PWD/backup:/backup" alpine \
+docker run --rm -v filevault_file_storage:/data -v "$PWD/backup:/backup" alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc \
     tar czf /backup/file_storage-$(date +%F).tar.gz -C /data .
 docker compose start sqlserver api
 ```
@@ -315,7 +429,7 @@ outcome of the commit is unknown, keep both keys and run it again: it reports wh
 Upgrading from a version without this command needs nothing special: `docker compose up -d` adds the
 `MasterKeyState` table and the first start records which key the database uses.
 
-1. **Back up first** (section 3), including the current `ENCRYPTION_MASTER_KEY`.
+1. **Back up first** (section 3: run `deploy/backup.sh` so a snapshot made with the old key exists), including the current `ENCRYPTION_MASTER_KEY`.
 2. Generate the new key straight into `.env`, so it doesn't pass through your shell history:
    `printf 'ENCRYPTION_MASTER_KEY_NEW=%s\n' "$(openssl rand -base64 32)" >> .env`
 3. If you updated FileVault, `docker compose build api` so the command exists, then

@@ -14,6 +14,17 @@ BEGIN
 END
 GO
 
+-- Daily full backups are the restore points (docs/DEPLOYMENT.md, "Backups"), so no transaction-log
+-- backups: SIMPLE keeps the log from growing without bound. Only touches a database that isn't SIMPLE yet.
+IF EXISTS (SELECT *
+FROM sys.databases
+WHERE name = 'SecureVaultDb' AND recovery_model_desc <> 'SIMPLE')
+BEGIN
+    ALTER DATABASE SecureVaultDb SET RECOVERY SIMPLE;
+    PRINT 'Database "SecureVaultDb" set to SIMPLE recovery.';
+END
+GO
+
 USE SecureVaultDb;
 GO
 
