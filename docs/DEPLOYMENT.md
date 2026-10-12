@@ -190,7 +190,7 @@ without the first four.
 | `HOSTED_CONTACT_EMAIL` | Optional, hosted mode only: the address users are told to email to ask for a permanent account |
 | `STORAGE_MAX_DISK_USE_PERCENT` | Optional: uploads are refused once the drive holding the file storage is this percent full (1-99, default 80, `0` = off). See "Disk limit" below |
 | `INITIAL_ADMIN_EMAIL` | Optional, recommended on a public install: the one email that can become the first administrator (section 7) |
-| `GEOIPUPDATE_ACCOUNT_ID`, `GEOIPUPDATE_LICENSE_KEY` | Optional: MaxMind credentials for the `geoip` profile, which downloads the country database (section 8) |
+| `GEOIPUPDATE_ACCOUNT_ID`, `GEOIPUPDATE_LICENSE_KEY` | Optional: MaxMind credentials for the `geoip` profile, which downloads the country database (section 8). The keyless `geoip-dbip` profile (city and region) needs no variables |
 
 Other API settings can be passed as environment variables on the `api` service using
 `Section__Key` names, for example `Storage__DefaultQuotaBytes`, `Storage__MaxUploadBytes`,
@@ -586,22 +586,41 @@ writes an audit line to the API log under the `Backend.AdminAudit` category, usi
 
 ## 8. Last login location (GeoIP)
 
-The Admin page shows each user's last login IP address and country. Only the latest login address
-is stored (`Users.LastLoginIp`), and it is recorded when a session is issued. The country is
-looked up when the page loads, in a local MaxMind GeoLite2 Country database, and is never stored.
-No address is sent to MaxMind or anyone else. Without the database the country shows "Unknown".
+The Admin page shows each user's last login IP address and its location: city, region and country
+with a City database, the country only with the Country database. Only the latest login address
+is stored (`Users.LastLoginIp`), and it is recorded when a session is issued. The location is
+looked up when the page loads, in a local database file, and is never stored. No address is sent
+to DB-IP, MaxMind or anyone else. Without a database the location shows "Unknown".
 
-**Set it up**
+**Set it up (free, no account or key): DB-IP City Lite**
+
+1. Start the updater: `docker compose --profile geoip-dbip up -d`. The `geoipupdate-dbip` service
+   downloads this month's `dbip-city-lite-YYYY-MM.mmdb.gz` from `download.db-ip.com` (last month's if
+   it is not published yet), checks it is a valid gzip and database, and installs it atomically as
+   `dbip-city-lite.mmdb` in the `geoip_data` volume (about 125 MB; the API loads it into memory). It
+   re-checks weekly and downloads only when a newer month is available.
+2. The API mounts the volume read-only (`GeoIp__CityDatabasePath` is `/data/geoip/dbip-city-lite.mmdb`),
+   prefers it, and picks up a replaced file within the hour.
+3. To turn it off, run `docker compose --profile geoip-dbip down` (or `stop geoipupdate-dbip`) and
+   delete `dbip-city-lite.mmdb` and `dbip-city-lite.version` from the volume (Compose names it
+   `filevault_geoip_data`); the page then falls back to the Country file or "Unknown".
+
+The image is pinned by digest (`alpine/curl`; bump the tag and digest occasionally for security fixes); the only network access is that download over HTTPS, and the container drops all capabilities.
+
+**DB-IP licence.** The Lite data is CC BY 4.0: the Admin page shows "IP geolocation by DB-IP"
+(linking to https://db-ip.com) whenever it shows a location from a DB-IP file, and the README carries
+the notice. Keep the link if you modify the page. Don't commit the file or bake it into an image.
+
+**Alternative: MaxMind GeoLite2 Country (country only, needs an account)**
 
 1. Create a free [MaxMind](https://www.maxmind.com) account and generate a licence key.
 2. Put `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY` in `.env`.
 3. Start the updater: `docker compose --profile geoip up -d`. The `geoipupdate` service downloads
-   `GeoLite2-Country.mmdb` into the `geoip_data` volume and refreshes it every 72 hours. The API
-   mounts the volume read-only (`GeoIp__DatabasePath` is `/data/geoip/GeoLite2-Country.mmdb`) and
-   picks up the new file when it changes.
+   `GeoLite2-Country.mmdb` into the `geoip_data` volume and refreshes it every 72 hours
+   (`GeoIp__DatabasePath` is `/data/geoip/GeoLite2-Country.mmdb`). It is used when the DB-IP file is
+   missing or doesn't know an address.
 
-Without a MaxMind account, copy a `GeoLite2-Country.mmdb` into the `geoip_data` volume yourself
-(Compose names it `filevault_geoip_data`).
+Without a MaxMind account, copy a `GeoLite2-Country.mmdb` into the volume yourself.
 
 **MaxMind's licence**
 
@@ -619,7 +638,7 @@ Without a MaxMind account, copy a `GeoLite2-Country.mmdb` into the `geoip_data` 
 **Privacy**
 
 Storing IP addresses is personal data processing. If you run a public instance, mention the
-last-login IP logging in your privacy notice. Only the latest login address is kept for the admin page, and only admins can see it; active sessions also keep their own address (users see it under Active sessions).
+last-login IP logging in your privacy notice. The approximate city, region and country are derived from that stored IP address when the admin page loads and are not stored. Only the latest login address is kept for the admin page, and only admins can see it; active sessions also keep their own address (users see it under Active sessions).
 
 **Upgrading**
 

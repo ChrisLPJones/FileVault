@@ -4,42 +4,43 @@ using MaxMind.GeoIP2;
 
 namespace Backend.Services;
 
-// Looks up the country of an IP address in a local MaxMind GeoLite2 Country database
-// (GeoIp:DatabasePath). Nothing leaves the server. The database is optional: when the file is
-// missing or unreadable every lookup returns null and the app carries on. The file is re-opened
-// when it changes on disk (the geoipupdate container replaces it every few days).
+// Looks up where an IP address is, in local databases (nothing leaves the server). Two optional
+// files, in order of preference: a City database (GeoIp:CityDatabasePath; DB-IP "IP to City Lite"
+// or a MaxMind GeoLite2/GeoIP2 City file) giving country, region and city, then the MaxMind
+// GeoLite2 Country database (GeoIp:DatabasePath) giving the country only. When neither file is
+// usable every lookup returns null and the app carries on. Each file is re-opened when it changes
+// on disk (the updater replaces it). Results are computed per request and never stored.
 public sealed class GeoIpService
 {
-    private readonly string? _path;
+    private readonly Source? _city;
+    private readonly Source? _country;
     private readonly ILogger<GeoIpService> _logger;
-    private readonly TimeSpan _recheckInterval;
-    private readonly object _gate = new();
+    private int _loggedCityFailure;
 
-    private DatabaseReader? _reader;
-    private DateTime _loadedWriteTime;
-    private DateTime _lastCheck = DateTime.MinValue;
-    private bool _loggedProblem;
-
-    public GeoIpService(string? databasePath, ILogger<GeoIpService> logger, TimeSpan? recheckInterval = null)
+    public GeoIpService(string? databasePath, ILogger<GeoIpService> logger, TimeSpan? recheckInterval = null,
+        string? cityDatabasePath = null)
     {
-        _path = string.IsNullOrWhiteSpace(databasePath) ? null : databasePath.Trim();
         _logger = logger;
-        _recheckInterval = recheckInterval ?? TimeSpan.FromHours(1);
+        var interval = recheckInterval ?? TimeSpan.FromHours(1);
+        _country = Source.Create(databasePath, interval, logger);
+        _city = Source.Create(cityDatabasePath, interval, logger);
     }
 
-    // Whether a database is currently loaded
-    public bool IsAvailable
-    {
-        get
-        {
-            Refresh();
-            return _reader != null;
-        }
-    }
+    // The result of a lookup. City and Region are null for a country-only database or when the
+    // database has none for the address. FromDbIp is true when the answer came from a DB-IP file,
+    // whose CC BY 4.0 licence requires an attribution wherever it is shown.
+    public sealed record GeoLocation(string IsoCode, string Country, string? City, string? Region, bool FromDbIp);
 
-    // The ISO country code and English name for a public address, or null (no database,
-    // private/unparseable address, or not in the database)
-    public (string IsoCode, string Name)? TryCountry(string? ipAddress)
+    // Whether any database is currently loaded
+    public bool IsAvailable => _city?.Reader() != null || _country?.Reader() != null;
+
+    // DB-IP files report a database type such as "DBIP-City-Lite"
+    public static bool IsDbIpType(string? databaseType) =>
+        databaseType != null && databaseType.StartsWith("DBIP", StringComparison.OrdinalIgnoreCase);
+
+    // The location of a public address, or null (no database, private/unparseable address, or not
+    // in the database)
+    public GeoLocation? TryLookup(string? ipAddress)
     {
         if (string.IsNullOrWhiteSpace(ipAddress) || !IPAddress.TryParse(ipAddress, out var ip))
             return null;
@@ -48,15 +49,32 @@ public sealed class GeoIpService
         if (IsNonPublic(ip))
             return null;
 
-        Refresh();
-        var reader = _reader;
-        if (reader == null)
-            return null;
+        try
+        {
+            var city = _city?.Reader();
+            if (city != null && city.TryCity(ip, out var c) && c?.Country?.IsoCode is { } cityCode)
+            {
+                return new GeoLocation(
+                    cityCode,
+                    c.Country.Name ?? cityCode,
+                    NullIfBlank(c.City?.Name),
+                    NullIfBlank(c.Subdivisions.FirstOrDefault()?.Name),
+                    IsDbIpType(city.Metadata.DatabaseType));
+            }
+        }
+        catch (Exception ex)
+        {
+            // e.g. the file is not a City database: fall back to the Country file
+            if (Interlocked.Exchange(ref _loggedCityFailure, 1) == 0)
+                _logger.LogWarning(ex, "GeoIP city lookup failed (logged once); using the Country database");
+        }
 
         try
         {
-            if (reader.TryCountry(ip, out var response) && response?.Country?.IsoCode is { } code)
-                return (code, response.Country.Name ?? code);
+            // Not in the City file (or none installed): the Country file gives the country alone
+            var country = _country?.Reader();
+            if (country != null && country.TryCountry(ip, out var r) && r?.Country?.IsoCode is { } code)
+                return new GeoLocation(code, r.Country.Name ?? code, null, null, IsDbIpType(country.Metadata.DatabaseType));
         }
         catch (Exception ex)
         {
@@ -64,6 +82,8 @@ public sealed class GeoIpService
         }
         return null;
     }
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     // Loopback, private, link-local, carrier-grade NAT and other addresses with no country
     internal static bool IsNonPublic(IPAddress ip)
@@ -92,50 +112,77 @@ public sealed class GeoIpService
         return true;
     }
 
-    // Opens the file the first time, and again when its last-write time changes (checked at most hourly)
-    private void Refresh()
+    // One database file: opened the first time it is needed, and again when its last-write time changes
+    // (checked at most hourly)
+    private sealed class Source
     {
-        if (_path == null)
-            return;
+        private readonly string _path;
+        private readonly ILogger _logger;
+        private readonly TimeSpan _recheckInterval;
+        private readonly object _gate = new();
 
-        var now = DateTime.UtcNow;
-        if (_lastCheck != DateTime.MinValue && now - _lastCheck < _recheckInterval)
-            return;
+        private DatabaseReader? _reader;
+        private DateTime _loadedWriteTime;
+        private DateTime _lastCheck = DateTime.MinValue;
+        private bool _loggedProblem;
 
-        lock (_gate)
+        private Source(string path, TimeSpan recheckInterval, ILogger logger)
         {
+            _path = path;
+            _recheckInterval = recheckInterval;
+            _logger = logger;
+        }
+
+        public static Source? Create(string? path, TimeSpan recheckInterval, ILogger logger) =>
+            string.IsNullOrWhiteSpace(path) ? null : new Source(path.Trim(), recheckInterval, logger);
+
+        public DatabaseReader? Reader()
+        {
+            Refresh();
+            return _reader;
+        }
+
+        private void Refresh()
+        {
+            var now = DateTime.UtcNow;
             if (_lastCheck != DateTime.MinValue && now - _lastCheck < _recheckInterval)
                 return;
-            _lastCheck = now;
 
-            try
+            lock (_gate)
             {
-                if (!File.Exists(_path))
+                if (_lastCheck != DateTime.MinValue && now - _lastCheck < _recheckInterval)
+                    return;
+                _lastCheck = now;
+
+                try
+                {
+                    if (!File.Exists(_path))
+                    {
+                        if (!_loggedProblem)
+                        {
+                            _logger.LogInformation("No GeoIP database at {Path}; it is skipped", _path);
+                            _loggedProblem = true;
+                        }
+                        return; // keep serving an already-loaded copy
+                    }
+
+                    var writeTime = File.GetLastWriteTimeUtc(_path);
+                    if (_reader != null && writeTime == _loadedWriteTime)
+                        return;
+
+                    // Memory mode reads the file once, so the file itself can be replaced afterwards.
+                    // The old reader is left for the GC: lookups on other threads may still be using it.
+                    _reader = new DatabaseReader(_path, MaxMind.Db.FileAccessMode.Memory);
+                    _loadedWriteTime = writeTime;
+                    _loggedProblem = false;
+                    _logger.LogInformation("Loaded GeoIP database {Path}", _path);
+                }
+                catch (Exception ex)
                 {
                     if (!_loggedProblem)
-                    {
-                        _logger.LogInformation("No GeoIP database at {Path}; login countries will show as unknown", _path);
-                        _loggedProblem = true;
-                    }
-                    return; // keep serving an already-loaded copy
+                        _logger.LogWarning(ex, "Could not read the GeoIP database at {Path}; it is skipped", _path);
+                    _loggedProblem = true;
                 }
-
-                var writeTime = File.GetLastWriteTimeUtc(_path);
-                if (_reader != null && writeTime == _loadedWriteTime)
-                    return;
-
-                // Memory mode reads the file once, so the file itself can be replaced afterwards.
-                // The old reader is left for the GC: lookups on other threads may still be using it.
-                _reader = new DatabaseReader(_path, MaxMind.Db.FileAccessMode.Memory);
-                _loadedWriteTime = writeTime;
-                _loggedProblem = false;
-                _logger.LogInformation("Loaded GeoIP database {Path}", _path);
-            }
-            catch (Exception ex)
-            {
-                if (!_loggedProblem)
-                    _logger.LogWarning(ex, "Could not read the GeoIP database at {Path}; login countries will show as unknown", _path);
-                _loggedProblem = true;
             }
         }
     }

@@ -34,7 +34,7 @@ namespace Backend.Test
             _baseFactory = factory;
         }
 
-        private WebApplicationFactory<Program> NewApp(TestClock? clock = null, bool geoIp = true, bool forwarded = true)
+        private WebApplicationFactory<Program> NewApp(TestClock? clock = null, bool geoIp = true, bool forwarded = true, string? cityPath = null)
         {
             var settings = new Dictionary<string, string?>
             {
@@ -42,6 +42,7 @@ namespace Backend.Test
                 ["RateLimiting:two-factor:PermitLimit"] = "1000",
                 ["ForwardedHeaders:Enabled"] = forwarded ? "true" : "false",
                 ["GeoIp:DatabasePath"] = geoIp ? TestDatabasePath : "",
+                ["GeoIp:CityDatabasePath"] = cityPath ?? "",
             };
             var factory = _baseFactory.WithWebHostBuilder(builder =>
             {
@@ -138,6 +139,25 @@ namespace Backend.Test
         }
 
         [Fact]
+        public async Task AdminList_ShowsCityAndRegion_WithACityDatabase_AndNoDbIpAttribution()
+        {
+            var factory = NewApp(cityPath: CityTestDatabasePath);
+            var client = NewClient(factory);
+            var (email, userId) = await RegisterAsync(factory, client);
+            await TokenAsync(await LoginAsync(client, email), client);
+            await TestDatabase.SetAdminAsync(factory, userId, true);
+
+            var users = await JsonAsync(await client.SendAsync(Authed(HttpMethod.Get, "/admin/users",
+                _usersToDelete.Last().token)));
+            var row = users.EnumerateArray().Single(u => u.GetProperty("id").GetString() == userId);
+            row.GetProperty("lastLoginCountry").GetString().Should().Be("United Kingdom");
+            row.GetProperty("lastLoginCity").GetString().Should().Be("Boxford");
+            row.GetProperty("lastLoginRegion").GetString().Should().Be("England");
+            // MaxMind test data, not DB-IP
+            row.GetProperty("lastLoginGeoFromDbIp").GetBoolean().Should().BeFalse();
+        }
+
+        [Fact]
         public async Task AdminList_HasNoCountry_WhenNoGeoIpDatabaseIsConfigured()
         {
             var factory = NewApp(geoIp: false);
@@ -228,16 +248,80 @@ namespace Backend.Test
 
         // ---- GeoIpService itself ----
 
-        private static GeoIpService Geo(string? path, TimeSpan? recheck = null) =>
-            new(path, NullLogger<GeoIpService>.Instance, recheck);
+        private static GeoIpService Geo(string? path, TimeSpan? recheck = null, string? cityPath = null) =>
+            new(path, NullLogger<GeoIpService>.Instance, recheck, cityPath);
+
+        private static (string, string)? Country(GeoIpService.GeoLocation? location) =>
+            location == null ? null : (location.IsoCode, location.Country);
+
+        // MaxMind's synthetic City test database (Apache-2.0/MIT). 2.125.160.216 is Boxford, England, GB;
+        // 89.160.20.112 is Linkoping, Ostergotland, SE; 81.2.69.142 is London; 2001:218:: is in Japan (no city).
+        internal static readonly string CityTestDatabasePath =
+            Path.Combine(AppContext.BaseDirectory, "TestData", "GeoIP2-City-Test.mmdb");
+
+        [Fact]
+        public void GeoIp_ReturnsCityAndRegion_FromACityDatabase()
+        {
+            var geo = Geo(null, cityPath: CityTestDatabasePath);
+            geo.IsAvailable.Should().BeTrue();
+            geo.TryLookup(GbAddress).Should().Be(new GeoIpService.GeoLocation("GB", "United Kingdom", "Boxford", "England", false));
+            geo.TryLookup("89.160.20.112")!.City.Should().Be("Linköping");
+            geo.TryLookup("89.160.20.112")!.Region.Should().Be("Östergötland County");
+            geo.TryLookup($"::ffff:{GbAddress}")!.City.Should().Be("Boxford");
+        }
+
+        [Fact]
+        public void GeoIp_ReturnsIpv6Locations_FromACityDatabase()
+        {
+            var location = Geo(null, cityPath: CityTestDatabasePath).TryLookup("2001:218::");
+            location.Should().NotBeNull();
+            location!.IsoCode.Should().Be("JP");
+        }
+
+        [Fact]
+        public void GeoIp_PrefersTheCityDatabase_AndFallsBackToTheCountryFile()
+        {
+            // Both configured: the City file answers when it knows the address
+            var both = Geo(TestDatabasePath, cityPath: CityTestDatabasePath);
+            both.TryLookup(GbAddress)!.City.Should().Be("Boxford");
+
+            // A missing or unreadable City file leaves the country-only answer
+            var missing = Geo(TestDatabasePath, cityPath: Path.Combine(Path.GetTempPath(), $"nocity_{Guid.NewGuid():N}.mmdb"));
+            missing.TryLookup(GbAddress).Should().Be(new GeoIpService.GeoLocation("GB", "United Kingdom", null, null, false));
+
+            // A Country database configured as the City path throws on the City lookup: still falls back
+            var wrongType = Geo(TestDatabasePath, cityPath: TestDatabasePath);
+            wrongType.TryLookup(GbAddress).Should().Be(new GeoIpService.GeoLocation("GB", "United Kingdom", null, null, false));
+        }
+
+        [Fact]
+        public void GeoIp_ReturnsNull_ForAnAddressInNeitherDatabase_AndForPrivateAddresses()
+        {
+            var geo = Geo(TestDatabasePath, cityPath: CityTestDatabasePath);
+            geo.TryLookup("8.8.8.8").Should().BeNull();
+            geo.TryLookup("10.1.2.3").Should().BeNull();
+            geo.TryLookup("::ffff:192.168.1.1").Should().BeNull();
+            geo.TryLookup("fd00::1").Should().BeNull();
+        }
+
+        [Theory]
+        [InlineData("DBIP-City-Lite", true)]
+        [InlineData("dbip-country-lite", true)]
+        [InlineData("GeoIP2-City", false)]
+        [InlineData("GeoLite2-Country", false)]
+        [InlineData(null, false)]
+        public void GeoIp_RecognisesDbIpDatabases_ForTheAttributionFlag(string? databaseType, bool expected)
+        {
+            GeoIpService.IsDbIpType(databaseType).Should().Be(expected);
+        }
 
         [Fact]
         public void GeoIp_ResolvesAKnownAddress_WithTheTestDatabase()
         {
             var geo = Geo(TestDatabasePath);
             geo.IsAvailable.Should().BeTrue();
-            geo.TryCountry(GbAddress).Should().Be(("GB", "United Kingdom"));
-            geo.TryCountry($"::ffff:{GbAddress}").Should().Be(("GB", "United Kingdom"));
+            Country(geo.TryLookup(GbAddress)).Should().Be(("GB", "United Kingdom"));
+            Country(geo.TryLookup($"::ffff:{GbAddress}")).Should().Be(("GB", "United Kingdom"));
         }
 
         [Theory]
@@ -248,14 +332,14 @@ namespace Backend.Test
         {
             var geo = Geo(path);
             geo.IsAvailable.Should().BeFalse();
-            geo.TryCountry(GbAddress).Should().BeNull();
+            geo.TryLookup(GbAddress).Should().BeNull();
         }
 
         [Fact]
         public void GeoIp_ReturnsNull_WhenTheFileIsMissing_WithoutThrowing()
         {
             var geo = Geo(Path.Combine(Path.GetTempPath(), $"missing_{Guid.NewGuid():N}.mmdb"));
-            geo.TryCountry(GbAddress).Should().BeNull();
+            geo.TryLookup(GbAddress).Should().BeNull();
             geo.IsAvailable.Should().BeFalse();
         }
 
@@ -266,7 +350,7 @@ namespace Backend.Test
             File.WriteAllText(path, "not a database");
             try
             {
-                Geo(path).TryCountry(GbAddress).Should().BeNull();
+                Geo(path).TryLookup(GbAddress).Should().BeNull();
             }
             finally
             {
@@ -289,7 +373,7 @@ namespace Backend.Test
         [InlineData(null)]
         public void GeoIp_SkipsPrivateAndInvalidAddresses(string? address)
         {
-            Geo(TestDatabasePath).TryCountry(address).Should().BeNull();
+            Geo(TestDatabasePath).TryLookup(address).Should().BeNull();
         }
 
         [Fact]
@@ -299,19 +383,19 @@ namespace Backend.Test
             try
             {
                 var geo = Geo(path, recheck: TimeSpan.Zero);
-                geo.TryCountry(GbAddress).Should().BeNull();
+                geo.TryLookup(GbAddress).Should().BeNull();
 
                 File.Copy(TestDatabasePath, path);
-                geo.TryCountry(GbAddress).Should().Be(("GB", "United Kingdom"));
+                Country(geo.TryLookup(GbAddress)).Should().Be(("GB", "United Kingdom"));
 
                 // Replaced by something unreadable: the working copy keeps serving until a good file arrives
                 File.WriteAllText(path, "garbage");
                 File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(5));
-                geo.TryCountry(GbAddress).Should().Be(("GB", "United Kingdom"));
+                Country(geo.TryLookup(GbAddress)).Should().Be(("GB", "United Kingdom"));
 
                 File.Copy(TestDatabasePath, path, overwrite: true);
                 File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(10));
-                geo.TryCountry(GbAddress).Should().Be(("GB", "United Kingdom"));
+                Country(geo.TryLookup(GbAddress)).Should().Be(("GB", "United Kingdom"));
             }
             finally
             {

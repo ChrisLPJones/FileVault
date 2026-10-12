@@ -23,9 +23,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- MaxMind's small GeoLite2 *test* database (Apache-2.0 or MIT, see TestData/MaxMind-DB-LICENSE-APACHE.txt);
+    <!-- MaxMind's small GeoLite2 Country and GeoIP2 City *test* databases (Apache-2.0 or MIT, see TestData/MaxMind-DB-LICENSE-APACHE.txt);
          never the real GeoLite2 database -->
     <None Include="TestData\GeoLite2-Country-Test.mmdb" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="TestData\GeoIP2-City-Test.mmdb" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

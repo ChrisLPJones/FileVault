@@ -112,6 +112,26 @@ describe("Admin page", () => {
         expect(screen.queryByRole("link", { name: "maxmind.com" })).toBeNull();
     });
 
+    it("shows city, region and country, leaving out missing parts, with the DB-IP attribution only for DB-IP data", async () => {
+        getAdminUsersAPI.mockResolvedValue([
+            { ...users[0], lastLoginIp: "1.1.1.1", lastLoginCity: "Boxford", lastLoginRegion: "England", lastLoginCountry: "United Kingdom", lastLoginGeoFromDbIp: false },
+            { ...users[1], id: "u3", email: "kim@example.com", lastLoginIp: "2.2.2.2", lastLoginCity: null, lastLoginRegion: "Bavaria", lastLoginCountry: "Germany", lastLoginGeoFromDbIp: false },
+        ]);
+        const { unmount } = render(<Admin />);
+        await screen.findByText("alex@example.com");
+        expect(within(row("alex@example.com")).getByText("Boxford, England, United Kingdom")).toBeInTheDocument();
+        expect(within(row("kim@example.com")).getByText("Bavaria, Germany")).toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: "IP geolocation by DB-IP" })).toBeNull();
+        unmount();
+
+        getAdminUsersAPI.mockResolvedValue([
+            { ...users[0], lastLoginIp: "1.1.1.1", lastLoginCity: "Sydney", lastLoginRegion: "New South Wales", lastLoginCountry: "Australia", lastLoginGeoFromDbIp: true },
+        ]);
+        render(<Admin />);
+        await screen.findByText("Sydney, New South Wales, Australia");
+        expect(screen.getByRole("link", { name: "IP geolocation by DB-IP" })).toHaveAttribute("href", "https://db-ip.com");
+    });
+
     it("changes a quota in the chosen unit and reloads", async () => {
         render(<Admin />);
         await userEvent.click(await screen.findByRole("button", { name: "Change quota for alex@example.com" }));

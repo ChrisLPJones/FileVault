@@ -23,6 +23,9 @@ namespace Backend.Models
         string? LastLoginIp = null,
         string? LastLoginCountryCode = null,
         string? LastLoginCountry = null,
+        string? LastLoginCity = null,
+        string? LastLoginRegion = null,
+        bool LastLoginGeoFromDbIp = false, // true when the location came from DB-IP data (CC BY 4.0: show the attribution)
         DateTime? LastActiveAt = null, // last sign-in or use of the app
         DateTime? RemovalDueAt = null); // hosted mode only: when the account will be removed for inactivity; null if exempt
 
