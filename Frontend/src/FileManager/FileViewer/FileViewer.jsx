@@ -7,6 +7,7 @@ import { useFileViewer } from "../../contexts/FileViewerContext";
 import { formatBytes } from "../../utils/formatBytes";
 import { AUTO_PREVIEW_LIMIT, previewKind } from "../preview/previewKind";
 import { useFileContent } from "../preview/useFileContent";
+import { mediaProblemText, useMediaPlayback } from "../preview/useMediaPlayback";
 import "./FileViewer.scss";
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select, textarea, video[controls], audio[controls], iframe, [tabindex]:not([tabindex="-1"])';
@@ -18,6 +19,7 @@ function ViewerBody({ file, onDownload }) {
   const [requested, setRequested] = useState(false);
   const shouldLoad = !!kind && (requested || file.size <= AUTO_PREVIEW_LIMIT);
   const state = useFileContent(file._id, kind, shouldLoad, file.name);
+  const media = useMediaPlayback(kind);
 
   if (!kind) {
     return (
@@ -31,7 +33,11 @@ function ViewerBody({ file, onDownload }) {
   if (!shouldLoad) {
     return (
       <div className="fv-message">
-        <button type="button" className="fv-button" onClick={() => setRequested(true)}>
+        <button type="button" className="fv-button" onClick={(e) => {
+          // The button goes away, and focus with it: keep it in the viewer so Esc and the arrows still work
+          e.currentTarget.closest('[role="dialog"]')?.focus();
+          setRequested(true);
+        }}>
           Show preview ({formatBytes(file.size)})
         </button>
       </div>
@@ -54,12 +60,27 @@ function ViewerBody({ file, onDownload }) {
     );
   }
 
+  if (media.status === "error") {
+    return (
+      <div className="fv-message" role="alert">
+        <p>{mediaProblemText(kind, media.status)}</p>
+        {onDownload && <button type="button" className="fv-button" onClick={onDownload}>Download file</button>}
+      </div>
+    );
+  }
+
   return (
     <div className={`fv-content fv-${kind}`}>
       {/* An image is only ever shown through <img>, which doesn't run an SVG's scripts */}
       {kind === "image" && state.url && <img src={state.url} alt={file.name} />}
-      {kind === "video" && state.url && <video src={state.url} controls />}
-      {kind === "audio" && state.url && <audio src={state.url} controls />}
+      {kind === "video" && state.url && <video src={state.url} controls {...media.props} />}
+      {kind === "audio" && state.url && <audio src={state.url} controls {...media.props} />}
+      {media.status === "no-picture" && (
+        <p className="fv-note">
+          {mediaProblemText(kind, media.status)}
+          {onDownload && <> <button type="button" className="fv-link" onClick={onDownload}>Download it</button></>}
+        </p>
+      )}
       {kind === "pdf" && state.url && <iframe src={state.url} title={file.name} />}
       {/* Text is a React text child, never HTML */}
       {kind === "text" && state.text !== null && (

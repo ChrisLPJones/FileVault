@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DetailsPane from "./DetailsPane";
 import { DetailsPaneProvider } from "../../contexts/DetailsPaneContext";
@@ -77,6 +77,17 @@ describe("DetailsPane", () => {
         expect(fetchFileBlob).not.toHaveBeenCalled();
         await userEvent.click(button);
         await waitFor(() => expect(fetchFileBlob).toHaveBeenCalledWith("f1", expect.any(AbortSignal)));
+    });
+
+    it("says so when the browser can't play a video", async () => {
+        URL.createObjectURL = vi.fn(() => "blob:test");
+        URL.revokeObjectURL = vi.fn();
+        renderPane({ ...file, name: "clip.mov", size: 2000 });
+
+        await waitFor(() => expect(document.querySelector("video")).toBeTruthy());
+        fireEvent.error(document.querySelector("video"));
+
+        expect(await screen.findByRole("alert")).toHaveTextContent("This video format can't be played in your browser.");
     });
 
     it("stars the file", async () => {
