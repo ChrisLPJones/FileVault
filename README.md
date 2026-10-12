@@ -35,7 +35,7 @@
 - Log in with email; first and last name, profile picture, password change, account deletion
 - Changing your email address needs your password and is confirmed by a link sent to the new address (open it while signed in); until then the current address stays your login, and the old address (if confirmed) gets a "wasn't me" link that cancels the change and signs out every device
 - Light, dark and system themes, and a choice of accent colour
-- An admin page for the server owner: every account's avatar, storage use and quota, each user's last login IP address and country (looked up in a local database, nothing sent to a third party), and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark non-admin accounts permanent (admins are always permanent), suspend and unsuspend accounts (a suspended user is signed out at once and can't sign in; files and shares are kept, share links show "not found" until unsuspended), and delete accounts (type the email to confirm; the last admin can't be deleted)
+- An admin page for the server owner: every account's avatar, storage use and quota, each user's last login IP address and location (looked up in a local database, nothing sent to a third party), and server totals; create accounts (active immediately, email confirmed), set a user's password (signs them out everywhere), mark non-admin accounts permanent (admins are always permanent), suspend and unsuspend accounts (a suspended user is signed out at once and can't sign in; files and shares are kept, share links show "not found" until unsuspended), and delete accounts (type the email to confirm; the last admin can't be deleted)
 - Optional hosted mode (`FILEVAULT_MODE=hosted`) for a public instance: accounts unused for 30 days are removed with their files (after a warning email; hosted mode requires SMTP), and new users see a dismissible notice. Administrator, permanent and suspended accounts are never removed. Hosted mode also rate limits sign-ups (5 per IP per hour by default, optional site-wide hourly and daily limits), can give ordinary accounts a smaller default quota, and checks for a confirmed email before a share link is created. Self-hosted is the default and removes nothing
 
 **Tooling**
@@ -134,7 +134,7 @@ The first account registered on a new install becomes the administrator and gets
 
 If the browser reaches the API somewhere other than `http://localhost:3000`, set `API_URL` (and `FRONTEND_URL` for CORS) in `.env`; the frontend container reads `API_URL` when it starts, so `docker compose up -d` is enough. After pulling schema changes use `docker compose up --build -d`.
 
-The Admin page can show the country of each user's last login. That needs a free MaxMind GeoLite2 Country database, which Compose can download for you with `docker compose --profile geoip up -d` once `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY` are set in `.env`. Without it the country shows "Unknown". See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#8-last-login-location-geoip).
+The Admin page can show the city, region and country of each user's last login. Run `docker compose --profile geoip-dbip up -d` to download the free DB-IP City Lite database (no account or key; lookups stay local). A free MaxMind GeoLite2 Country database (`--profile geoip`, needs `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY` in `.env`) gives the country only. Without a database the location shows "Unknown". See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#8-last-login-location-geoip).
 
 To run a public instance that cleans up unused accounts, set `FILEVAULT_MODE=hosted` in `.env`, and optionally `HOSTED_CONTACT_EMAIL` (the address the notice tells users to email to ask for a permanent account). Anything other than `self-hosted` or `hosted` stops the API starting. See "Hosted mode" in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
@@ -251,6 +251,8 @@ This project is licensed under the [MIT License](LICENSE). The file manager UI i
 [@cubone/react-file-manager](https://github.com/Saifullah-dev/react-file-manager), also MIT licensed.
 
 This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com
+
+IP geolocation by [DB-IP](https://db-ip.com): the optional IP to City Lite database is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ## Author
 

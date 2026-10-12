@@ -20,6 +20,10 @@ import "./Admin.css";
 const formatWhen = (value) =>
     value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Never";
 
+// "City, Region, Country" with any missing part left out; "Unknown" when there is nothing
+const formatLocation = (user) =>
+    [user.lastLoginCity, user.lastLoginRegion, user.lastLoginCountry].filter(Boolean).join(", ") || "Unknown";
+
 // A quota in the biggest unit that gives a whole-ish number, for the edit box
 const toEditable = (bytes) => {
     const unit = bytes >= UNITS.TB && bytes % UNITS.TB === 0 ? "TB" : bytes >= UNITS.GB ? "GB" : "MB";
@@ -378,7 +382,7 @@ export default function Admin() {
                                             {user.lastLoginIp ? (
                                                 <>
                                                     <div>{user.lastLoginIp}</div>
-                                                    <div className="admin-muted">{user.lastLoginCountry || "Unknown"}</div>
+                                                    <div className="admin-muted">{formatLocation(user)}</div>
                                                 </>
                                             ) : (
                                                 <span className="admin-muted">Unknown</span>
@@ -413,6 +417,11 @@ export default function Admin() {
                         </tbody>
                     </table>
                 </div>
+                {users.some((user) => user.lastLoginGeoFromDbIp) && (
+                    <p className="admin-muted">
+                        <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">IP geolocation by DB-IP</a>
+                    </p>
+                )}
             </section>
 
             {dialog?.type === "password" && (

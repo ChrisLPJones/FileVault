@@ -84,6 +84,8 @@ services:
       Jwt__SecureRefreshCookie: ${BEHIND_HTTPS_PROXY:-false}
       # Country lookup for the admin page's "Last login" column; optional, see the geoipupdate service
       GeoIp__DatabasePath: /data/geoip/GeoLite2-Country.mmdb
+      # City and region from the free DB-IP file (see the geoipupdate-dbip service); preferred when present
+      GeoIp__CityDatabasePath: /data/geoip/dbip-city-lite.mmdb
     ports:
       - "3000:8080"
     volumes:
@@ -113,6 +115,44 @@ services:
       - geoip_data:/usr/share/GeoIP
     restart: unless-stopped
 
+  # Optional, no account or key: keeps the free DB-IP "IP to City Lite" database (city and region
+  # for each login address) up to date. Start it with:  docker compose --profile geoip-dbip up -d
+  # It only downloads the monthly file from download.db-ip.com (CC BY 4.0; the admin page shows the
+  # required attribution); no user address ever leaves the server. Checks weekly, writes atomically.
+  geoipupdate-dbip:
+    profiles: ["geoip-dbip"]
+    image: alpine/curl:8.14.1@sha256:bd3d6bf85a478818cb858cce42c87fcecbac141249f10814be96309e4abeb807
+    entrypoint: ["/bin/sh", "-c"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command:
+      - |
+        set -u
+        dir=/data/geoip
+        target=$$dir/dbip-city-lite.mmdb
+        marker=$$dir/dbip-city-lite.version
+        while true; do
+          rm -f "$$dir"/.dbip.*
+          y=$$(date -u +%Y); m=$$(date -u +%m); m=$${m#0}
+          if [ "$$m" -eq 1 ]; then py=$$((y - 1)); pm=12; else py=$$y; pm=$$((m - 1)); fi
+          for ym in $$(printf '%04d-%02d %04d-%02d' "$$y" "$$m" "$$py" "$$pm"); do
+            if [ -s "$$target" ] && [ "$$(cat "$$marker" 2>/dev/null)" = "$$ym" ]; then
+              echo "DB-IP $$ym is already installed"; break
+            fi
+            tmp=$$(mktemp -p "$$dir" .dbip.XXXXXX)
+            if curl -fsSL --proto '=https' --proto-redir '=https' --retry 3 --max-time 1800 -o "$$tmp.gz" "https://download.db-ip.com/free/dbip-city-lite-$$ym.mmdb.gz" \
+               && gzip -t "$$tmp.gz" && gzip -dc "$$tmp.gz" > "$$tmp" && [ -s "$$tmp" ] && tail -c 4096 "$$tmp" | strings | grep -q binary_format_major_version; then
+              chmod 644 "$$tmp"; mv -f "$$tmp" "$$target"; echo "$$ym" > "$$marker"
+              echo "Installed DB-IP $$ym"; rm -f "$$tmp.gz"; break
+            fi
+            echo "DB-IP $$ym not available (yet)"; rm -f "$$tmp" "$$tmp.gz"
+          done
+          sleep 604800
+        done
+    volumes:
+      - geoip_data:/data/geoip
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./Frontend
@@ -129,5 +169,5 @@ volumes:
   sql_data:
   # Encrypted files. Back this up together with the database and ENCRYPTION_MASTER_KEY.
   file_storage:
-  # GeoLite2 Country database (never committed or built into the image: MaxMind's licence forbids redistribution)
+  # GeoLite2 Country and DB-IP City databases (never committed or built into the image)
   geoip_data:
