@@ -58,7 +58,7 @@ describe("DetailsPane", () => {
 
         // Text files get a preview of their contents
         expect(await within(pane).findByText(/Rent: 1200/)).toBeInTheDocument();
-        expect(fetchFileBlob).toHaveBeenCalledWith("f1");
+        expect(fetchFileBlob).toHaveBeenCalledWith("f1", expect.any(AbortSignal));
     });
 
     it("labels files without an extension and leaves out unknown dates", () => {
@@ -76,7 +76,7 @@ describe("DetailsPane", () => {
         const button = screen.getByRole("button", { name: "Show preview (50 MB)" });
         expect(fetchFileBlob).not.toHaveBeenCalled();
         await userEvent.click(button);
-        await waitFor(() => expect(fetchFileBlob).toHaveBeenCalledWith("f1"));
+        await waitFor(() => expect(fetchFileBlob).toHaveBeenCalledWith("f1", expect.any(AbortSignal)));
     });
 
     it("stars the file", async () => {

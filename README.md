@@ -8,6 +8,8 @@
 - Upload, download (single files or zips), rename, move, copy and delete files and folders
 - Big files upload in 8 MB chunks that resume after a dropped connection (up to 2 GB each by default); whole folders can be uploaded too
 - Desktop-style file and folder icons, image thumbnails, grid and list views, sortable columns
+- Double-click (or Enter, or Open in the context menu) shows a file full screen: images, PDFs, text, video and audio, with previous/next through the folder, Download and Esc to close
+- Drag files or folders from your computer anywhere onto the file manager to upload them into the open folder
 - Details pane with name, type, size, created/modified dates and a preview (images, video, audio, PDF and text)
 - Search every file and folder by name from the top bar
 - Favourites and recently opened files at the top of the folder tree

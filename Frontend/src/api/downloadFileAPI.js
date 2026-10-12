@@ -1,9 +1,11 @@
 import { api } from "./api";
 
 // Fetch one stored file as a Blob (used for downloads and previews)
-export const fetchFileBlob = async (fileId) => {
+// An AbortSignal cancels the request (moving on to another file in the viewer)
+export const fetchFileBlob = async (fileId, signal) => {
     const response = await api.get(`/download/${encodeURIComponent(fileId)}`, {
         responseType: "blob",
+        signal,
     });
     return response.data;
 };

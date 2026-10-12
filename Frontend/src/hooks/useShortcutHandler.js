@@ -6,6 +6,7 @@ import { useSelection } from "../contexts/SelectionContext";
 import { useLayout } from "../contexts/LayoutContext";
 import { validateApiCallback } from "../utils/validateApiCallback";
 import { useRecycleBin } from "../contexts/RecycleBinContext";
+import { useFileViewer } from "../contexts/FileViewerContext";
 
 export const useShortcutHandler = (triggerAction, onRefresh, permissions) => {
   const { setClipBoard, handleCutCopy, handlePasting } = useClipBoard();
@@ -13,8 +14,9 @@ export const useShortcutHandler = (triggerAction, onRefresh, permissions) => {
   const { selectedFiles, setSelectedFiles, handleDownload } = useSelection();
   const { setActiveLayout } = useLayout();
   const { isBinOpen } = useRecycleBin();
+  const { viewing } = useFileViewer();
   // Off while an action (dialog, rename) is open, and in the recycle bin, whose items aren't files to act on
-  const disabled = triggerAction.isActive || isBinOpen;
+  const disabled = triggerAction.isActive || isBinOpen || !!viewing;
 
   const triggerCreateFolder = () => {
     permissions.create && triggerAction.show("createFolder");

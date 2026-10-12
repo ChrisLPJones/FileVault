@@ -13,6 +13,7 @@ import { duplicateNameHandler } from "../../utils/duplicateNameHandler";
 import { validateApiCallback } from "../../utils/validateApiCallback";
 import { useFileActions } from "../../contexts/FileActionsContext";
 import { useFiles } from "../../contexts/FilesContext";
+import { useFileViewer } from "../../contexts/FileViewerContext";
 import { useTranslation } from "../../contexts/TranslationProvider";
 
 const useFileList = (onRefresh, triggerAction, permissions, onFileOpen) => {
@@ -30,6 +31,7 @@ const useFileList = (onRefresh, triggerAction, permissions, onFileOpen) => {
   const t = useTranslation();
   const { setFavourite } = useFileActions();
   const { files } = useFiles();
+  const { openViewer } = useFileViewer();
 
   // Context Menu
   const handleFileOpen = () => {
@@ -39,6 +41,8 @@ const useFileList = (onRefresh, triggerAction, permissions, onFileOpen) => {
       onFolderChange?.(lastSelectedFile.path);
       setSelectedFileIndexes([]);
       setSelectedFiles([]);
+    } else {
+      openViewer(lastSelectedFile);
     }
     setVisible(false);
   };
