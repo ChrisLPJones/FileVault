@@ -188,6 +188,16 @@
     color: var(--fm-muted);
     font-size: 13px;
   }
+
+  .fv-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
 }
 
 @media (max-width: 900px) {
