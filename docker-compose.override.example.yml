@@ -8,5 +8,7 @@ services:
   # Docker Desktop doesn't forward reliably, so some tools time out.
   # (1434 avoids clashing with the dev database from Backend/Docker on 1433.)
   sqlserver:
+    # Cap SQL Server at 3 CPUs so a parallel test run can't starve a small shared machine
+    cpus: "3"
     ports:
       - "127.0.0.1:1434:1433"
