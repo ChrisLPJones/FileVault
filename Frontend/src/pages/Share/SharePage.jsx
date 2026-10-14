@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getErrorMessage } from "../../api/api";
 import { getPublicShareAPI, shareDownloadUrl, unlockShareAPI } from "../../api/shareAPI";
+import PrivacyLink from "../../components/PrivacyLink";
 import FileTypeIcon from "../../components/FileTypeIcon/FileTypeIcon";
 import { formatBytes } from "../../utils/formatBytes";
 import "../Auth/Auth.css";
@@ -163,6 +164,7 @@ function SharePage() {
         <div className="auth-page">
             <div className="auth-card share-card">
                 {renderBody()}
+                <PrivacyLink />
             </div>
         </div>
     );

@@ -4,6 +4,10 @@ import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 import { clearToken } from "../utils/auth";
 
+// Pages show a Privacy link only on a hosted site, found out from GET /site. Tests default to a
+// self-hosted one without touching the network; tests of the link or the privacy page mock this themselves.
+vi.mock("../api/siteAPI", () => ({ getSiteInfoAPI: async () => ({ privacy: null }) }));
+
 // jsdom has no matchMedia. Tests can change what matches with setMediaMatches().
 let matching = new Set();
 const lists = new Set();

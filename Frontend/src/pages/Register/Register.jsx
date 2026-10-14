@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../Auth/Auth.css";
+import PrivacyLink from "../../components/PrivacyLink";
 import { register } from "../../services/Auth";
 import ServerStatus from "../../components/ServerStatus";
 import { meetsPasswordRules, passwordRules } from "../../utils/passwordRules";
@@ -178,6 +179,7 @@ function Register() {
                 <p className="auth-switch">
                     Already have an account? <Link to="/login">Log in</Link>
                 </p>
+                <PrivacyLink />
             </div>
         </div>
     );

@@ -1,0 +1,32 @@
+/* The privacy page (/privacy). Builds on the auth page card in Auth.css. */
+.auth-card.privacy-card {
+    max-width: 640px;
+    line-height: 1.5;
+}
+
+.privacy-card h2 {
+    margin: 22px 0 6px;
+    font-size: 1.05rem;
+}
+
+.privacy-card p {
+    margin: 0 0 8px;
+}
+
+.privacy-card ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.privacy-card li {
+    margin-bottom: 6px;
+    overflow-wrap: anywhere;
+}
+
+.privacy-card a {
+    color: var(--fv-link);
+}
+
+.privacy-card .auth-switch {
+    margin-top: 24px;
+}

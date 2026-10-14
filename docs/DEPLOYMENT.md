@@ -638,7 +638,7 @@ Without a MaxMind account, copy a `GeoLite2-Country.mmdb` into the volume yourse
 **Privacy**
 
 Storing IP addresses is personal data processing. If you run a public instance, mention the
-last-login IP logging in your privacy notice. The approximate city, region and country are derived from that stored IP address when the admin page loads and are not stored. Only the latest login address is kept for the admin page, and only admins can see it; active sessions also keep their own address (users see it under Active sessions).
+last-login IP logging in your privacy notice (hosted mode's built-in `/privacy` page does, see section 9). The approximate city, region and country are derived from that stored IP address when the admin page loads and are not stored. Only the latest login address is kept for the admin page, and only admins can see it; active sessions also keep their own address (users see it under Active sessions).
 
 **Upgrading**
 
@@ -662,6 +662,13 @@ In hosted mode:
 - New users see a dismissible notice on the dashboard on first login saying unused accounts are
   removed. Administrators and permanent accounts don't see it. `HOSTED_CONTACT_EMAIL` adds the
   address to ask for a permanent account; leave it empty to leave that sentence out.
+- A public `/privacy` page (linked as "Privacy" from the login, sign-up, share and Settings pages)
+  lists what the site keeps and for how long. It is built from the settings above: the inactivity and
+  warning days, whether a GeoIP database is installed (the sign-in location paragraph) and
+  `HOSTED_CONTACT_EMAIL`, which is shown there as the contact address (publicly; "no contact address"
+  if empty). Self-hosted installs have no `/privacy` page (it shows the not-found page). Read it
+  before going live and check it matches your setup, e.g. backups keep copies for their retention
+  period, which the page does not mention. It is not legal advice.
 - The Admin page gains "Last active" and "Removal due" columns.
 - Sign-ups are rate limited (below).
 - **SMTP is required.** The API refuses to start in hosted mode without a working email setup:
