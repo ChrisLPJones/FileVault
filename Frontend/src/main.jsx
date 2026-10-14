@@ -15,6 +15,7 @@ import ResetPassword from "./pages/ResetPassword/ResetPassword";
 import VerifyEmail from "./pages/VerifyEmail/VerifyEmail";
 import ConfirmEmailChange from "./pages/ConfirmEmailChange/ConfirmEmailChange";
 import CancelEmailChange from "./pages/CancelEmailChange/CancelEmailChange";
+import Privacy from "./pages/Privacy/Privacy";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import PublicRoute from "./components/PublicRoute";
@@ -83,6 +84,11 @@ const router = createBrowserRouter([
             {
                 path: "cancel-email-change",
                 element: <CancelEmailChange />,
+            },
+            {
+                // Hosted sites only (the page shows the not-found page on a self-hosted install)
+                path: "privacy",
+                element: <Privacy />,
             },
             {
                 // Share links work whether or not the visitor is logged in

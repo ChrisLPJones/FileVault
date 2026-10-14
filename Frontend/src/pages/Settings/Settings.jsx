@@ -10,6 +10,7 @@ import {
     updateProfileAPI,
     uploadAvatarAPI,
 } from "../../api/accountAPI";
+import PrivacyLink from "../../components/PrivacyLink";
 import Avatar from "../../components/Avatar";
 import { resizeImageToSquare } from "../../utils/avatarImage";
 import { formatBytes } from "../../utils/formatBytes";
@@ -410,6 +411,8 @@ function Settings() {
                     <Status status={deleteStatus} />
                 </form>
             </section>
+
+            <PrivacyLink />
         </div>
     );
 }

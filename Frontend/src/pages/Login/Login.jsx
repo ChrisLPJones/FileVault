@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../Auth/Auth.css";
+import PrivacyLink from "../../components/PrivacyLink";
 import { login } from "../../services/Auth";
 import { startSession } from "../../utils/auth";
 import { returnPathAfterLogin } from "../../utils/returnPath";
@@ -186,6 +187,7 @@ function Login() {
                 <p className="auth-switch">
                     Don't have an account? <Link to="/register">Create one</Link>
                 </p>
+                <PrivacyLink />
             </div>
         </div>
     );
