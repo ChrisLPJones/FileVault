@@ -43,8 +43,10 @@ namespace Backend.Test
         {
             TestDatabaseGuard.AssertTestDatabase(db.ConnectionString);
             // The command refuses while any other connection is open to the database; the test's own
-            // pooled (idle) ones from earlier queries and stopped apps would count
-            SqlConnection.ClearAllPools();
+            // pooled (idle) ones from earlier queries and stopped apps would count, so close them and
+            // wait briefly until the server has ended those sessions (a test that keeps one open on purpose
+            // still gets its refusal, after the wait)
+            await WaitForNoOtherSessionsAsync(db, 3);
             var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] = db.ConnectionString,
@@ -56,15 +58,26 @@ namespace Backend.Test
             return (exit, output.ToString());
         }
 
-        // Wait (bounded) until no session other than ours is left on the database
-        private static async Task WaitForNoOtherSessionsAsync(FreshDatabase db)
+        // Wait (bounded) until no session other than ours is left on the database. Closing a connection
+        // returns before the server has ended its session, and the command refuses while any other session
+        // is listed, so a run right after a stopped app or a test query could be refused for a moment.
+        // Counts through a connection that isn't pooled, so the check leaves nothing behind itself.
+        private static async Task WaitForNoOtherSessionsAsync(FreshDatabase db, int seconds = 10)
         {
-            var deadline = DateTime.UtcNow.AddSeconds(10);
+            TestDatabaseGuard.AssertTestDatabase(db.ConnectionString);
+            var unpooled = new SqlConnectionStringBuilder(db.ConnectionString) { Pooling = false }.ConnectionString;
+            var deadline = DateTime.UtcNow.AddSeconds(seconds);
             while (true)
             {
                 SqlConnection.ClearAllPools();
-                var others = await db.ScalarAsync<int>(
-                    "SELECT COUNT(*) FROM sys.dm_exec_sessions WHERE database_id = DB_ID() AND is_user_process = 1 AND session_id <> @@SPID");
+                int others;
+                await using (var connection = new SqlConnection(unpooled))
+                {
+                    await connection.OpenAsync();
+                    await using var command = new SqlCommand(
+                        "SELECT COUNT(*) FROM sys.dm_exec_sessions WHERE database_id = DB_ID() AND is_user_process = 1 AND session_id <> @@SPID", connection);
+                    others = Convert.ToInt32(await command.ExecuteScalarAsync());
+                }
                 if (others == 0 || DateTime.UtcNow > deadline)
                     return;
                 await Task.Delay(200);

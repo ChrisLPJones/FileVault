@@ -16,7 +16,13 @@ public partial class DatabaseServices
 
     // Store a new link: the token's hash (for lookups), the password's BCrypt hash (for checks) and
     // both encrypted for showing the owner later. Returns its creation time.
-    public async Task<DateTime> CreateShareAsync(
+    public Task<DateTime> CreateShareAsync(
+        Guid shareId, string userId, string itemId, string tokenHash, DateTime? expiresAtUtc, string? passwordHash,
+        string tokenCipher, string? passwordCipher) =>
+        RetryOnDeadlockAsync(() => CreateShareOnceAsync(
+            shareId, userId, itemId, tokenHash, expiresAtUtc, passwordHash, tokenCipher, passwordCipher));
+
+    private async Task<DateTime> CreateShareOnceAsync(
         Guid shareId, string userId, string itemId, string tokenHash, DateTime? expiresAtUtc, string? passwordHash,
         string tokenCipher, string? passwordCipher)
     {
@@ -30,7 +36,7 @@ public partial class DatabaseServices
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@Id", shareId);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        AddTokenHash(command, tokenHash);
         command.Parameters.AddWithValue("@ItemId", itemId);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@ExpiresAt", (object?)expiresAtUtc ?? DBNull.Value);
@@ -66,7 +72,10 @@ public partial class DatabaseServices
         reader.IsDBNull(10) ? null : reader.GetString(10));
 
     // The user's links that haven't been revoked (expired ones included), newest first
-    public async Task<List<ShareListRow>> GetSharesAsync(string userId)
+    public Task<List<ShareListRow>> GetSharesAsync(string userId) =>
+        RetryOnDeadlockAsync(() => GetSharesOnceAsync(userId));
+
+    private async Task<List<ShareListRow>> GetSharesOnceAsync(string userId)
     {
         var shares = new List<ShareListRow>();
 
@@ -84,7 +93,10 @@ public partial class DatabaseServices
     }
 
     // One of the user's links (not revoked), or null
-    public async Task<ShareListRow?> GetShareAsync(Guid shareId, string userId)
+    public Task<ShareListRow?> GetShareAsync(Guid shareId, string userId) =>
+        RetryOnDeadlockAsync(() => GetShareOnceAsync(shareId, userId));
+
+    private async Task<ShareListRow?> GetShareOnceAsync(Guid shareId, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -100,7 +112,10 @@ public partial class DatabaseServices
 
 
     // Revoke one of the user's links; false if it doesn't exist, isn't theirs or was already revoked
-    public async Task<bool> RevokeShareAsync(Guid shareId, string userId)
+    public Task<bool> RevokeShareAsync(Guid shareId, string userId) =>
+        RetryOnDeadlockAsync(() => RevokeShareOnceAsync(shareId, userId));
+
+    private async Task<bool> RevokeShareOnceAsync(Guid shareId, string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -118,7 +133,10 @@ public partial class DatabaseServices
 
 
     // An active link (not revoked, not expired by the database clock) by its token hash, or null
-    public async Task<ShareRecord?> GetActiveShareAsync(string tokenHash)
+    public Task<ShareRecord?> GetActiveShareAsync(string tokenHash) =>
+        RetryOnDeadlockAsync(() => GetActiveShareOnceAsync(tokenHash));
+
+    private async Task<ShareRecord?> GetActiveShareOnceAsync(string tokenHash)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -132,7 +150,7 @@ public partial class DatabaseServices
               AND u.SuspendedAt IS NULL"; // links of a suspended owner look like missing ones; they work again after unsuspending
 
         await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        AddTokenHash(command, tokenHash);
 
         await using var reader = await command.ExecuteReaderAsync();
         if (!await reader.ReadAsync())
@@ -149,7 +167,10 @@ public partial class DatabaseServices
 
 
     // Count a download through a link
-    public async Task IncrementShareDownloadsAsync(Guid shareId)
+    public Task IncrementShareDownloadsAsync(Guid shareId) =>
+        RetryOnDeadlockAsync(() => IncrementShareDownloadsOnceAsync(shareId));
+
+    private async Task IncrementShareDownloadsOnceAsync(Guid shareId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();

@@ -745,7 +745,10 @@ public partial class DatabaseServices
 
     // 
     // Record a successful login (a session was issued) and the address it came from
-    public async Task UpdateUserLastLogin(string userId, string? ipAddress)
+    public Task UpdateUserLastLogin(string userId, string? ipAddress) =>
+        RetryOnDeadlockAsync(() => UpdateUserLastLoginOnceAsync(userId, ipAddress));
+
+    private async Task UpdateUserLastLoginOnceAsync(string userId, string? ipAddress)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -797,20 +800,20 @@ public partial class DatabaseServices
             BEGIN TRAN;
             DECLARE @L INT;
             SELECT @L = 1 FROM Users WITH (UPDLOCK, ROWLOCK) WHERE Id = @UserId;
-            DELETE FROM RefreshTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
+            DELETE RefreshTokens FROM RefreshTokens WITH (INDEX (IX_RefreshTokens_UserId)) WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
             INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt)
             SELECT @UserId, @SessionId, @TokenHash, @ExpiresAt
             WHERE EXISTS (SELECT 1 FROM Users WHERE Id = @UserId AND SuspendedAt IS NULL);
             DECLARE @Stored INT = @@ROWCOUNT;
-            DELETE FROM Sessions WHERE UserId = @UserId
-                AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);
+            DELETE Sessions FROM Sessions WITH (INDEX (IX_Sessions_UserId)) WHERE UserId = @UserId
+                AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WITH (FORCESEEK, INDEX (IX_RefreshTokens_SessionId)) WHERE r.SessionId = Sessions.Id);
             COMMIT;
             SELECT @Stored;";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@SessionId", sessionId);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        AddTokenHash(command, tokenHash);
         command.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
         return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
     }
@@ -849,7 +852,7 @@ public partial class DatabaseServices
         Guid userId;
         await using (var find = new SqlCommand("SELECT UserId FROM RefreshTokens WHERE TokenHash = @TokenHash", connection, transaction))
         {
-            find.Parameters.AddWithValue("@TokenHash", oldHash);
+            AddTokenHash(find, oldHash);
             if (await find.ExecuteScalarAsync() is not Guid found)
             {
                 await transaction.RollbackAsync();
@@ -883,7 +886,7 @@ public partial class DatabaseServices
             OUTPUT inserted.ExpiresAt, inserted.SessionId
             WHERE TokenHash = @TokenHash AND RevokedAt IS NULL;", connection, transaction))
         {
-            consume.Parameters.AddWithValue("@TokenHash", oldHash);
+            AddTokenHash(consume, oldHash);
             await using var reader = await consume.ExecuteReaderAsync();
             consumed = await reader.ReadAsync();
             if (consumed)
@@ -923,15 +926,15 @@ public partial class DatabaseServices
             }
 
             await using (var store = new SqlCommand(@"
-                DELETE FROM RefreshTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
+                DELETE RefreshTokens FROM RefreshTokens WITH (INDEX (IX_RefreshTokens_UserId)) WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
                 INSERT INTO RefreshTokens (UserId, SessionId, TokenHash, ExpiresAt)
                 VALUES (@UserId, @SessionId, @TokenHash, @ExpiresAt);
-                DELETE FROM Sessions WHERE UserId = @UserId
-                    AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WHERE r.SessionId = Sessions.Id);", connection, transaction))
+                DELETE Sessions FROM Sessions WITH (INDEX (IX_Sessions_UserId)) WHERE UserId = @UserId
+                    AND NOT EXISTS (SELECT 1 FROM RefreshTokens r WITH (FORCESEEK, INDEX (IX_RefreshTokens_SessionId)) WHERE r.SessionId = Sessions.Id);", connection, transaction))
             {
                 store.Parameters.AddWithValue("@UserId", userId);
                 store.Parameters.AddWithValue("@SessionId", sessionId.Value);
-                store.Parameters.AddWithValue("@TokenHash", newHash);
+                AddTokenHash(store, newHash);
                 store.Parameters.AddWithValue("@ExpiresAt", newExpiresAtUtc);
                 await store.ExecuteNonQueryAsync();
             }
@@ -944,11 +947,11 @@ public partial class DatabaseServices
         RefreshTokenUse? result = null;
         await using (var lookup = new SqlCommand(@"
             SELECT t.UserId, DATEDIFF_BIG(millisecond, t.RevokedAt, SYSUTCDATETIME()), t.SessionId,
-                   CASE WHEN EXISTS (SELECT 1 FROM RefreshTokens n WHERE n.SessionId = t.SessionId AND n.Id > t.Id)
+                   CASE WHEN EXISTS (SELECT 1 FROM RefreshTokens n WITH (FORCESEEK, INDEX (IX_RefreshTokens_SessionId)) WHERE n.SessionId = t.SessionId AND n.Id > t.Id)
                         THEN 1 ELSE 0 END
             FROM RefreshTokens t WHERE t.TokenHash = @TokenHash", connection, transaction))
         {
-            lookup.Parameters.AddWithValue("@TokenHash", oldHash);
+            AddTokenHash(lookup, oldHash);
             await using var reader = await lookup.ExecuteReaderAsync();
             if (await reader.ReadAsync())
                 result = new RefreshTokenUse(
@@ -987,6 +990,7 @@ public partial class DatabaseServices
             DECLARE @Locked INT;
             SELECT @Locked = 1 FROM Users WITH (UPDLOCK, ROWLOCK) WHERE Id = @UserId;
             UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
+            FROM RefreshTokens WITH (INDEX (IX_RefreshTokens_UserId))
             WHERE SessionId = @SessionId AND UserId = @UserId AND RevokedAt IS NULL AND ExpiresAt > SYSUTCDATETIME();
             IF @@ROWCOUNT = 0
             BEGIN
@@ -1001,7 +1005,7 @@ public partial class DatabaseServices
             SELECT @@ROWCOUNT;", connection, transaction);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@SessionId", sessionId);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        AddTokenHash(command, tokenHash);
         command.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
         command.Parameters.Add("@Seen", System.Data.SqlDbType.DateTime2).Value = (object?)seenTokensValidAfter ?? DBNull.Value;
         var stored = Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
@@ -1029,7 +1033,7 @@ public partial class DatabaseServices
                 SELECT @L = 1 FROM Users WITH (UPDLOCK, ROWLOCK) WHERE Id = @U;
                 UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE TokenHash = @TokenHash AND RevokedAt IS NULL;",
                 connection, transaction);
-            command.Parameters.AddWithValue("@TokenHash", tokenHash);
+            AddTokenHash(command, tokenHash);
             await command.ExecuteNonQueryAsync();
             await transaction.CommitAsync();
         });
@@ -1039,7 +1043,7 @@ public partial class DatabaseServices
     // Revoke every refresh token for a user (password change, suspected token theft)
     public Task RevokeAllRefreshTokensAsync(string userId) =>
         RetryOnDeadlockAsync(() => RevokeLockedAsync(
-            "UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE UserId = @UserId AND RevokedAt IS NULL",
+            "UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() FROM RefreshTokens WITH (INDEX (IX_RefreshTokens_UserId)) WHERE UserId = @UserId AND RevokedAt IS NULL",
             userId, _ => { }));
 
 

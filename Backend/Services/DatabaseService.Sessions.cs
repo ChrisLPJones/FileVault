@@ -51,7 +51,7 @@ public partial class DatabaseServices
         await connection.OpenAsync();
 
         await using var command = new SqlCommand("SELECT SessionId FROM RefreshTokens WHERE TokenHash = @TokenHash", connection);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        AddTokenHash(command, tokenHash);
         return await command.ExecuteScalarAsync() is Guid id ? id : null;
     }
 
@@ -65,9 +65,9 @@ public partial class DatabaseServices
 
         const string query = @"
             SELECT s.Id, s.Device, s.IpAddress, s.CreatedAt, s.LastUsedAt
-            FROM Sessions s
+            FROM Sessions s WITH (INDEX (IX_Sessions_UserId))
             WHERE s.UserId = @UserId AND EXISTS (
-                SELECT 1 FROM RefreshTokens r
+                SELECT 1 FROM RefreshTokens r WITH (FORCESEEK, INDEX (IX_RefreshTokens_SessionId))
                 WHERE r.SessionId = s.Id AND r.RevokedAt IS NULL AND r.ExpiresAt > SYSUTCDATETIME())
             ORDER BY s.LastUsedAt DESC";
 
@@ -97,6 +97,7 @@ public partial class DatabaseServices
     public Task<bool> RevokeSessionAsync(string userId, Guid sessionId) =>
         RetryOnDeadlockAsync(async () => await RevokeLockedAsync(@"
             UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
+            FROM RefreshTokens WITH (INDEX (IX_RefreshTokens_UserId))
             WHERE UserId = @UserId AND SessionId = @SessionId AND RevokedAt IS NULL",
             userId, cmd => cmd.Parameters.AddWithValue("@SessionId", sessionId)) > 0);
 
@@ -107,6 +108,7 @@ public partial class DatabaseServices
     public Task<int> RevokeOtherSessionsAsync(string userId, Guid? keepSessionId) =>
         RetryOnDeadlockAsync(() => RevokeLockedAsync(@"
             UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME()
+            FROM RefreshTokens WITH (INDEX (IX_RefreshTokens_UserId))
             WHERE UserId = @UserId AND RevokedAt IS NULL
               AND (@KeepSessionId IS NULL OR SessionId IS NULL OR SessionId <> @KeepSessionId)",
             userId, cmd => cmd.Parameters.Add("@KeepSessionId", System.Data.SqlDbType.UniqueIdentifier).Value =

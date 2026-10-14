@@ -32,14 +32,18 @@ public partial class DatabaseServices
 
     // Store a new single-use token (hash only). Earlier unused tokens for the same purpose stop
     // working, so only the most recent email's link can be used; expired ones are cleared out.
-    public async Task StoreAccountTokenAsync(string userId, string purpose, string tokenHash, string? email, DateTime expiresAtUtc)
+    public Task StoreAccountTokenAsync(string userId, string purpose, string tokenHash, string? email, DateTime expiresAtUtc) =>
+        RetryOnDeadlockAsync(() => StoreAccountTokenOnceAsync(userId, purpose, tokenHash, email, expiresAtUtc));
+
+    private async Task StoreAccountTokenOnceAsync(string userId, string purpose, string tokenHash, string? email, DateTime expiresAtUtc)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         const string query = @"
-            DELETE FROM AccountTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
+            DELETE AccountTokens FROM AccountTokens WITH (INDEX (IX_AccountTokens_UserId)) WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
             UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
+            FROM AccountTokens WITH (INDEX (IX_AccountTokens_UserId))
             WHERE UserId = @UserId AND Purpose = @Purpose AND UsedAt IS NULL;
             INSERT INTO AccountTokens (UserId, Purpose, TokenHash, Email, ExpiresAt)
             VALUES (@UserId, @Purpose, @TokenHash, @Email, @ExpiresAt);";
@@ -47,7 +51,7 @@ public partial class DatabaseServices
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@Purpose", purpose);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        AddTokenHash(command, tokenHash);
         command.Parameters.AddWithValue("@Email", (object?)email ?? DBNull.Value);
         command.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
         await command.ExecuteNonQueryAsync();
@@ -68,7 +72,7 @@ public partial class DatabaseServices
               AND UsedAt IS NULL AND ExpiresAt > SYSUTCDATETIME();";
 
         await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        AddTokenHash(command, tokenHash);
         command.Parameters.AddWithValue("@Purpose", purpose);
 
         await using var reader = await command.ExecuteReaderAsync();
