@@ -21,6 +21,7 @@ namespace Backend.Test
                 builder.UseSetting("Hosted:InactiveDays", "45");
                 builder.UseSetting("Hosted:WarningDays", "10");
                 builder.UseSetting("Hosted:ContactEmail", contact);
+                builder.UseSetting("Storage:TrashRetentionDays", "14");
                 builder.UseSetting("GeoIp:DatabasePath", "");
                 builder.UseSetting("GeoIp:CityDatabasePath", cityDatabase ?? "");
                 TestAccounts.WithNoopEmailServices(builder);
@@ -41,6 +42,7 @@ namespace Backend.Test
             var privacy = body.GetProperty("privacy");
             privacy.GetProperty("inactiveDays").GetInt32().Should().Be(45);
             privacy.GetProperty("warningDays").GetInt32().Should().Be(10);
+            privacy.GetProperty("trashRetentionDays").GetInt32().Should().Be(14);
             privacy.GetProperty("contactEmail").GetString().Should().Be("privacy@example.test");
             privacy.GetProperty("loginLocation").GetBoolean().Should().BeFalse("no GeoIP database is installed");
         }
@@ -70,7 +72,7 @@ namespace Backend.Test
 
             body.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("privacy");
             body.GetProperty("privacy").EnumerateObject().Select(p => p.Name)
-                .Should().BeEquivalentTo("inactiveDays", "warningDays", "loginLocation", "contactEmail");
+                .Should().BeEquivalentTo("inactiveDays", "warningDays", "trashRetentionDays", "loginLocation", "contactEmail");
         }
 
         [Fact]

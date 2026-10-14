@@ -38,8 +38,8 @@ namespace Backend.Models
     public record SiteInfoResponse(PrivacySiteInfo? Privacy);
 
     // Hosted mode's settings behind the privacy page. ContactEmail is left out when none is set;
-    // LoginLocation says whether a GeoIP database is installed (the admin page can show where a sign-in came from)
-    public record PrivacySiteInfo(int InactiveDays, int WarningDays, bool LoginLocation,
+    // TrashRetentionDays is how long the recycle bin keeps deleted files; LoginLocation says whether a GeoIP database is installed (the admin page can show where a sign-in came from)
+    public record PrivacySiteInfo(int InactiveDays, int WarningDays, int TrashRetentionDays, bool LoginLocation,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         string? ContactEmail);
 }

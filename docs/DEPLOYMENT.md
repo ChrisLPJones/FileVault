@@ -664,7 +664,7 @@ In hosted mode:
   address to ask for a permanent account; leave it empty to leave that sentence out.
 - A public `/privacy` page (linked as "Privacy" from the login, sign-up, share and Settings pages)
   lists what the site keeps and for how long. It is built from the settings above: the inactivity and
-  warning days, whether a GeoIP database is installed (the sign-in location paragraph) and
+  warning days, `Storage:TrashRetentionDays` (recycle bin), whether a GeoIP database is installed (the sign-in location paragraph) and
   `HOSTED_CONTACT_EMAIL`, which is shown there as the contact address (publicly; "no contact address"
   if empty). Self-hosted installs have no `/privacy` page (it shows the not-found page). Read it
   before going live and check it matches your setup, e.g. backups keep copies for their retention

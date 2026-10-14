@@ -37,7 +37,7 @@ function Privacy() {
     // A self-hosted install has no privacy page: the usual not-found page
     if (!privacy) return <ErrorPage />;
 
-    const { inactiveDays, warningDays, loginLocation, contactEmail } = privacy;
+    const { inactiveDays, warningDays, trashRetentionDays, loginLocation, contactEmail } = privacy;
 
     return (
         <div className="auth-page">
@@ -49,8 +49,13 @@ function Privacy() {
                 <ul>
                     <li>Your name, email address and a scrambled (hashed) version of your password.</li>
                     <li>Your files, encrypted on the server's disk. File and folder names, sizes and dates are not encrypted.</li>
+                    <li>
+                        Encryption protects files on disk and in backups. It does not stop the people who run this site
+                        from opening them, and administrators can reset an account's password.
+                    </li>
                     <li>Share links you create, and your profile picture and two-factor setup if you add them.</li>
                     <li>When you last signed in and the IP address you used. Only the latest sign-in is kept.</li>
+                    <li>When you were last active on the site.</li>
                     <li>
                         For each device you are signed in on: a description of it (browser and operating system), its IP
                         address and when it was last used. You can see these under Active sessions in Settings.
@@ -80,17 +85,21 @@ function Privacy() {
                         links and sign-in records.
                     </li>
                     <li>
+                        Files you delete go to the recycle bin and are removed for good after {days(trashRetentionDays)}, or
+                        when you empty it.
+                    </li>
+                    <li>
                         Signing out ends a device's session, but its record (device and IP address) stays until your next
-                        sign-in after that session has expired, or until your account is removed.
+                        sign-in or renewal after that session has expired, or until your account is removed.
                     </li>
                 </ul>
 
                 <h2>Who can see it</h2>
                 <ul>
                     <li>
-                        Administrators can see each account's name, email address, storage used, last sign-in time and
-                        the IP address of the latest sign-in{loginLocation ? " with its approximate place" : ""}. The
-                        admin page cannot open your files.
+                        Administrators can see each account's name, email address, storage used, when each account was last active
+                        (and when an inactive account will be removed), last sign-in time and the IP address of the latest
+                        sign-in{loginLocation ? " with its approximate place" : ""}.
                     </li>
                     <li>Anyone with a share link you made can download what it shares (and needs its password, if you set one).</li>
                 </ul>

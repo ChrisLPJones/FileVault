@@ -10,7 +10,7 @@ vi.mock("../../api/siteAPI", () => ({ getSiteInfoAPI: vi.fn() }));
 const renderPage = () => render(<MemoryRouter><Privacy /></MemoryRouter>);
 
 const hosted = (overrides = {}) => ({
-    privacy: { inactiveDays: 30, warningDays: 7, loginLocation: true, contactEmail: "owner@example.com", ...overrides },
+    privacy: { inactiveDays: 30, warningDays: 7, trashRetentionDays: 30, loginLocation: true, contactEmail: "owner@example.com", ...overrides },
 });
 
 beforeEach(() => resetSiteInfo());
@@ -23,6 +23,16 @@ describe("Privacy page", () => {
         expect(await screen.findByRole("heading", { name: "Privacy" })).toBeInTheDocument();
         expect(screen.getByText(/not signed in to or used for 45 days is removed/)).toHaveTextContent("10 days before that we email a warning");
         expect(screen.getByRole("link", { name: "owner@example.com" })).toHaveAttribute("href", "mailto:owner@example.com");
+    });
+
+    it("states the recycle bin period and that encryption does not hide files from the operators", async () => {
+        getSiteInfoAPI.mockResolvedValue(hosted({ trashRetentionDays: 14 }));
+        renderPage();
+
+        expect(await screen.findByText(/removed for good after 14 days/)).toBeInTheDocument();
+        expect(screen.getByText(/does not stop the people who run this site/)).toBeInTheDocument();
+        expect(screen.queryByText(/cannot open your files/)).not.toBeInTheDocument();
+        expect(screen.getByText("When you were last active on the site.")).toBeInTheDocument();
     });
 
     it("uses the singular for one day", async () => {

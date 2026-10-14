@@ -13,7 +13,7 @@ beforeEach(() => resetSiteInfo());
 
 describe("PrivacyLink", () => {
     it("links to the privacy page on a hosted site", async () => {
-        getSiteInfoAPI.mockResolvedValue({ privacy: { inactiveDays: 30, warningDays: 7, loginLocation: false } });
+        getSiteInfoAPI.mockResolvedValue({ privacy: { inactiveDays: 30, warningDays: 7, trashRetentionDays: 30, loginLocation: false } });
         renderLink();
 
         expect(await screen.findByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
