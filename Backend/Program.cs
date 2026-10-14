@@ -111,6 +111,8 @@ namespace Backend
             });
             // Public share links: viewing, and password attempts/downloads
             builder.Services.AddFixedWindowRateLimits(("share", 60), ("share-download", 20));
+            // GET /site (public, read by the sign-in, sign-up and privacy pages)
+            builder.Services.AddFixedWindowRateLimits(("site", 120));
             // Endpoints that send email (forgot password, resend verification)
             builder.Services.AddFixedWindowRateLimits(("email", 5));
             // OpenAPI document (/swagger/v1/swagger.json) and interactive docs (/swagger)
@@ -314,6 +316,7 @@ namespace Backend
             app.UseRateLimiter();
             app.MapFileRoutes();
             app.MapHealthCheckRoutes();
+            app.MapSiteRoutes();
             app.MapAuthRoutes();
             app.MapThumbnailRoutes();
             app.MapFavouriteRoutes();
