@@ -12,4 +12,9 @@
       <Storage__MaxDiskUsePercent>0</Storage__MaxDiskUsePercent>
     </EnvironmentVariables>
   </RunConfiguration>
+  <!-- xunit.runner.visualstudio reads this: caps concurrently running test collections (default = CPU count, 16 here).
+       Keeps a full run from starving the shared machine and SQL Server -->
+  <xUnit>
+    <MaxParallelThreads>4</MaxParallelThreads>
+  </xUnit>
 </RunSettings>

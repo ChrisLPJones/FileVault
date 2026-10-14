@@ -16,6 +16,8 @@ x-app-password: &app-password ${MSSQL_APP_PASSWORD:?Set MSSQL_APP_PASSWORD in .e
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
+    # Caps SQL Server at 3 CPUs so a parallel test run can't starve the host
+    cpus: "3"
     environment:
       ACCEPT_EULA: "Y"
       # Developer edition (the image default) is not licensed for production
