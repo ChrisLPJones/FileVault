@@ -322,12 +322,24 @@ namespace Backend.Routes
 
         // Bytes used by the storage folder (encrypted files, avatars and thumbnails, so a little
         // more than the files' sizes); null if it can't be read
-        private static long? StorageBytesOnDisk(string storageRoot)
+        public static long? StorageBytesOnDisk(string storageRoot)
         {
             try
             {
                 var root = new DirectoryInfo(Path.GetFullPath(storageRoot));
-                return root.Exists ? root.EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length) : 0;
+                if (!root.Exists)
+                    return 0;
+
+                // Uploads and deletes run while this counts: a file or folder that vanishes between being
+                // listed and being measured is skipped, it doesn't make the whole figure unavailable
+                long total = 0;
+                var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+                foreach (var file in root.EnumerateFiles("*", options))
+                {
+                    try { total += file.Length; }
+                    catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { }
+                }
+                return total;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
             {

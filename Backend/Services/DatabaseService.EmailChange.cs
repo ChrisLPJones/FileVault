@@ -87,15 +87,16 @@ public partial class DatabaseServices
         }
 
         await using (var store = new SqlCommand(@"
-            DELETE FROM AccountTokens WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
+            DELETE AccountTokens FROM AccountTokens WITH (INDEX (IX_AccountTokens_UserId)) WHERE UserId = @UserId AND ExpiresAt < SYSUTCDATETIME();
             UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
+            FROM AccountTokens WITH (INDEX (IX_AccountTokens_UserId))
             WHERE UserId = @UserId AND Purpose = @Purpose AND UsedAt IS NULL;
             INSERT INTO AccountTokens (UserId, Purpose, TokenHash, Email, ExpiresAt)
             VALUES (@UserId, @Purpose, @TokenHash, @Email, @ExpiresAt);", connection, transaction))
         {
             store.Parameters.AddWithValue("@UserId", userId);
             store.Parameters.AddWithValue("@Purpose", AccountEmailService.ChangePurpose);
-            store.Parameters.AddWithValue("@TokenHash", tokenHash);
+            AddTokenHash(store, tokenHash);
             store.Parameters.AddWithValue("@Email", email);
             store.Parameters.AddWithValue("@ExpiresAt", expiresAtUtc);
             await store.ExecuteNonQueryAsync();
@@ -106,13 +107,17 @@ public partial class DatabaseServices
     }
 
     // Drop the pending change: both of its links stop working
-    public async Task CancelPendingEmailChangeAsync(string userId)
+    public Task CancelPendingEmailChangeAsync(string userId) =>
+        RetryOnDeadlockAsync(() => CancelPendingEmailChangeOnceAsync(userId));
+
+    private async Task CancelPendingEmailChangeOnceAsync(string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         await using var command = new SqlCommand(@"
             UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
+            FROM AccountTokens WITH (INDEX (IX_AccountTokens_UserId))
             WHERE UserId = @UserId AND UsedAt IS NULL AND Purpose IN (@Change, @Cancel)", connection);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@Change", AccountEmailService.ChangePurpose);
@@ -123,7 +128,10 @@ public partial class DatabaseServices
     // "This wasn't me" link from the old address: drop the pending change and end every way the
     // account is signed in (refresh tokens, pending two-factor challenges, and access tokens
     // already issued, see AccessTokenGate), in one transaction.
-    public async Task CancelEmailChangeAndSignOutAsync(string userId)
+    public Task CancelEmailChangeAndSignOutAsync(string userId) =>
+        RetryOnDeadlockAsync(() => CancelEmailChangeAndSignOutOnceAsync(userId));
+
+    private async Task CancelEmailChangeAndSignOutOnceAsync(string userId)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -134,9 +142,10 @@ public partial class DatabaseServices
         await using var command = new SqlCommand(@"
             UPDATE Users SET TokensValidAfter = @Now WHERE Id = @UserId;
             UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
+            FROM AccountTokens WITH (INDEX (IX_AccountTokens_UserId))
             WHERE UserId = @UserId AND UsedAt IS NULL AND Purpose IN (@Change, @Cancel);
-            UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE UserId = @UserId AND RevokedAt IS NULL;
-            DELETE FROM LoginChallenges WHERE UserId = @UserId;", connection, transaction);
+            UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() FROM RefreshTokens WITH (INDEX (IX_RefreshTokens_UserId)) WHERE UserId = @UserId AND RevokedAt IS NULL;
+            DELETE LoginChallenges FROM LoginChallenges WITH (INDEX (IX_LoginChallenges_UserId)) WHERE UserId = @UserId;", connection, transaction);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@Change", AccountEmailService.ChangePurpose);
         command.Parameters.AddWithValue("@Cancel", AccountEmailService.CancelChangePurpose);
@@ -173,7 +182,7 @@ public partial class DatabaseServices
             WHERE TokenHash = @TokenHash AND Purpose = @Purpose AND UserId = @UserId
               AND UsedAt IS NULL AND ExpiresAt > SYSUTCDATETIME();", connection, transaction))
         {
-            use.Parameters.AddWithValue("@TokenHash", tokenHash);
+            AddTokenHash(use, tokenHash);
             use.Parameters.AddWithValue("@Purpose", AccountEmailService.ChangePurpose);
             use.Parameters.AddWithValue("@UserId", userId);
             await using var reader = await use.ExecuteReaderAsync();
@@ -259,7 +268,7 @@ public partial class DatabaseServices
                 await using var burn = new SqlCommand(@"
                     UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
                     WHERE TokenHash = @TokenHash AND Purpose = @Purpose AND UserId = @UserId AND UsedAt IS NULL", connection);
-                burn.Parameters.AddWithValue("@TokenHash", tokenHash);
+                AddTokenHash(burn, tokenHash);
                 burn.Parameters.AddWithValue("@Purpose", AccountEmailService.ChangePurpose);
                 burn.Parameters.AddWithValue("@UserId", userId);
                 await burn.ExecuteNonQueryAsync();
@@ -269,6 +278,7 @@ public partial class DatabaseServices
 
         await using (var clear = new SqlCommand(@"
             UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
+            FROM AccountTokens WITH (INDEX (IX_AccountTokens_UserId))
             WHERE UserId = @UserId AND UsedAt IS NULL AND Purpose IN (@Verify, @Reset, @Cancel)", connection, transaction))
         {
             clear.Parameters.AddWithValue("@UserId", userId);

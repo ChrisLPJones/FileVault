@@ -79,9 +79,10 @@ public partial class DatabaseServices
                 SELECT CASE WHEN EXISTS (SELECT 1 FROM Users WHERE Id = @UserId) THEN 2 ELSE 0 END;
                 RETURN;
             END
-            UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE UserId = @UserId AND RevokedAt IS NULL;
-            DELETE FROM LoginChallenges WHERE UserId = @UserId;
+            UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() FROM RefreshTokens WITH (INDEX (IX_RefreshTokens_UserId)) WHERE UserId = @UserId AND RevokedAt IS NULL;
+            DELETE LoginChallenges FROM LoginChallenges WITH (INDEX (IX_LoginChallenges_UserId)) WHERE UserId = @UserId;
             UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
+            FROM AccountTokens WITH (INDEX (IX_AccountTokens_UserId))
             WHERE UserId = @UserId AND Purpose = @ResetPurpose AND UsedAt IS NULL;
             SELECT 1;", connection, transaction);
         command.Parameters.AddWithValue("@PasswordHash", passwordHash);
@@ -183,9 +184,10 @@ public partial class DatabaseServices
             await using var command = new SqlCommand(@"
                 UPDATE Users SET SuspendedAt = COALESCE(SuspendedAt, SYSUTCDATETIME()), TokensValidAfter = @Now
                 WHERE Id = @UserId;
-                UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() WHERE UserId = @UserId AND RevokedAt IS NULL;
-                DELETE FROM LoginChallenges WHERE UserId = @UserId;
+                UPDATE RefreshTokens SET RevokedAt = SYSUTCDATETIME() FROM RefreshTokens WITH (INDEX (IX_RefreshTokens_UserId)) WHERE UserId = @UserId AND RevokedAt IS NULL;
+                DELETE LoginChallenges FROM LoginChallenges WITH (INDEX (IX_LoginChallenges_UserId)) WHERE UserId = @UserId;
                 UPDATE AccountTokens SET UsedAt = SYSUTCDATETIME()
+                FROM AccountTokens WITH (INDEX (IX_AccountTokens_UserId))
                 WHERE UserId = @UserId AND Purpose = @ResetPurpose AND UsedAt IS NULL;", connection, transaction);
             command.Parameters.AddWithValue("@Now", DateTime.UtcNow);
             command.Parameters.AddWithValue("@UserId", userId);

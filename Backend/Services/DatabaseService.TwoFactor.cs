@@ -158,7 +158,7 @@ public partial class DatabaseServices
         const string query = @"
             UPDATE Users SET TotpSecret = NULL, TotpEnabled = 0, TotpLastStep = NULL WHERE Id = @UserId;
             DELETE FROM TotpRecoveryCodes WHERE UserId = @UserId;
-            DELETE FROM LoginChallenges WHERE UserId = @UserId;";
+            DELETE LoginChallenges FROM LoginChallenges WITH (INDEX (IX_LoginChallenges_UserId)) WHERE UserId = @UserId;";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
@@ -169,18 +169,21 @@ public partial class DatabaseServices
 
     // Store a login challenge (hash only) and drop this user's finished or expired ones.
     // The expiry uses the database clock, like the checks against it.
-    public async Task StoreLoginChallengeAsync(string userId, string tokenHash, TimeSpan lifetime)
+    public Task StoreLoginChallengeAsync(string userId, string tokenHash, TimeSpan lifetime) =>
+        RetryOnDeadlockAsync(() => StoreLoginChallengeOnceAsync(userId, tokenHash, lifetime));
+
+    private async Task StoreLoginChallengeOnceAsync(string userId, string tokenHash, TimeSpan lifetime)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         const string query = @"
-            DELETE FROM LoginChallenges WHERE UserId = @UserId AND (ExpiresAt < SYSUTCDATETIME() OR UsedAt IS NOT NULL);
+            DELETE LoginChallenges FROM LoginChallenges WITH (INDEX (IX_LoginChallenges_UserId)) WHERE UserId = @UserId AND (ExpiresAt < SYSUTCDATETIME() OR UsedAt IS NOT NULL);
             INSERT INTO LoginChallenges (UserId, TokenHash, ExpiresAt) VALUES (@UserId, @TokenHash, DATEADD(second, @Seconds, SYSUTCDATETIME()));";
 
         await using var command = new SqlCommand(query, connection);
         command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        AddTokenHash(command, tokenHash);
         command.Parameters.AddWithValue("@Seconds", (int)lifetime.TotalSeconds);
         await command.ExecuteNonQueryAsync();
     }
@@ -202,7 +205,7 @@ public partial class DatabaseServices
               AND ExpiresAt > SYSUTCDATETIME() AND Attempts < @MaxAttempts";
 
         await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        AddTokenHash(command, tokenHash);
         command.Parameters.AddWithValue("@MaxAttempts", maxAttempts);
 
         var userId = await command.ExecuteScalarAsync();
@@ -222,7 +225,7 @@ public partial class DatabaseServices
             WHERE TokenHash = @TokenHash AND UsedAt IS NULL";
 
         await using var command = new SqlCommand(query, connection);
-        command.Parameters.AddWithValue("@TokenHash", tokenHash);
+        AddTokenHash(command, tokenHash);
         return await command.ExecuteNonQueryAsync() == 1;
     }
 }

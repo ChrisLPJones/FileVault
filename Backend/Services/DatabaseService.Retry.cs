@@ -37,4 +37,11 @@ public partial class DatabaseServices
             }
         }
     }
+
+    // Token hashes are stored as CHAR(64). A string parameter would be sent as NVARCHAR, which under the
+    // usual SQL collation makes SQL Server convert the column instead of the value, so the unique index
+    // can't be used: every lookup then scans the table, taking locks on other users' rows (and deadlocking
+    // with their writes). A CHAR parameter keeps it an index seek.
+    private static void AddTokenHash(SqlCommand command, string tokenHash) =>
+        command.Parameters.Add("@TokenHash", System.Data.SqlDbType.Char, 64).Value = tokenHash;
 }
