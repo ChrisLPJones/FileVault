@@ -12,4 +12,7 @@
       <Storage__MaxDiskUsePercent>0</Storage__MaxDiskUsePercent>
     </EnvironmentVariables>
   </RunConfiguration>
+  <!-- Do NOT add <xUnit><MaxParallelThreads>: xunit.runner.visualstudio honours it and it overrides the
+       [assembly: CollectionBehavior(MaxParallelThreads = -1)] in TestParallelism.cs, which turns the
+       sync context back on (see the comment there). Verified 2026-10-15 -->
 </RunSettings>
