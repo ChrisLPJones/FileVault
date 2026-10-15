@@ -91,7 +91,7 @@ services:
     volumes:
       - file_storage:/data/storage
       - geoip_data:/data/geoip:ro
-    # Emailed links (when SMTP isn't set up) and sign-in IPs end up in this log: keep it from growing forever
+    # Emailed links (when SMTP isn't set up) end up in this log: keep it from growing forever
     logging:
       driver: json-file
       options:
@@ -163,6 +163,12 @@ services:
       - api
     ports:
       - "5173:80"
+    # nginx access logging is off (no IPs or share tokens); this only caps the error log and start-up output
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
 
 volumes:

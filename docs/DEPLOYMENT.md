@@ -495,6 +495,7 @@ authentication, so leaving them off in production is about not advertising the A
   `frame-ancestors` rule, as it's a real page)
 - `Cache-Control: no-store` on `/user/*` (login, tokens, profile, sessions, two-factor), unless the
   endpoint sets its own caching
+- The frontend's nginx access log is off, so visitor IPs (including `X-Forwarded-For`) and share-link tokens in URLs are not written to the container log; only nginx errors are.
 - The refresh cookie is `HttpOnly`, `SameSite=Strict`, limited to `/user`, and `Secure` on HTTPS
   (section 1)
 

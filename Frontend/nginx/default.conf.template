@@ -15,6 +15,10 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # No access log: it would record visitor IPs (X-Forwarded-For) and share-link tokens in the
+    # URL. error_log stays on.
+    access_log off;
+
     # Request body limit: big uploads go to the API in 8 MB chunks. This server only serves the
     # app, but if it is also used to proxy the API, chunks (plus headers) must fit.
     client_max_body_size 16m;
