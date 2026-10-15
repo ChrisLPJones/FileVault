@@ -43,6 +43,15 @@ jobs:
           docker cp Backend/Docker/db/init.sql ${{ job.services.sqlserver.id }}:/tmp/init.sql
           $SQLCMD -i /tmp/init.sql
 
+      # Diagnostic only (admin-lock stalls): deadlock graphs to the SQL error log, and a read-only
+      # poller of lock waits, load and container stats. Its log is printed after the tests.
+      - name: Start lock poller (diagnostic)
+        run: |
+          set +x
+          docker exec ${{ job.services.sqlserver.id }} /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA_PASSWORD" -Q "DBCC TRACEON(1222,-1)" > /dev/null
+          nohup bash .github/scripts/lock-poll.sh ${{ job.services.sqlserver.id }} "$RUNNER_TEMP/lock-poll.log" > "$RUNNER_TEMP/lock-poll.out" 2>&1 &
+          echo $! > "$RUNNER_TEMP/lock-poll.pid"
+
       - name: Configure test secrets
         run: |
           JWT_KEY=$(openssl rand -base64 48)
@@ -58,6 +67,18 @@ jobs:
 
       - name: Test
         run: dotnet test FileVault.sln --configuration Release --no-build --logger "console;verbosity=normal"
+
+      - name: Lock poller log (diagnostic)
+        if: always()
+        run: |
+          set +x
+          kill "$(cat "$RUNNER_TEMP/lock-poll.pid")" 2>/dev/null || true
+          echo "::group::Lock poller log"
+          cat "$RUNNER_TEMP/lock-poll.log" "$RUNNER_TEMP/lock-poll.out" 2>&1 | head -c 100000
+          echo "::endgroup::"
+          echo "::group::SQL Server deadlock graphs"
+          docker exec ${{ job.services.sqlserver.id }} grep -A40 "deadlock-list" /var/opt/mssql/log/errorlog 2>&1 | head -c 100000 || true
+          echo "::endgroup::"
 
   frontend:
     name: Frontend build & lint
